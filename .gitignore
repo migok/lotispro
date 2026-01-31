@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# Streamlit / logs
+.streamlit/secrets.toml
+*.log
+
+# OS
+.DS_Store
+.claude
