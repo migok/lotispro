@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { apiFetch, apiGet, apiPut, apiDelete } from '../utils/api';
+import { apiFetch, apiGet, apiPut, apiDelete, apiUploadFile } from '../utils/api';
 import LotDetailModal from './LotDetailModal';
 import Dashboard from './Dashboard';
 import { useAuth } from '../contexts/AuthContext';
@@ -43,6 +43,13 @@ export default function ProjectDetailPage() {
   const [filterStatus, setFilterStatus] = useState(null);
   const [surfaceMin, setSurfaceMin] = useState('');
   const [surfaceMax, setSurfaceMax] = useState('');
+  const [priceMin, setPriceMin] = useState('');
+  const [priceMax, setPriceMax] = useState('');
+  // Metadata filters
+  const [filterTypeLot, setFilterTypeLot] = useState(null);
+  const [filterEmplacement, setFilterEmplacement] = useState(null);
+  const [filterTypeMaison, setFilterTypeMaison] = useState(null);
+  const [metadataOptions, setMetadataOptions] = useState({ type_lot: [], emplacement: [], type_maison: [] });
 
   // Modal state
   const [selectedLot, setSelectedLot] = useState(null);
@@ -55,16 +62,24 @@ export default function ProjectDetailPage() {
 
   // Initialize map when carte tab is active
   useEffect(() => {
-    if (activeTab === 'carte' && mapContainerRef.current && !mapRef.current && project) {
-      const map = L.map(mapContainerRef.current, { minZoom: 2, maxZoom: 22 });
-      mapRef.current = map;
+    if (activeTab === 'carte' && mapContainerRef.current && project) {
+      if (!mapRef.current) {
+        // Première initialisation de la carte
+        const map = L.map(mapContainerRef.current, { minZoom: 2, maxZoom: 22 });
+        mapRef.current = map;
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 22,
-        attribution: '&copy; OpenStreetMap contributors',
-      }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 22,
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(map);
 
-      loadLots();
+        loadLots();
+      } else {
+        // La carte existe déjà, on force le recalcul des dimensions
+        setTimeout(() => {
+          mapRef.current.invalidateSize();
+        }, 100);
+      }
     }
   }, [activeTab, project]);
 
@@ -73,7 +88,7 @@ export default function ProjectDetailPage() {
     if (activeTab === 'carte' && mapRef.current) {
       loadLots();
     }
-  }, [filterStatus, surfaceMin, surfaceMax]);
+  }, [filterStatus, surfaceMin, surfaceMax, priceMin, priceMax, filterTypeLot, filterEmplacement, filterTypeMaison]);
 
   // Clean up map when leaving
   useEffect(() => {
@@ -106,16 +121,29 @@ export default function ProjectDetailPage() {
       const res = await apiFetch(`/api/projects/${projectId}/lots.geojson`);
       const geojson = await res.json();
 
-      // Calculate stats
+      // Calculate stats and extract metadata options
       const features = geojson.features || [];
       const newStats = { available: 0, reserved: 0, sold: 0, blocked: 0 };
+      const typeLotSet = new Set();
+      const emplacementSet = new Set();
+      const typeMaisonSet = new Set();
+
       features.forEach((f) => {
         const status = f.properties?.status || 'available';
         if (newStats.hasOwnProperty(status)) {
           newStats[status]++;
         }
+        // Collect unique metadata values
+        if (f.properties?.type_lot) typeLotSet.add(f.properties.type_lot);
+        if (f.properties?.emplacement) emplacementSet.add(f.properties.emplacement);
+        if (f.properties?.type_maison) typeMaisonSet.add(f.properties.type_maison);
       });
       setStats(newStats);
+      setMetadataOptions({
+        type_lot: Array.from(typeLotSet).sort(),
+        emplacement: Array.from(emplacementSet).sort(),
+        type_maison: Array.from(typeMaisonSet).sort(),
+      });
 
       // Update map
       if (geoRef.current) geoRef.current.remove();
@@ -124,6 +152,7 @@ export default function ProjectDetailPage() {
         style: (feature) => {
           const status = feature.properties?.status ?? 'available';
           const area = feature.properties?.Shape_Area;
+          const props = feature.properties || {};
 
           // Apply filters
           if (filterStatus && status !== filterStatus) {
@@ -133,6 +162,24 @@ export default function ProjectDetailPage() {
             return { opacity: 0.2, fillOpacity: 0.1 };
           }
           if (surfaceMax && area && area > parseFloat(surfaceMax)) {
+            return { opacity: 0.2, fillOpacity: 0.1 };
+          }
+          // Price filters
+          const lotPrice = props.price;
+          if (priceMin && lotPrice && lotPrice < parseFloat(priceMin)) {
+            return { opacity: 0.2, fillOpacity: 0.1 };
+          }
+          if (priceMax && lotPrice && lotPrice > parseFloat(priceMax)) {
+            return { opacity: 0.2, fillOpacity: 0.1 };
+          }
+          // Metadata filters
+          if (filterTypeLot && props.type_lot !== filterTypeLot) {
+            return { opacity: 0.2, fillOpacity: 0.1 };
+          }
+          if (filterEmplacement && props.emplacement !== filterEmplacement) {
+            return { opacity: 0.2, fillOpacity: 0.1 };
+          }
+          if (filterTypeMaison && props.type_maison !== filterTypeMaison) {
             return { opacity: 0.2, fillOpacity: 0.1 };
           }
 
@@ -182,6 +229,43 @@ export default function ProjectDetailPage() {
               <div class="lot-tooltip-row">
                 <span class="lot-tooltip-label">Surface:</span>
                 <span class="lot-tooltip-value">${area} m²</span>
+              </div>
+            `;
+          }
+
+          // Prix au m²
+          if (props.price && area && parseFloat(area) > 0) {
+            const prixM2 = (props.price / parseFloat(area)).toFixed(0);
+            tooltipContent += `
+              <div class="lot-tooltip-row">
+                <span class="lot-tooltip-label">Prix/m²:</span>
+                <span class="lot-tooltip-value">${Number(prixM2).toLocaleString('fr-FR')} MAD</span>
+              </div>
+            `;
+          }
+
+          // Metadata fields
+          if (props.type_lot) {
+            tooltipContent += `
+              <div class="lot-tooltip-row">
+                <span class="lot-tooltip-label">Type:</span>
+                <span class="lot-tooltip-value">${props.type_lot}</span>
+              </div>
+            `;
+          }
+          if (props.emplacement) {
+            tooltipContent += `
+              <div class="lot-tooltip-row">
+                <span class="lot-tooltip-label">Emplacement:</span>
+                <span class="lot-tooltip-value">${props.emplacement}</span>
+              </div>
+            `;
+          }
+          if (props.type_maison) {
+            tooltipContent += `
+              <div class="lot-tooltip-row">
+                <span class="lot-tooltip-label">Type maison:</span>
+                <span class="lot-tooltip-value">${props.type_maison}</span>
               </div>
             `;
           }
@@ -238,6 +322,10 @@ export default function ProjectDetailPage() {
               days_in_status: props.days_in_status || 0,
               sold_by_name: props.sold_by_name || null,
               sale_date: props.sale_date || null,
+              // Metadata fields
+              type_lot: props.type_lot || null,
+              emplacement: props.emplacement || null,
+              type_maison: props.type_maison || null,
             });
             setShowModal(true);
           });
@@ -256,9 +344,15 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     if (activeTab === 'carte') {
-      loadLots();
+      await loadLots();
+      // Force le recalcul des dimensions de la carte après le rechargement
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize();
+        }
+      }, 150);
     }
     loadProject();
   };
@@ -333,6 +427,7 @@ export default function ProjectDetailPage() {
             projectId={parseInt(projectId)}
             onNavigate={(page) => {
               if (page === 'map') setActiveTab('carte');
+              if (page === 'clients') navigate('/clients');
             }}
           />
         )}
@@ -348,6 +443,21 @@ export default function ProjectDetailPage() {
             setSurfaceMin={setSurfaceMin}
             surfaceMax={surfaceMax}
             setSurfaceMax={setSurfaceMax}
+            priceMin={priceMin}
+            setPriceMin={setPriceMin}
+            priceMax={priceMax}
+            setPriceMax={setPriceMax}
+            filterTypeLot={filterTypeLot}
+            setFilterTypeLot={setFilterTypeLot}
+            filterEmplacement={filterEmplacement}
+            setFilterEmplacement={setFilterEmplacement}
+            filterTypeMaison={filterTypeMaison}
+            setFilterTypeMaison={setFilterTypeMaison}
+            metadataOptions={metadataOptions}
+            showModal={showModal}
+            selectedLot={selectedLot}
+            onCloseModal={closeModal}
+            onRefresh={handleRefresh}
           />
         )}
 
@@ -362,8 +472,8 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
-      {/* Lot Detail Modal */}
-      {showModal && selectedLot && (
+      {/* Lot Detail Modal - only render outside CarteTab when not in carte tab */}
+      {activeTab !== 'carte' && showModal && selectedLot && (
         <LotDetailModal
           lot={selectedLot}
           onClose={closeModal}
@@ -384,7 +494,22 @@ function CarteTab({
   setSurfaceMin,
   surfaceMax,
   setSurfaceMax,
+  priceMin,
+  setPriceMin,
+  priceMax,
+  setPriceMax,
   mapRef,
+  filterTypeLot,
+  setFilterTypeLot,
+  filterEmplacement,
+  setFilterEmplacement,
+  filterTypeMaison,
+  setFilterTypeMaison,
+  metadataOptions,
+  showModal,
+  selectedLot,
+  onCloseModal,
+  onRefresh,
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const carteTabRef = useRef(null);
@@ -468,106 +593,155 @@ function CarteTab({
     };
   }, [mapRef?.current, isFullscreen]);
 
+  const hasActiveFilters = filterStatus || surfaceMin || surfaceMax || priceMin || priceMax || filterTypeLot || filterEmplacement || filterTypeMaison;
+
+  const clearAllFilters = () => {
+    setFilterStatus(null);
+    setSurfaceMin('');
+    setSurfaceMax('');
+    setPriceMin('');
+    setPriceMax('');
+    setFilterTypeLot(null);
+    setFilterEmplacement(null);
+    setFilterTypeMaison(null);
+  };
+
   return (
     <div ref={carteTabRef} className={`carte-tab ${isFullscreen ? 'carte-fullscreen' : ''}`}>
-      {/* Filters */}
-      <div className="section-card carte-filters" style={{ marginBottom: 'var(--spacing-md)' }}>
-        <div className="flex gap-md items-center" style={{ flexWrap: 'wrap' }}>
-          <button
-            className={`btn ${filterStatus === null ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setFilterStatus(null)}
-          >
-            Tous ({stats.available + stats.reserved + stats.sold + stats.blocked})
-          </button>
-          <button
-            className={`btn ${filterStatus === 'available' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setFilterStatus('available')}
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: STATUS_COLORS.available,
-                marginRight: 6,
-              }}
-            ></span>
-            Disponible ({stats.available})
-          </button>
-          <button
-            className={`btn ${filterStatus === 'reserved' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setFilterStatus('reserved')}
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: STATUS_COLORS.reserved,
-                marginRight: 6,
-              }}
-            ></span>
-            Réservé ({stats.reserved})
-          </button>
-          <button
-            className={`btn ${filterStatus === 'sold' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setFilterStatus('sold')}
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: STATUS_COLORS.sold,
-                marginRight: 6,
-              }}
-            ></span>
-            Vendu ({stats.sold})
-          </button>
-          <button
-            className={`btn ${filterStatus === 'blocked' ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setFilterStatus('blocked')}
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: STATUS_COLORS.blocked,
-                marginRight: 6,
-              }}
-            ></span>
-            Bloqué ({stats.blocked})
-          </button>
-
-          <div className="flex gap-sm items-center" style={{ marginLeft: 'auto' }}>
-            <span className="text-muted">Surface:</span>
-            <input
-              type="number"
-              className="form-input"
-              style={{ width: 100 }}
-              placeholder="Min m²"
-              value={surfaceMin}
-              onChange={(e) => setSurfaceMin(e.target.value)}
-            />
-            <span className="text-muted">-</span>
-            <input
-              type="number"
-              className="form-input"
-              style={{ width: 100 }}
-              placeholder="Max m²"
-              value={surfaceMax}
-              onChange={(e) => setSurfaceMax(e.target.value)}
-            />
+      {/* Filters V2 */}
+      <div className="map-filters-v2">
+        {/* Header Row */}
+        <div className="filters-header">
+          <div className="filters-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+            </svg>
+            Filtres
+            {hasActiveFilters && (
+              <span className="filters-active-badge">Actifs</span>
+            )}
+          </div>
+          <div className="filters-actions">
+            {hasActiveFilters && (
+              <button className="btn-clear-filters" onClick={clearAllFilters}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+                Tout effacer
+              </button>
+            )}
             <button
-              className={`btn ${isFullscreen ? 'btn-primary' : 'btn-ghost'}`}
+              className={`btn-fullscreen ${isFullscreen ? 'active' : ''}`}
               onClick={toggleFullscreen}
               title={isFullscreen ? 'Quitter le plein écran (Échap)' : 'Plein écran'}
-              style={{ marginLeft: 'var(--spacing-md)', fontSize: '1.2rem' }}
             >
-              {isFullscreen ? '✕' : '⛶'}
+              {isFullscreen ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                </svg>
+              )}
             </button>
           </div>
+        </div>
+
+        {/* All Filters in One Row */}
+        <div className="filters-unified-row">
+          <div className="filter-inline-group">
+            <label className="filter-inline-label">Surface</label>
+            <div className="filter-inline-inputs">
+              <input
+                type="number"
+                className="filter-input-sm"
+                placeholder="Min"
+                value={surfaceMin}
+                onChange={(e) => setSurfaceMin(e.target.value)}
+              />
+              <span className="filter-sep">-</span>
+              <input
+                type="number"
+                className="filter-input-sm"
+                placeholder="Max"
+                value={surfaceMax}
+                onChange={(e) => setSurfaceMax(e.target.value)}
+              />
+              <span className="filter-unit">m²</span>
+            </div>
+          </div>
+
+          <div className="filter-inline-group">
+            <label className="filter-inline-label">Prix</label>
+            <div className="filter-inline-inputs">
+              <input
+                type="number"
+                className="filter-input-sm"
+                placeholder="Min"
+                value={priceMin}
+                onChange={(e) => setPriceMin(e.target.value)}
+              />
+              <span className="filter-sep">-</span>
+              <input
+                type="number"
+                className="filter-input-sm"
+                placeholder="Max"
+                value={priceMax}
+                onChange={(e) => setPriceMax(e.target.value)}
+              />
+              <span className="filter-unit">MAD</span>
+            </div>
+          </div>
+
+          {metadataOptions.type_lot.length > 0 && (
+            <div className="filter-inline-group">
+              <label className="filter-inline-label">Type</label>
+              <select
+                className="filter-select-sm"
+                value={filterTypeLot || ''}
+                onChange={(e) => setFilterTypeLot(e.target.value || null)}
+              >
+                <option value="">Tous</option>
+                {metadataOptions.type_lot.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {metadataOptions.emplacement.length > 0 && (
+            <div className="filter-inline-group">
+              <label className="filter-inline-label">Emplacement</label>
+              <select
+                className="filter-select-sm"
+                value={filterEmplacement || ''}
+                onChange={(e) => setFilterEmplacement(e.target.value || null)}
+              >
+                <option value="">Tous</option>
+                {metadataOptions.emplacement.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {metadataOptions.type_maison.length > 0 && (
+            <div className="filter-inline-group">
+              <label className="filter-inline-label">Maison</label>
+              <select
+                className="filter-select-sm"
+                value={filterTypeMaison || ''}
+                onChange={(e) => setFilterTypeMaison(e.target.value || null)}
+              >
+                <option value="">Tous</option>
+                {metadataOptions.type_maison.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -583,11 +757,20 @@ function CarteTab({
       >
         <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
       </div>
+
+      {/* Modal inside CarteTab for fullscreen support */}
+      {showModal && selectedLot && (
+        <LotDetailModal
+          lot={selectedLot}
+          onClose={onCloseModal}
+          onRefresh={onRefresh}
+        />
+      )}
     </div>
   );
 }
 
-// KPIs Tab Component
+// KPIs Tab Component - Modern Design
 function KPIsTab({ project }) {
   const [kpis, setKpis] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -640,169 +823,377 @@ function KPIsTab({ project }) {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 'var(--spacing-xl)' }}>
+      <div className="kpis-loading">
         <div className="loading-spinner"></div>
+        <p>Chargement des KPIs...</p>
       </div>
     );
   }
 
   const tendanceVentes = getTendanceIcon(kpis?.tendance_ventes || 0);
   const tendanceCa = getTendanceIcon(kpis?.tendance_ca || 0);
+  const totalLots = kpis?.total_lots || 1;
 
   return (
-    <div className="kpis-tab">
-      {/* Section Stock */}
-      <div className="kpi-section">
-        <h3 className="kpi-section-title">Stock de Lots</h3>
-        <div className="kpi-grid">
-          <div className="kpi-card">
-            <div className="kpi-icon">📦</div>
-            <div className="kpi-value">{kpis?.total_lots || 0}</div>
-            <div className="kpi-label">Total Lots</div>
+    <div className="kpis-tab-v2">
+      {/* Hero KPIs - CA Section */}
+      <div className="kpis-hero">
+        <div className="kpis-hero-grid">
+          <div className="kpis-hero-card gradient-success">
+            <div className="kpis-hero-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+            <div className="kpis-hero-content">
+              <div className="kpis-hero-value">{formatMoney(kpis?.ca_realise)}</div>
+              <div className="kpis-hero-label">CA R&eacute;alis&eacute;</div>
+              {kpis?.ca_objectif > 0 && (
+                <div className="kpis-hero-progress">
+                  <div className="kpis-hero-progress-bar">
+                    <div
+                      className="kpis-hero-progress-fill"
+                      style={{ width: `${Math.min(kpis?.progression_ca || 0, 100)}%` }}
+                    />
+                  </div>
+                  <span>{kpis?.progression_ca || 0}% de l'objectif</span>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="kpi-card">
-            <div className="kpi-icon available">✓</div>
-            <div className="kpi-value">{kpis?.lots_disponibles || 0}</div>
-            <div className="kpi-label">Disponibles</div>
+
+          <div className="kpis-hero-card gradient-primary">
+            <div className="kpis-hero-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 16v-4M12 8h.01"/>
+              </svg>
+            </div>
+            <div className="kpis-hero-content">
+              <div className="kpis-hero-value">{formatMoney(kpis?.ca_potentiel)}</div>
+              <div className="kpis-hero-label">CA Potentiel</div>
+              <div className="kpis-hero-subtitle">Lots disponibles</div>
+            </div>
           </div>
-          <div className="kpi-card">
-            <div className="kpi-icon reserved">📋</div>
-            <div className="kpi-value">{kpis?.lots_reserves || 0}</div>
-            <div className="kpi-label">Réservés</div>
+
+          <div className="kpis-hero-card gradient-warning">
+            <div className="kpis-hero-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 20V10M18 20V4M6 20v-4"/>
+              </svg>
+            </div>
+            <div className="kpis-hero-content">
+              <div className="kpis-hero-value">{kpis?.ventes_mois || 0}</div>
+              <div className="kpis-hero-label">Ventes ce Mois</div>
+              <div className="kpis-hero-trend" style={{ color: tendanceVentes.color === '#10b981' ? '#a7f3d0' : tendanceVentes.color === '#ef4444' ? '#fca5a5' : 'rgba(255,255,255,0.7)' }}>
+                {tendanceVentes.icon} {tendanceVentes.label}
+              </div>
+            </div>
           </div>
-          <div className="kpi-card">
-            <div className="kpi-icon sold">✅</div>
-            <div className="kpi-value">{kpis?.lots_vendus || 0}</div>
-            <div className="kpi-label">Vendus</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon blocked">🚫</div>
-            <div className="kpi-value">{kpis?.lots_bloques || 0}</div>
-            <div className="kpi-label">Bloqués</div>
+
+          <div className="kpis-hero-card gradient-info">
+            <div className="kpis-hero-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+            </div>
+            <div className="kpis-hero-content">
+              <div className="kpis-hero-value">{formatMoney(kpis?.ca_mois)}</div>
+              <div className="kpis-hero-label">CA ce Mois</div>
+              <div className="kpis-hero-trend" style={{ color: tendanceCa.color === '#10b981' ? '#a7f3d0' : tendanceCa.color === '#ef4444' ? '#fca5a5' : 'rgba(255,255,255,0.7)' }}>
+                {tendanceCa.icon} {tendanceCa.label}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Section Financiers */}
-      <div className="kpi-section">
-        <h3 className="kpi-section-title">Indicateurs Financiers</h3>
-        <div className="kpi-grid">
-          <div className="kpi-card kpi-card-highlight">
-            <div className="kpi-icon money">💰</div>
-            <div className="kpi-value">{formatMoney(kpis?.ca_realise)}</div>
-            <div className="kpi-label">CA Réalisé</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon">🎯</div>
-            <div className="kpi-value">{formatMoney(kpis?.ca_objectif)}</div>
-            <div className="kpi-label">CA Objectif</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon">📊</div>
-            <div className="kpi-value" style={{ color: kpis?.progression_ca >= 100 ? '#10b981' : '#f59e0b' }}>
-              {kpis?.progression_ca || 0}%
+      {/* Stock de Lots - Visual Cards */}
+      <div className="kpis-section-v2">
+        <div className="kpis-section-header">
+          <h3>
+            <span className="kpis-section-icon">📦</span>
+            Stock de Lots
+          </h3>
+          <span className="kpis-section-badge">{kpis?.total_lots || 0} lots</span>
+        </div>
+
+        <div className="kpis-stock-grid">
+          <div className="kpis-stock-card available">
+            <div className="kpis-stock-visual">
+              <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                <path
+                  className="kpis-circle-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="kpis-circle available"
+                  strokeDasharray={`${((kpis?.available_lots || 0) / totalLots) * 100}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+              </svg>
+              <div className="kpis-stock-percent">{Math.round(((kpis?.available_lots || 0) / totalLots) * 100)}%</div>
             </div>
-            <div className="kpi-label">Progression CA</div>
-            <div className="kpi-progress-bar">
+            <div className="kpis-stock-info">
+              <div className="kpis-stock-value">{kpis?.available_lots || 0}</div>
+              <div className="kpis-stock-label">Disponibles</div>
+            </div>
+          </div>
+
+          <div className="kpis-stock-card reserved">
+            <div className="kpis-stock-visual">
+              <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                <path
+                  className="kpis-circle-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="kpis-circle reserved"
+                  strokeDasharray={`${((kpis?.reserved_lots || 0) / totalLots) * 100}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+              </svg>
+              <div className="kpis-stock-percent">{Math.round(((kpis?.reserved_lots || 0) / totalLots) * 100)}%</div>
+            </div>
+            <div className="kpis-stock-info">
+              <div className="kpis-stock-value">{kpis?.reserved_lots || 0}</div>
+              <div className="kpis-stock-label">R&eacute;serv&eacute;s</div>
+            </div>
+          </div>
+
+          <div className="kpis-stock-card sold">
+            <div className="kpis-stock-visual">
+              <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                <path
+                  className="kpis-circle-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="kpis-circle sold"
+                  strokeDasharray={`${((kpis?.sold_lots || 0) / totalLots) * 100}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+              </svg>
+              <div className="kpis-stock-percent">{Math.round(((kpis?.sold_lots || 0) / totalLots) * 100)}%</div>
+            </div>
+            <div className="kpis-stock-info">
+              <div className="kpis-stock-value">{kpis?.sold_lots || 0}</div>
+              <div className="kpis-stock-label">Vendus</div>
+            </div>
+          </div>
+
+          <div className="kpis-stock-card blocked">
+            <div className="kpis-stock-visual">
+              <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                <path
+                  className="kpis-circle-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="kpis-circle blocked"
+                  strokeDasharray={`${((kpis?.blocked_lots || 0) / totalLots) * 100}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+              </svg>
+              <div className="kpis-stock-percent">{Math.round(((kpis?.blocked_lots || 0) / totalLots) * 100)}%</div>
+            </div>
+            <div className="kpis-stock-info">
+              <div className="kpis-stock-value">{kpis?.blocked_lots || 0}</div>
+              <div className="kpis-stock-label">Bloqu&eacute;s</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Financial & Surface Stats */}
+      <div className="kpis-dual-section">
+        {/* Indicateurs Financiers */}
+        <div className="kpis-section-v2">
+          <div className="kpis-section-header">
+            <h3>
+              <span className="kpis-section-icon">💰</span>
+              Indicateurs Financiers
+            </h3>
+          </div>
+
+          <div className="kpis-metrics-list">
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon primary">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 18V6"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">CA Objectif</div>
+                <div className="kpis-metric-value">{formatMoney(kpis?.ca_objectif)}</div>
+              </div>
+            </div>
+
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon success">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">Prix Moyen / Lot</div>
+                <div className="kpis-metric-value">{formatMoney(kpis?.prix_moyen_lot)}</div>
+              </div>
+            </div>
+
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon warning">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <path d="M3 9h18M9 21V9"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">Prix Moyen / m²</div>
+                <div className="kpis-metric-value">{formatMoney(kpis?.prix_moyen_m2)}</div>
+              </div>
+            </div>
+
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon info">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="1" y="4" width="22" height="16" rx="2"/>
+                  <path d="M1 10h22"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">Total Acomptes</div>
+                <div className="kpis-metric-value">{formatMoney(kpis?.total_deposits)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Surfaces */}
+        <div className="kpis-section-v2">
+          <div className="kpis-section-header">
+            <h3>
+              <span className="kpis-section-icon">📐</span>
+              Surfaces
+            </h3>
+          </div>
+
+          <div className="kpis-metrics-list">
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">Surface Totale</div>
+                <div className="kpis-metric-value">{formatSurface(kpis?.surface_totale)}</div>
+              </div>
+            </div>
+
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon success">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">Disponible</div>
+                <div className="kpis-metric-value">{formatSurface(kpis?.surface_disponible)}</div>
+              </div>
+            </div>
+
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon warning">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">R&eacute;serv&eacute;e</div>
+                <div className="kpis-metric-value">{formatSurface(kpis?.surface_reservee)}</div>
+              </div>
+            </div>
+
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon danger">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">Vendue</div>
+                <div className="kpis-metric-value">{formatSurface(kpis?.surface_vendue)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Performance Rates */}
+      <div className="kpis-section-v2">
+        <div className="kpis-section-header">
+          <h3>
+            <span className="kpis-section-icon">📈</span>
+            Taux de Performance
+          </h3>
+        </div>
+
+        <div className="kpis-rates-grid">
+          <div className="kpis-rate-card">
+            <div className="kpis-rate-header">
+              <span>Taux de Vente</span>
+              <span className="kpis-rate-value" style={{ color: (kpis?.taux_vente || 0) >= 50 ? 'var(--color-success)' : 'var(--color-warning)' }}>
+                {kpis?.taux_vente || 0}%
+              </span>
+            </div>
+            <div className="kpis-rate-bar">
               <div
-                className="kpi-progress-fill"
+                className="kpis-rate-fill"
                 style={{
-                  width: `${Math.min(kpis?.progression_ca || 0, 100)}%`,
-                  background: kpis?.progression_ca >= 100 ? '#10b981' : '#3b82f6'
+                  width: `${Math.min(kpis?.taux_vente || 0, 100)}%`,
+                  background: (kpis?.taux_vente || 0) >= 50 ? 'var(--color-success)' : 'var(--color-warning)'
                 }}
               />
             </div>
           </div>
-          <div className="kpi-card">
-            <div className="kpi-icon">💎</div>
-            <div className="kpi-value">{formatMoney(kpis?.ca_potentiel)}</div>
-            <div className="kpi-label">CA Potentiel</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon">💵</div>
-            <div className="kpi-value">{formatMoney(kpis?.prix_moyen_lot)}</div>
-            <div className="kpi-label">Prix Moyen / Lot</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon">📐</div>
-            <div className="kpi-value">{formatMoney(kpis?.prix_moyen_m2)}</div>
-            <div className="kpi-label">Prix Moyen / m²</div>
-          </div>
-        </div>
-      </div>
 
-      {/* Section Surfaces */}
-      <div className="kpi-section">
-        <h3 className="kpi-section-title">Surfaces</h3>
-        <div className="kpi-grid">
-          <div className="kpi-card">
-            <div className="kpi-icon">🗺️</div>
-            <div className="kpi-value">{formatSurface(kpis?.surface_totale)}</div>
-            <div className="kpi-label">Surface Totale</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon available">📏</div>
-            <div className="kpi-value">{formatSurface(kpis?.surface_disponible)}</div>
-            <div className="kpi-label">Surface Disponible</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon reserved">📐</div>
-            <div className="kpi-value">{formatSurface(kpis?.surface_reservee)}</div>
-            <div className="kpi-label">Surface Réservée</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon sold">✅</div>
-            <div className="kpi-value">{formatSurface(kpis?.surface_vendue)}</div>
-            <div className="kpi-label">Surface Vendue</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Section Performance */}
-      <div className="kpi-section">
-        <h3 className="kpi-section-title">Performance</h3>
-        <div className="kpi-grid">
-          <div className="kpi-card">
-            <div className="kpi-icon">📈</div>
-            <div className="kpi-value">{kpis?.taux_vente || 0}%</div>
-            <div className="kpi-label">Taux de Vente</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon reserved">📋</div>
-            <div className="kpi-value">{kpis?.taux_reservation || 0}%</div>
-            <div className="kpi-label">Taux de Réservation</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon">🔄</div>
-            <div className="kpi-value">{kpis?.taux_conversion || 0}%</div>
-            <div className="kpi-label">Taux de Conversion</div>
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-icon">💳</div>
-            <div className="kpi-value">{formatMoney(kpis?.total_deposits)}</div>
-            <div className="kpi-label">Total Acomptes</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Section Ce Mois */}
-      <div className="kpi-section">
-        <h3 className="kpi-section-title">Ce Mois</h3>
-        <div className="kpi-grid">
-          <div className="kpi-card">
-            <div className="kpi-icon">📅</div>
-            <div className="kpi-value">{kpis?.ventes_mois || 0}</div>
-            <div className="kpi-label">Ventes ce Mois</div>
-            <div className="kpi-tendance" style={{ color: tendanceVentes.color }}>
-              {tendanceVentes.icon} {tendanceVentes.label} vs mois précédent
+          <div className="kpis-rate-card">
+            <div className="kpis-rate-header">
+              <span>Taux de R&eacute;servation</span>
+              <span className="kpis-rate-value" style={{ color: 'var(--color-warning)' }}>
+                {kpis?.taux_reservation || 0}%
+              </span>
+            </div>
+            <div className="kpis-rate-bar">
+              <div
+                className="kpis-rate-fill"
+                style={{
+                  width: `${Math.min(kpis?.taux_reservation || 0, 100)}%`,
+                  background: 'var(--color-warning)'
+                }}
+              />
             </div>
           </div>
-          <div className="kpi-card">
-            <div className="kpi-icon money">💰</div>
-            <div className="kpi-value">{formatMoney(kpis?.ca_mois)}</div>
-            <div className="kpi-label">CA ce Mois</div>
-            <div className="kpi-tendance" style={{ color: tendanceCa.color }}>
-              {tendanceCa.icon} {tendanceCa.label} vs mois précédent
+
+          <div className="kpis-rate-card">
+            <div className="kpis-rate-header">
+              <span>Taux de Conversion</span>
+              <span className="kpis-rate-value" style={{ color: (kpis?.taux_conversion || 0) >= 50 ? 'var(--color-success)' : 'var(--color-primary)' }}>
+                {kpis?.taux_conversion || 0}%
+              </span>
+            </div>
+            <div className="kpis-rate-bar">
+              <div
+                className="kpis-rate-fill"
+                style={{
+                  width: `${Math.min(kpis?.taux_conversion || 0, 100)}%`,
+                  background: (kpis?.taux_conversion || 0) >= 50 ? 'var(--color-success)' : 'var(--color-primary)'
+                }}
+              />
             </div>
           </div>
         </div>
@@ -826,9 +1217,47 @@ const formatNumberPerf = (num, suffix = '') => {
   return `${Math.round(num)}${suffix ? ' ' + suffix : ''}`;
 };
 
+// Circular Progress Component
+function CircularProgress({ value, size = 80, strokeWidth = 6, color = 'var(--color-primary)' }) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const offset = circumference - (value / 100) * circumference;
+
+  return (
+    <svg width={size} height={size} className="circular-progress">
+      <circle
+        className="circular-progress-bg"
+        stroke="var(--bg-tertiary)"
+        strokeWidth={strokeWidth}
+        fill="none"
+        r={radius}
+        cx={size / 2}
+        cy={size / 2}
+      />
+      <circle
+        className="circular-progress-value"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        fill="none"
+        r={radius}
+        cx={size / 2}
+        cy={size / 2}
+        style={{
+          strokeDasharray: circumference,
+          strokeDashoffset: offset,
+          transform: 'rotate(-90deg)',
+          transformOrigin: '50% 50%',
+          transition: 'stroke-dashoffset 0.8s ease-out'
+        }}
+      />
+    </svg>
+  );
+}
+
 // Performance Tab Component
 function PerformanceTab({ project }) {
-  const [performance, setPerformance] = useState(null);
+  const [commercials, setCommercials] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCommercial, setSelectedCommercial] = useState(null);
 
@@ -840,13 +1269,27 @@ function PerformanceTab({ project }) {
     setLoading(true);
     try {
       const data = await apiGet(`/api/projects/${project.id}/performance`);
-      setPerformance(data);
+      setCommercials(data || []);
     } catch (err) {
       console.error(err);
+      setCommercials([]);
     } finally {
       setLoading(false);
     }
   };
+
+  // Calculer le r&eacute;sum&eacute; &agrave; partir des donn&eacute;es des commerciaux
+  const summary = {
+    total_ventes: commercials.reduce((sum, c) => sum + (c.total_sales || 0), 0),
+    total_ca: commercials.reduce((sum, c) => sum + (c.ca_total || 0), 0),
+    taux_moyen: commercials.length > 0
+      ? Math.round(commercials.reduce((sum, c) => sum + (c.taux_transformation || 0), 0) / commercials.length)
+      : 0,
+  };
+
+  // Trier les commerciaux par CA pour le classement
+  const sortedCommercials = [...commercials].sort((a, b) => (b.ca_total || 0) - (a.ca_total || 0));
+  const maxCA = sortedCommercials.length > 0 ? (sortedCommercials[0].ca_total || 1) : 1;
 
   const handleSelectCommercial = (commercial) => {
     if (selectedCommercial?.user_id === commercial.user_id) {
@@ -856,173 +1299,276 @@ function PerformanceTab({ project }) {
     }
   };
 
+  const getRankBadge = (index) => {
+    if (index === 0) return { icon: '🥇', color: '#FFD700', label: '1er' };
+    if (index === 1) return { icon: '🥈', color: '#C0C0C0', label: '2e' };
+    if (index === 2) return { icon: '🥉', color: '#CD7F32', label: '3e' };
+    return { icon: null, color: 'var(--text-muted)', label: `${index + 1}e` };
+  };
+
+  const getTransformationColor = (rate) => {
+    if (rate >= 60) return 'var(--color-success)';
+    if (rate >= 30) return 'var(--color-warning)';
+    return 'var(--color-danger)';
+  };
+
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 'var(--spacing-xl)' }}>
+      <div className="perf-loading">
         <div className="loading-spinner"></div>
+        <p>Chargement des performances...</p>
       </div>
     );
   }
 
   return (
-    <div className="performance-tab">
-      <div className="section-card">
-        <h3>Commerciaux Assign&eacute;s</h3>
-        {performance?.commercials && performance.commercials.length > 0 ? (
-          <div className="commercials-grid">
-            {performance.commercials.map((commercial) => (
-              <div
-                key={commercial.user_id}
-                className={`commercial-card ${selectedCommercial?.user_id === commercial.user_id ? 'selected' : ''}`}
-                onClick={() => handleSelectCommercial(commercial)}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="commercial-header">
-                  <div className="user-avatar" style={{ width: '48px', height: '48px', fontSize: '1rem' }}>
-                    {commercial.name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '??'}
-                  </div>
-                  <div className="commercial-info">
-                    <div className="user-name" style={{ fontSize: '1rem', fontWeight: 600 }}>{commercial.name}</div>
-                    <div className="user-email" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      {commercial.email}
-                    </div>
-                  </div>
-                  <div style={{ marginLeft: 'auto', fontSize: '1.2rem' }}>
-                    {selectedCommercial?.user_id === commercial.user_id ? '▼' : '▶'}
-                  </div>
-                </div>
-
-                {/* Quick Stats */}
-                <div className="commercial-quick-stats" style={{
-                  display: 'flex',
-                  gap: 'var(--spacing-md)',
-                  marginTop: 'var(--spacing-md)',
-                  paddingTop: 'var(--spacing-md)',
-                  borderTop: '1px solid var(--bg-tertiary)'
-                }}>
-                  <div style={{ textAlign: 'center', flex: 1 }}>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--success)' }}>
-                      {commercial.total_sales || 0}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Ventes</div>
-                  </div>
-                  <div style={{ textAlign: 'center', flex: 1 }}>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--warning)' }}>
-                      {commercial.total_reservations || 0}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>R&eacute;servations</div>
-                  </div>
-                  <div style={{ textAlign: 'center', flex: 1 }}>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary)' }}>
-                      {formatNumberPerf(commercial.ca_total || commercial.ca_realise, 'MAD')}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>CA</div>
-                  </div>
-                </div>
-
-                {/* Expanded Details */}
-                {selectedCommercial?.user_id === commercial.user_id && (
-                  <div className="commercial-details" style={{
-                    marginTop: 'var(--spacing-md)',
-                    padding: 'var(--spacing-md)',
-                    background: 'var(--bg-secondary)',
-                    borderRadius: 'var(--radius-md)'
-                  }}>
-                    <h4 style={{ margin: '0 0 var(--spacing-md) 0', fontSize: '0.9rem' }}>D&eacute;tails Performance</h4>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--spacing-md)' }}>
-                      <div className="detail-item">
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Taux de Transformation</div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                          <span className={`status-badge ${(commercial.taux_transformation || 0) >= 50 ? 'sold' : (commercial.taux_transformation || 0) >= 25 ? 'reserved' : 'available'}`}>
-                            {commercial.taux_transformation || 0}%
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="detail-item">
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>CA Moyen / Vente</div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-                          {formatNumberPerf(commercial.ca_moyen, 'MAD')}
-                        </div>
-                      </div>
-
-                      <div className="detail-item">
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Lots Vendus</div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--success)' }}>
-                          {commercial.total_sales || commercial.ventes_count || 0}
-                        </div>
-                      </div>
-
-                      <div className="detail-item">
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>R&eacute;servations Actives</div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--warning)' }}>
-                          {commercial.total_reservations || 0}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Progress bar for transformation rate */}
-                    <div style={{ marginTop: 'var(--spacing-md)' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-xs)' }}>
-                        Progression des ventes
-                      </div>
-                      <div className="kpi-progress-bar" style={{ height: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px' }}>
-                        <div
-                          style={{
-                            width: `${Math.min(commercial.taux_transformation || 0, 100)}%`,
-                            height: '100%',
-                            background: (commercial.taux_transformation || 0) >= 50 ? 'var(--success)' : 'var(--primary)',
-                            borderRadius: '4px',
-                            transition: 'width 0.3s ease'
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
+    <div className="performance-tab-v2">
+      {/* Summary Header */}
+      {commercials.length > 0 && (
+        <div className="perf-summary-header">
+          <div className="perf-summary-grid">
+            <div className="perf-summary-card gradient-primary">
+              <div className="perf-summary-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 20V10M18 20V4M6 20v-4"/>
+                </svg>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">
-            <div className="empty-state-icon">👔</div>
-            <div className="empty-state-title">Aucun commercial assign&eacute;</div>
-            <div className="empty-state-description">
-              Assignez des commerciaux &agrave; ce projet pour voir leurs performances.
+              <div className="perf-summary-content">
+                <div className="perf-summary-value">{summary.total_ventes}</div>
+                <div className="perf-summary-label">Ventes Totales</div>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* Global Performance Summary */}
-      {performance?.summary && (
-        <div className="section-card" style={{ marginTop: 'var(--spacing-md)' }}>
-          <h3>R&eacute;sum&eacute; Global</h3>
-          <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-            <div className="kpi-card">
-              <div className="kpi-icon">📈</div>
-              <div className="kpi-value">{performance.summary.total_ventes || 0}</div>
-              <div className="kpi-label">Total Ventes</div>
+            <div className="perf-summary-card gradient-success">
+              <div className="perf-summary-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 6v6l4 2"/>
+                </svg>
+              </div>
+              <div className="perf-summary-content">
+                <div className="perf-summary-value">{formatNumberPerf(summary.total_ca, '')}</div>
+                <div className="perf-summary-label">CA Total (MAD)</div>
+              </div>
             </div>
-            <div className="kpi-card">
-              <div className="kpi-icon money">💰</div>
-              <div className="kpi-value">{formatNumberPerf(performance.summary.total_ca, 'MAD')}</div>
-              <div className="kpi-label">CA Total</div>
+
+            <div className="perf-summary-card gradient-warning">
+              <div className="perf-summary-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+              </div>
+              <div className="perf-summary-content">
+                <div className="perf-summary-value">{summary.taux_moyen}%</div>
+                <div className="perf-summary-label">Taux Conversion</div>
+              </div>
             </div>
-            <div className="kpi-card">
-              <div className="kpi-icon">🔄</div>
-              <div className="kpi-value">{performance.summary.taux_moyen || 0}%</div>
-              <div className="kpi-label">Taux Moyen</div>
-            </div>
-            <div className="kpi-card">
-              <div className="kpi-icon">👔</div>
-              <div className="kpi-value">{performance.commercials?.length || 0}</div>
-              <div className="kpi-label">Commerciaux</div>
+
+            <div className="perf-summary-card gradient-info">
+              <div className="perf-summary-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <div className="perf-summary-content">
+                <div className="perf-summary-value">{commercials.length}</div>
+                <div className="perf-summary-label">Commerciaux</div>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Leaderboard */}
+      <div className="perf-section">
+        <div className="perf-section-header">
+          <h3>
+            <span className="perf-section-icon">🏆</span>
+            Classement des Commerciaux
+          </h3>
+          {commercials.length > 0 && (
+            <span className="perf-section-badge">{commercials.length} actifs</span>
+          )}
+        </div>
+
+        {sortedCommercials.length > 0 ? (
+          <div className="perf-leaderboard">
+            {sortedCommercials.map((commercial, index) => {
+              const rank = getRankBadge(index);
+              const isSelected = selectedCommercial?.user_id === commercial.user_id;
+              const caPercent = ((commercial.ca_total || 0) / maxCA) * 100;
+
+              return (
+                <div
+                  key={commercial.user_id}
+                  className={`perf-commercial-card ${isSelected ? 'selected' : ''} ${index < 3 ? 'top-three' : ''}`}
+                  onClick={() => handleSelectCommercial(commercial)}
+                >
+                  {/* Rank Badge */}
+                  <div className="perf-rank" style={{ color: rank.color }}>
+                    {rank.icon ? (
+                      <span className="perf-rank-icon">{rank.icon}</span>
+                    ) : (
+                      <span className="perf-rank-number">{rank.label}</span>
+                    )}
+                  </div>
+
+                  {/* Avatar & Info */}
+                  <div className="perf-commercial-main">
+                    <div className="perf-avatar" style={{
+                      background: index === 0 ? 'linear-gradient(135deg, #FFD700, #FFA500)' :
+                                 index === 1 ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)' :
+                                 index === 2 ? 'linear-gradient(135deg, #CD7F32, #8B4513)' :
+                                 'var(--color-primary)'
+                    }}>
+                      {commercial.user_name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '??'}
+                    </div>
+                    <div className="perf-commercial-info">
+                      <div className="perf-commercial-name">{commercial.user_name}</div>
+                      <div className="perf-commercial-stats-mini">
+                        <span className="perf-stat-mini success">
+                          <strong>{commercial.total_sales || 0}</strong> ventes
+                        </span>
+                        <span className="perf-stat-mini warning">
+                          <strong>{commercial.total_reservations || 0}</strong> r&eacute;serv.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CA Bar */}
+                  <div className="perf-ca-section">
+                    <div className="perf-ca-value">{formatNumberPerf(commercial.ca_total, 'MAD')}</div>
+                    <div className="perf-ca-bar">
+                      <div
+                        className="perf-ca-fill"
+                        style={{
+                          width: `${caPercent}%`,
+                          background: index === 0 ? 'linear-gradient(90deg, #FFD700, #FFA500)' :
+                                     'var(--color-primary)'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Transformation Rate Circle */}
+                  <div className="perf-transformation">
+                    <div className="perf-circle-container">
+                      <CircularProgress
+                        value={commercial.taux_transformation || 0}
+                        size={56}
+                        strokeWidth={5}
+                        color={getTransformationColor(commercial.taux_transformation || 0)}
+                      />
+                      <div className="perf-circle-value">
+                        {commercial.taux_transformation || 0}%
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expand Arrow */}
+                  <div className={`perf-expand-icon ${isSelected ? 'expanded' : ''}`}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                  </div>
+
+                  {/* Expanded Details Panel */}
+                  {isSelected && (
+                    <div className="perf-details-panel">
+                      <div className="perf-details-grid">
+                        <div className="perf-detail-card">
+                          <div className="perf-detail-icon success">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                          </div>
+                          <div className="perf-detail-content">
+                            <div className="perf-detail-value">{commercial.total_sales || 0}</div>
+                            <div className="perf-detail-label">Lots Vendus</div>
+                          </div>
+                        </div>
+
+                        <div className="perf-detail-card">
+                          <div className="perf-detail-icon warning">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10"/>
+                              <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                          </div>
+                          <div className="perf-detail-content">
+                            <div className="perf-detail-value">{commercial.total_reservations || 0}</div>
+                            <div className="perf-detail-label">R&eacute;servations</div>
+                          </div>
+                        </div>
+
+                        <div className="perf-detail-card">
+                          <div className="perf-detail-icon primary">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                            </svg>
+                          </div>
+                          <div className="perf-detail-content">
+                            <div className="perf-detail-value">
+                              {formatNumberPerf(commercial.total_sales > 0 ? commercial.ca_total / commercial.total_sales : 0, '')}
+                            </div>
+                            <div className="perf-detail-label">CA Moyen/Vente</div>
+                          </div>
+                        </div>
+
+                        <div className="perf-detail-card">
+                          <div className="perf-detail-icon info">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                            </svg>
+                          </div>
+                          <div className="perf-detail-content">
+                            <div className="perf-detail-value">{commercial.converted_reservations || 0}</div>
+                            <div className="perf-detail-label">Conversions</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Performance Progress */}
+                      <div className="perf-progress-section">
+                        <div className="perf-progress-header">
+                          <span>Performance globale</span>
+                          <span className="perf-progress-value" style={{ color: getTransformationColor(commercial.taux_transformation || 0) }}>
+                            {commercial.taux_transformation || 0}%
+                          </span>
+                        </div>
+                        <div className="perf-progress-bar">
+                          <div
+                            className="perf-progress-fill"
+                            style={{
+                              width: `${Math.min(commercial.taux_transformation || 0, 100)}%`,
+                              background: `linear-gradient(90deg, ${getTransformationColor(commercial.taux_transformation || 0)}, ${getTransformationColor(commercial.taux_transformation || 0)}88)`
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="perf-empty-state">
+            <div className="perf-empty-icon">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            </div>
+            <h4>Aucun commercial assign&eacute;</h4>
+            <p>Assignez des commerciaux &agrave; ce projet pour suivre leurs performances.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1043,13 +1589,10 @@ function HistoriqueTab({ projectId, userId, isCommercial }) {
   const loadHistory = async () => {
     setLoading(true);
     try {
-      // Construire les query params
       const params = new URLSearchParams();
-      // Pour les commerciaux, filtrer par leur propre ID
       if (isCommercial && userId) {
         params.append('user_id', userId);
       }
-      // Filtres de dates
       if (dateDebut) {
         params.append('date_from', dateDebut);
       }
@@ -1072,101 +1615,246 @@ function HistoriqueTab({ projectId, userId, isCommercial }) {
     setDateFin('');
   };
 
+  const getActionConfig = (action) => {
+    const configs = {
+      create: {
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        ),
+        color: 'var(--color-success)',
+        bg: 'rgba(16, 185, 129, 0.15)',
+        label: 'Création'
+      },
+      update: {
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        ),
+        color: 'var(--color-primary)',
+        bg: 'rgba(59, 130, 246, 0.15)',
+        label: 'Modification'
+      },
+      delete: {
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+        ),
+        color: 'var(--color-danger)',
+        bg: 'rgba(239, 68, 68, 0.15)',
+        label: 'Suppression'
+      },
+      reserve: {
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+        ),
+        color: 'var(--color-warning)',
+        bg: 'rgba(245, 158, 11, 0.15)',
+        label: 'Réservation'
+      },
+      sell: {
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+        ),
+        color: 'var(--color-success)',
+        bg: 'rgba(16, 185, 129, 0.15)',
+        label: 'Vente'
+      },
+      cancel: {
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+        ),
+        color: 'var(--color-danger)',
+        bg: 'rgba(239, 68, 68, 0.15)',
+        label: 'Annulation'
+      },
+    };
+    return configs[action] || {
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+      ),
+      color: 'var(--text-secondary)',
+      bg: 'var(--bg-tertiary)',
+      label: 'Action'
+    };
+  };
+
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now - date;
+    const diffDays = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return `Aujourd'hui à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (diffDays === 1) {
+      return `Hier à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (diffDays < 7) {
+      return `${date.toLocaleDateString('fr-FR', { weekday: 'long' })} à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    } else {
+      return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+  };
+
+  // Grouper par date
+  const groupedHistory = history.reduce((groups, entry) => {
+    const date = new Date(entry.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (!groups[date]) {
+      groups[date] = [];
+    }
+    groups[date].push(entry);
+    return groups;
+  }, {});
+
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 'var(--spacing-xl)' }}>
+      <div className="history-loading">
         <div className="loading-spinner"></div>
+        <p>Chargement de l'historique...</p>
       </div>
     );
   }
 
   return (
-    <div className="historique-tab">
-      <div className="section-card">
-        <div className="section-header" style={{ marginBottom: 'var(--spacing-md)' }}>
-          <h3 style={{ margin: 0 }}>{isCommercial ? 'Mon Historique' : 'Historique du Projet'}</h3>
+    <div className="historique-tab-v2">
+      {/* Header */}
+      <div className="history-header">
+        <div className="history-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          {isCommercial ? 'Mon Historique' : 'Historique du Projet'}
         </div>
-
-        {/* Filtres de dates */}
-        <div className="filters-container" style={{
-          display: 'flex',
-          gap: 'var(--spacing-md)',
-          alignItems: 'center',
-          marginBottom: 'var(--spacing-lg)',
-          padding: 'var(--spacing-md)',
-          background: 'var(--bg-secondary)',
-          borderRadius: 'var(--radius-md)',
-          flexWrap: 'wrap'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-            <label style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Du:</label>
-            <input
-              type="date"
-              className="form-input"
-              value={dateDebut}
-              onChange={(e) => setDateDebut(e.target.value)}
-              style={{ width: 'auto' }}
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-            <label style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Au:</label>
-            <input
-              type="date"
-              className="form-input"
-              value={dateFin}
-              onChange={(e) => setDateFin(e.target.value)}
-              style={{ width: 'auto' }}
-            />
-          </div>
-          {(dateDebut || dateFin) && (
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={resetFilters}
-            >
-              Réinitialiser
-            </button>
-          )}
+        <div className="history-count">
+          {history.length} événement{history.length > 1 ? 's' : ''}
         </div>
+      </div>
 
-        {history.length > 0 ? (
-          <div className="history-list">
-            {history.map((entry) => (
-              <div key={entry.id} className="history-item">
-                <div className="history-icon">{getActionIcon(entry.action)}</div>
-                <div className="history-content">
-                  <div className="history-action">{entry.description}</div>
-                  <div className="history-meta">
-                    {entry.user_name} • {new Date(entry.created_at).toLocaleString('fr-FR')}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">
-            <div className="empty-state-icon">📋</div>
-            <div className="empty-state-description">
-              {dateDebut || dateFin
-                ? 'Aucun historique pour cette période'
-                : 'Aucun historique disponible'}
-            </div>
-          </div>
+      {/* Filters */}
+      <div className="history-filters">
+        <div className="history-filter-group">
+          <label className="history-filter-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Du
+          </label>
+          <input
+            type="date"
+            className="history-filter-input"
+            value={dateDebut}
+            onChange={(e) => setDateDebut(e.target.value)}
+          />
+        </div>
+        <div className="history-filter-group">
+          <label className="history-filter-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Au
+          </label>
+          <input
+            type="date"
+            className="history-filter-input"
+            value={dateFin}
+            onChange={(e) => setDateFin(e.target.value)}
+          />
+        </div>
+        {(dateDebut || dateFin) && (
+          <button className="history-filter-clear" onClick={resetFilters}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            Effacer
+          </button>
         )}
       </div>
+
+      {/* Timeline */}
+      {history.length > 0 ? (
+        <div className="history-timeline">
+          {Object.entries(groupedHistory).map(([date, entries]) => (
+            <div key={date} className="history-day-group">
+              <div className="history-day-header">
+                <div className="history-day-line"></div>
+                <span className="history-day-label">{date}</span>
+                <div className="history-day-line"></div>
+              </div>
+              <div className="history-entries">
+                {entries.map((entry, index) => {
+                  const config = getActionConfig(entry.action);
+                  return (
+                    <div key={entry.id} className="history-entry">
+                      <div className="history-entry-timeline">
+                        <div
+                          className="history-entry-icon"
+                          style={{ background: config.bg, color: config.color }}
+                        >
+                          {config.icon}
+                        </div>
+                        {index < entries.length - 1 && <div className="history-entry-connector"></div>}
+                      </div>
+                      <div className="history-entry-content">
+                        <div className="history-entry-header">
+                          <span
+                            className="history-entry-type"
+                            style={{ color: config.color }}
+                          >
+                            {config.label}
+                          </span>
+                          <span className="history-entry-time">
+                            {new Date(entry.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div className="history-entry-description">
+                          {entry.description}
+                        </div>
+                        <div className="history-entry-user">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                          </svg>
+                          {entry.user_name}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="history-empty">
+          <div className="history-empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <div className="history-empty-title">Aucun historique</div>
+          <div className="history-empty-text">
+            {dateDebut || dateFin
+              ? 'Aucun événement pour cette période'
+              : 'Les actions sur ce projet apparaîtront ici'}
+          </div>
+        </div>
+      )}
     </div>
   );
-}
-
-function getActionIcon(action) {
-  const icons = {
-    create: '➕',
-    update: '✏️',
-    delete: '🗑️',
-    reserve: '📋',
-    sell: '✅',
-    cancel: '❌',
-  };
-  return icons[action] || '📌';
 }
 
 // Parametres Tab Component
@@ -1180,6 +1868,12 @@ function ParametresTab({ project, onUpdate }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // CSV Import state
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvLoading, setCsvLoading] = useState(false);
+  const [csvResult, setCsvResult] = useState(null);
+  const csvInputRef = useRef(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -1210,6 +1904,50 @@ function ParametresTab({ project, onUpdate }) {
       setError(err.message || 'Erreur lors de la mise à jour');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCsvSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCsvFile(file);
+      setCsvResult(null);
+    }
+  };
+
+  const handleCsvImport = async () => {
+    if (!csvFile) return;
+
+    setCsvLoading(true);
+    setCsvResult(null);
+
+    try {
+      const result = await apiUploadFile(`/api/projects/${project.id}/import-csv`, csvFile);
+
+      // Determine if it's a success or partial success
+      const hasUpdates = (result.updated || 0) > 0;
+      const hasErrors = (result.errors && result.errors.length > 0) || (result.not_found || 0) > 0;
+
+      setCsvResult({
+        success: true,
+        hasUpdates,
+        hasErrors,
+        ...result,
+      });
+      setCsvFile(null);
+      if (csvInputRef.current) csvInputRef.current.value = '';
+
+      // Only refresh if there were updates
+      if (hasUpdates) {
+        onUpdate();
+      }
+    } catch (err) {
+      setCsvResult({
+        success: false,
+        message: err.message || 'Erreur lors de l\'import',
+      });
+    } finally {
+      setCsvLoading(false);
     }
   };
 
@@ -1290,6 +2028,97 @@ function ParametresTab({ project, onUpdate }) {
             {loading ? 'Enregistrement...' : 'Enregistrer les modifications'}
           </button>
         </form>
+      </div>
+
+      {/* CSV Import Section */}
+      <div className="section-card" style={{ marginTop: 'var(--spacing-lg)' }}>
+        <h3>Import CSV Métadonnées</h3>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+          Importez un fichier CSV pour mettre à jour les métadonnées des lots.
+          Le fichier doit contenir une colonne <strong>parcelid</strong> correspondant au numéro du lot.
+        </p>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+          Colonnes supportées: <code>parcelid</code>, <code>type de lots</code>, <code>emplacement</code>, <code>type maison</code>, <code>prix</code>
+        </p>
+
+        <div className="flex gap-md items-center" style={{ flexWrap: 'wrap' }}>
+          <input
+            type="file"
+            accept=".csv"
+            ref={csvInputRef}
+            onChange={handleCsvSelect}
+            className="form-input"
+            style={{ maxWidth: 300 }}
+          />
+          <button
+            className="btn btn-primary"
+            onClick={handleCsvImport}
+            disabled={!csvFile || csvLoading}
+          >
+            {csvLoading ? 'Import en cours...' : 'Importer CSV'}
+          </button>
+        </div>
+
+        {csvFile && (
+          <p style={{ fontSize: '0.85rem', marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)' }}>
+            Fichier sélectionné: <strong>{csvFile.name}</strong>
+          </p>
+        )}
+
+        {csvResult && (
+          <div
+            className={`alert ${!csvResult.success ? 'alert-error' : csvResult.hasUpdates && !csvResult.hasErrors ? 'alert-success' : 'alert-warning'}`}
+            style={{ marginTop: 'var(--spacing-md)' }}
+          >
+            {csvResult.success ? (
+              <>
+                <strong style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {csvResult.hasUpdates && !csvResult.hasErrors ? (
+                    <>✅ Import réussi!</>
+                  ) : csvResult.hasUpdates && csvResult.hasErrors ? (
+                    <>⚠️ Import partiel</>
+                  ) : (
+                    <>❌ Aucune mise à jour</>
+                  )}
+                </strong>
+                <ul style={{ margin: 'var(--spacing-sm) 0 0 var(--spacing-md)', padding: 0, listStyle: 'none' }}>
+                  <li style={{ color: csvResult.updated > 0 ? 'var(--success)' : 'inherit' }}>
+                    ✓ Lots mis à jour: <strong>{csvResult.updated || 0}</strong>
+                  </li>
+                  {(csvResult.skipped || 0) > 0 && (
+                    <li style={{ color: 'var(--text-secondary)' }}>
+                      ○ Lots ignorés: {csvResult.skipped}
+                    </li>
+                  )}
+                  {(csvResult.not_found || 0) > 0 && (
+                    <li style={{ color: 'var(--warning)' }}>
+                      ⚠ Lots non trouvés: {csvResult.not_found}
+                    </li>
+                  )}
+                </ul>
+                {csvResult.errors && csvResult.errors.length > 0 && (
+                  <details style={{ marginTop: 'var(--spacing-sm)' }}>
+                    <summary style={{ cursor: 'pointer', color: 'var(--warning)' }}>
+                      Voir les détails ({csvResult.errors.length} avertissement{csvResult.errors.length > 1 ? 's' : ''})
+                    </summary>
+                    <ul style={{ fontSize: '0.8rem', marginTop: 'var(--spacing-xs)', color: 'var(--text-secondary)' }}>
+                      {csvResult.errors.slice(0, 10).map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                      {csvResult.errors.length > 10 && (
+                        <li>... et {csvResult.errors.length - 10} autres</li>
+                      )}
+                    </ul>
+                  </details>
+                )}
+              </>
+            ) : (
+              <strong style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ❌ Erreur: {csvResult.message}
+              </strong>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -51,13 +51,21 @@ export default function ClientsPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    loadClients();
-  }, []);
+    if (token) {
+      loadClients();
+    }
+  }, [token]);
 
   const loadClients = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/dashboard/clients-pipeline`);
+      const response = await fetch(`${API_URL}/api/dashboard/clients-pipeline`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       setClients(data);
     } catch (error) {
@@ -148,7 +156,7 @@ export default function ClientsPage() {
         </div>
         <div className="kpi-card">
           <div className="kpi-value" style={{ color: 'var(--color-warning)' }}>
-            {clients.filter(c => c.pipeline_status === 'active_reservation').length}
+            {clients.reduce((sum, c) => sum + (c.active_reservations || 0), 0)}
           </div>
           <div className="kpi-label">Réservations actives</div>
         </div>
@@ -168,72 +176,132 @@ export default function ClientsPage() {
 
       {/* Clients List */}
       <div className="section-card">
-        <div className="client-list">
+        <div className="client-list-v2">
           {filteredClients.map((client) => (
             <div
               key={client.id}
-              className="client-card"
+              className="client-card-v2"
               onClick={() => handleClientClick(client.id)}
-              style={{ cursor: 'pointer' }}
             >
-              <div className="client-avatar">
-                {client.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'}
+              {/* Left Section - Avatar & Info */}
+              <div className="client-main-info">
+                <div className="client-avatar-v2">
+                  {client.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'}
+                </div>
+                <div className="client-details-v2">
+                  <div className="client-name-row">
+                    <span className="client-name-v2">{client.name}</span>
+                    {client.client_type && client.client_type !== 'autre' && (
+                      <span className="client-type-tag">
+                        {CLIENT_TYPE_LABELS[client.client_type] || client.client_type}
+                      </span>
+                    )}
+                  </div>
+                  <div className="client-contact-row">
+                    {client.phone && (
+                      <span className="contact-item">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                        </svg>
+                        {client.phone}
+                      </span>
+                    )}
+                    {client.email && (
+                      <span className="contact-item">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                          <polyline points="22,6 12,13 2,6"/>
+                        </svg>
+                        {client.email}
+                      </span>
+                    )}
+                    {client.cin && (
+                      <span className="contact-item">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="3" y="4" width="18" height="16" rx="2"/>
+                          <line x1="7" y1="8" x2="17" y2="8"/>
+                          <line x1="7" y1="12" x2="12" y2="12"/>
+                        </svg>
+                        {client.cin}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="client-info" style={{ flex: 1 }}>
-                <div className="client-name">
-                  {client.name}
-                  {client.client_type && client.client_type !== 'autre' && (
-                    <span
-                      className="client-type-badge"
-                      style={{
-                        marginLeft: 'var(--spacing-sm)',
-                        fontSize: '0.7rem',
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        backgroundColor: 'var(--bg-tertiary)',
-                        color: 'var(--text-secondary)',
-                      }}
-                    >
-                      {CLIENT_TYPE_LABELS[client.client_type] || client.client_type}
-                    </span>
-                  )}
-                </div>
-                <div className="client-details">
-                  {client.phone && <span>📞 {client.phone}</span>}
-                  {client.email && <span>📧 {client.email}</span>}
-                  {client.cin && <span>🪪 {client.cin}</span>}
-                </div>
-              </div>
-              <div style={{ textAlign: 'right', marginRight: 'var(--spacing-md)' }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {client.active_reservations > 0 && (
-                    <span style={{ color: 'var(--color-warning)' }}>
-                      {client.active_reservations} réserv.
-                    </span>
-                  )}
-                  {client.total_sales > 0 && (
-                    <span style={{ color: 'var(--color-success)', marginLeft: 'var(--spacing-sm)' }}>
-                      {client.total_sales} achat(s)
-                    </span>
-                  )}
-                </div>
-                {client.total_deposit > 0 && (
-                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                    Acompte: {formatPrice(client.total_deposit)}
+
+              {/* Middle Section - Activity Stats */}
+              <div className="client-activity-stats">
+                {client.active_reservations > 0 && (
+                  <div className="activity-stat reservation">
+                    <span className="stat-number">{client.active_reservations}</span>
+                    <span className="stat-label">Réserv.</span>
                   </div>
                 )}
-                {client.total_purchases > 0 && (
-                  <div style={{ fontSize: '0.875rem', color: 'var(--color-success)' }}>
-                    Total: {formatPrice(client.total_purchases)}
+                {client.total_sales > 0 && (
+                  <div className="activity-stat purchase">
+                    <span className="stat-number">{client.total_sales}</span>
+                    <span className="stat-label">Achat{client.total_sales > 1 ? 's' : ''}</span>
+                  </div>
+                )}
+                {!client.active_reservations && !client.total_sales && (
+                  <div className="activity-stat empty">
+                    <span className="stat-label">-</span>
                   </div>
                 )}
               </div>
-              <span className={`pipeline-badge ${client.pipeline_status}`}>
-                {PIPELINE_LABELS[client.pipeline_status] || client.pipeline_status}
-              </span>
-              <div className="flex gap-sm" onClick={(e) => e.stopPropagation()}>
-                <button className="btn btn-sm btn-primary" onClick={() => handleClientClick(client.id)}>
+
+              {/* Financial Section */}
+              <div className="client-financial-section">
+                {(client.total_deposit > 0 || client.total_purchases > 0) ? (
+                  <>
+                    {client.total_deposit > 0 && (
+                      <div className="financial-item deposit">
+                        <div className="financial-label">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                          </svg>
+                          Acompte versé
+                        </div>
+                        <div className="financial-value">{formatPrice(client.total_deposit)}</div>
+                      </div>
+                    )}
+                    {client.total_purchases > 0 && (
+                      <div className="financial-item total">
+                        <div className="financial-label">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="12" y1="1" x2="12" y2="23"/>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                          </svg>
+                          Total achats
+                        </div>
+                        <div className="financial-value">{formatPrice(client.total_purchases)}</div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="financial-empty">
+                    <span>Aucune transaction</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Section - Status & Action */}
+              <div className="client-actions-section">
+                <span className={`pipeline-badge-v2 ${client.pipeline_status}`}>
+                  {PIPELINE_LABELS[client.pipeline_status] || client.pipeline_status}
+                </span>
+                <button
+                  className="btn-view"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleClientClick(client.id);
+                  }}
+                >
                   Voir
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="9 18 15 12 9 6"/>
+                  </svg>
                 </button>
               </div>
             </div>

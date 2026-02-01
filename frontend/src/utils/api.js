@@ -94,10 +94,43 @@ export const apiDelete = async (endpoint) => {
   return response.json();
 };
 
+/**
+ * Upload file avec authentification
+ */
+export const apiUploadFile = async (endpoint, file, fieldName = 'file') => {
+  const token = getAuthToken();
+  const formData = new FormData();
+  formData.append(fieldName, file);
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (response.status === 401) {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+    window.location.href = '/login';
+    throw new Error('Session expirée');
+  }
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.message || `Erreur ${response.status}`);
+  }
+
+  return data;
+};
+
 export default {
   fetch: apiFetch,
   get: apiGet,
   post: apiPost,
   put: apiPut,
   delete: apiDelete,
+  uploadFile: apiUploadFile,
 };

@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 // Import components
 import ClientsPage from "./components/ClientsPage";
 import ClientDetailPage from "./components/ClientDetailPage";
+import CommercialsPage from "./components/CommercialsPage";
 import Login from "./components/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProjectsPage from "./components/ProjectsPage";
@@ -27,6 +28,13 @@ const NAV_ITEMS = [
     label: "Clients",
     icon: "👥",
     allowedRoles: ["manager", "commercial"]
+  },
+  {
+    id: "commerciaux",
+    path: "/commerciaux",
+    label: "Commerciaux",
+    icon: "👔",
+    allowedRoles: ["manager"]
   },
 ];
 
@@ -146,6 +154,14 @@ function AppContent() {
             element={
               <ProtectedRoute allowedRoles={["manager", "commercial"]}>
                 <ClientDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/commerciaux"
+            element={
+              <ProtectedRoute allowedRoles={["manager"]}>
+                <CommercialsPage />
               </ProtectedRoute>
             }
           />

@@ -55,6 +55,34 @@ const formatDate = (dateString) => {
   });
 };
 
+// Calculate days remaining until expiration
+const getDaysRemaining = (expirationDate) => {
+  if (!expirationDate) return null;
+  const now = new Date();
+  const expDate = new Date(expirationDate);
+  const diffTime = expDate - now;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
+// Helper pour faire des requêtes POST avec authentification
+const apiPost = async (endpoint, data) => {
+  const token = localStorage.getItem('auth_token');
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
 // Status labels
 const STATUS_LABELS = {
   available: 'Disponible',
@@ -135,11 +163,16 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       const queryString = params.toString() ? `?${params.toString()}` : '';
 
       // Requêtes de base pour tous les utilisateurs
+      const alertsParams = new URLSearchParams(params);
+      alertsParams.set('days', '3');
+      const perfParams = new URLSearchParams(params);
+      perfParams.set('period', 'month');
+
       const baseRequests = [
         apiGet(`/api/dashboard/stats${queryString}`),
         apiGet(`/api/dashboard/lots${queryString}`),
-        apiGet(`/api/dashboard/alerts?days_threshold=7${queryString ? '&' + params.toString() : ''}`),
-        apiGet(`/api/dashboard/performance?period=month${queryString ? '&' + params.toString() : ''}`),
+        apiGet(`/api/dashboard/alerts?${alertsParams.toString()}`),
+        apiGet(`/api/dashboard/performance?${perfParams.toString()}`),
         apiGet(`/api/dashboard/clients-pipeline${queryString}`),
       ];
 
@@ -179,12 +212,12 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   }
 
   return (
-    <div className="dashboard">
+    <div className="dashboard dashboard-v2">
       {/* Page Header */}
       <div className="page-header">
         <div>
           <h1 className="page-title">
-            {isCommercial() ? `Mon Activité` : 'Dashboard Commercial'}
+            {isCommercial() ? 'Mon Activité' : 'Dashboard Commercial'}
           </h1>
           <p className="page-subtitle">
             {isCommercial()
@@ -205,15 +238,8 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 <select
                   value={selectedProjectId || ''}
                   onChange={(e) => setSelectedProjectId(e.target.value ? parseInt(e.target.value) : null)}
-                  style={{
-                    width: '100%',
-                    padding: 'var(--spacing-sm)',
-                    border: '1px solid var(--bg-tertiary)',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '0.875rem',
-                  }}
+                  className="form-input"
+                  style={{ padding: 'var(--spacing-sm)' }}
                 >
                   <option value="">Tous les projets</option>
                   {projects.map(project => (
@@ -234,15 +260,8 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 <select
                   value={selectedUserId || ''}
                   onChange={(e) => setSelectedUserId(e.target.value ? parseInt(e.target.value) : null)}
-                  style={{
-                    width: '100%',
-                    padding: 'var(--spacing-sm)',
-                    border: '1px solid var(--bg-tertiary)',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: 'var(--bg-primary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '0.875rem',
-                  }}
+                  className="form-input"
+                  style={{ padding: 'var(--spacing-sm)' }}
                 >
                   <option value="">Tous les commerciaux</option>
                   {users.map(user => (
@@ -271,78 +290,261 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         )}
       </div>
 
-      {/* KPIs Section - Fusionnée pour les commerciaux */}
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="kpi-header">
-            <div className="kpi-icon available">📦</div>
+      {/* Hero KPIs - Chiffre d'Affaires */}
+      <div className="kpis-hero" style={{ marginBottom: 'var(--spacing-lg)' }}>
+        <div className="kpis-hero-grid">
+          <div className="kpis-hero-card gradient-success">
+            <div className="kpis-hero-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+            <div className="kpis-hero-content">
+              <div className="kpis-hero-value">{formatNumber(stats?.ca_realise, 'MAD')}</div>
+              <div className="kpis-hero-label">{isCommercial() ? 'Mon CA Réalisé' : 'CA Réalisé'}</div>
+            </div>
           </div>
-          <div className="kpi-value">{stats?.counts?.available || 0}</div>
-          <div className="kpi-label">Lots disponibles</div>
-          <div className="kpi-trend">{stats?.percentages?.available || 0}% du total</div>
+
+          <div className="kpis-hero-card gradient-primary">
+            <div className="kpis-hero-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 16v-4M12 8h.01"/>
+              </svg>
+            </div>
+            <div className="kpis-hero-content">
+              <div className="kpis-hero-value">{formatNumber(stats?.ca_potentiel, 'MAD')}</div>
+              <div className="kpis-hero-label">CA Potentiel</div>
+            </div>
+          </div>
+
+          <div className="kpis-hero-card gradient-warning">
+            <div className="kpis-hero-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+            </div>
+            <div className="kpis-hero-content">
+              <div className="kpis-hero-value">{isCommercial() ? (stats?.taux_transformation || 0) : (stats?.taux_vente || 0)}%</div>
+              <div className="kpis-hero-label">{isCommercial() ? 'Taux transformation' : 'Taux de vente'}</div>
+            </div>
+          </div>
+
+          <div className="kpis-hero-card gradient-info">
+            <div className="kpis-hero-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <path d="M3 9h18M9 21V9"/>
+              </svg>
+            </div>
+            <div className="kpis-hero-content">
+              <div className="kpis-hero-value">{formatNumber(stats?.surfaces?.total, 'm²')}</div>
+              <div className="kpis-hero-label">Surface Totale</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stock de Lots - Modern Cards */}
+      <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
+        <div className="kpis-section-header">
+          <h3>
+            <span className="kpis-section-icon">📦</span>
+            Stock de Lots
+          </h3>
+          <span className="kpis-section-badge">{stats?.counts?.total || 0} lots</span>
         </div>
 
-        <div className="kpi-card">
-          <div className="kpi-header">
-            <div className="kpi-icon reserved">📋</div>
+        <div className="kpis-stock-grid">
+          <div className="kpis-stock-card available">
+            <div className="kpis-stock-visual">
+              <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                <path
+                  className="kpis-circle-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="kpis-circle available"
+                  strokeDasharray={`${stats?.percentages?.available || 0}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+              </svg>
+              <div className="kpis-stock-percent">{stats?.percentages?.available || 0}%</div>
+            </div>
+            <div className="kpis-stock-info">
+              <div className="kpis-stock-value">{stats?.counts?.available || 0}</div>
+              <div className="kpis-stock-label">Disponibles</div>
+            </div>
           </div>
-          <div className="kpi-value">{stats?.counts?.reserved || 0}</div>
-          <div className="kpi-label">{isCommercial() ? 'Mes réservations' : 'Lots réservés'}</div>
-          <div className="kpi-trend">{stats?.percentages?.reserved || 0}% du total</div>
+
+          <div className="kpis-stock-card reserved">
+            <div className="kpis-stock-visual">
+              <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                <path
+                  className="kpis-circle-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="kpis-circle reserved"
+                  strokeDasharray={`${stats?.percentages?.reserved || 0}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+              </svg>
+              <div className="kpis-stock-percent">{stats?.percentages?.reserved || 0}%</div>
+            </div>
+            <div className="kpis-stock-info">
+              <div className="kpis-stock-value">{stats?.counts?.reserved || 0}</div>
+              <div className="kpis-stock-label">{isCommercial() ? 'Mes réserv.' : 'Réservés'}</div>
+            </div>
+          </div>
+
+          <div className="kpis-stock-card sold">
+            <div className="kpis-stock-visual">
+              <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                <path
+                  className="kpis-circle-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="kpis-circle sold"
+                  strokeDasharray={`${stats?.percentages?.sold || 0}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+              </svg>
+              <div className="kpis-stock-percent">{stats?.percentages?.sold || 0}%</div>
+            </div>
+            <div className="kpis-stock-info">
+              <div className="kpis-stock-value">{stats?.counts?.sold || 0}</div>
+              <div className="kpis-stock-label">{isCommercial() ? 'Mes ventes' : 'Vendus'}</div>
+            </div>
+          </div>
+
+          {(stats?.counts?.blocked > 0 || !isCommercial()) && (
+            <div className="kpis-stock-card blocked">
+              <div className="kpis-stock-visual">
+                <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                  <path
+                    className="kpis-circle-bg"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  <path
+                    className="kpis-circle blocked"
+                    strokeDasharray={`${stats?.percentages?.blocked || 0}, 100`}
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                </svg>
+                <div className="kpis-stock-percent">{stats?.percentages?.blocked || 0}%</div>
+              </div>
+              <div className="kpis-stock-info">
+                <div className="kpis-stock-value">{stats?.counts?.blocked || 0}</div>
+                <div className="kpis-stock-label">Bloqués</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Surfaces Section - Metrics List Style */}
+      <div className="kpis-dual-section" style={{ marginBottom: 'var(--spacing-lg)' }}>
+        <div className="kpis-section-v2">
+          <div className="kpis-section-header">
+            <h3>
+              <span className="kpis-section-icon">📐</span>
+              Surfaces
+            </h3>
+          </div>
+
+          <div className="kpis-metrics-list">
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">Surface Totale</div>
+                <div className="kpis-metric-value">{formatNumber(stats?.surfaces?.total, 'm²')}</div>
+              </div>
+            </div>
+
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon success">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">Disponible</div>
+                <div className="kpis-metric-value">{formatNumber(stats?.surfaces?.available, 'm²')}</div>
+              </div>
+            </div>
+
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon warning">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">Réservée</div>
+                <div className="kpis-metric-value">{formatNumber(stats?.surfaces?.reserved, 'm²')}</div>
+              </div>
+            </div>
+
+            <div className="kpis-metric-item">
+              <div className="kpis-metric-icon danger">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </div>
+              <div className="kpis-metric-content">
+                <div className="kpis-metric-label">Vendue</div>
+                <div className="kpis-metric-value">{formatNumber(stats?.surfaces?.sold, 'm²')}</div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="kpi-card">
-          <div className="kpi-header">
-            <div className="kpi-icon sold">✅</div>
-          </div>
-          <div className="kpi-value">{stats?.counts?.sold || 0}</div>
-          <div className="kpi-label">{isCommercial() ? 'Mes ventes' : 'Lots vendus'}</div>
-          <div className="kpi-trend">{stats?.percentages?.sold || 0}% du total</div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-header">
-            <div className="kpi-icon chart">📊</div>
-          </div>
-          <div className="kpi-value">{isCommercial() ? (stats?.taux_transformation || 0) : (stats?.taux_vente || 0)}%</div>
-          <div className="kpi-label">{isCommercial() ? 'Taux de transformation' : 'Taux de vente'}</div>
-        </div>
-
-        <div className="kpi-card highlight">
-          <div className="kpi-header">
-            <div className="kpi-icon money" style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}>💰</div>
-          </div>
-          <div className="kpi-value">{formatNumber(stats?.ca_realise, 'MAD')}</div>
-          <div className="kpi-label" style={{ color: 'rgba(255,255,255,0.8)' }}>{isCommercial() ? 'Mon CA Réalisé' : 'CA Réalisé'}</div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-header">
-            <div className="kpi-icon money">💵</div>
-          </div>
-          <div className="kpi-value">{formatNumber(stats?.ca_potentiel, 'MAD')}</div>
-          <div className="kpi-label">CA Potentiel restant</div>
-        </div>
-
-        {/* Métriques supplémentaires pour les commerciaux */}
+        {/* Additional Metrics for Commercials */}
         {isCommercial() && (
-          <>
-            <div className="kpi-card">
-              <div className="kpi-header">
-                <div className="kpi-icon">⏱️</div>
-              </div>
-              <div className="kpi-value">{performance?.average_durations?.available_to_reserved || 0}j</div>
-              <div className="kpi-label">Délai moy. réservation</div>
+          <div className="kpis-section-v2">
+            <div className="kpis-section-header">
+              <h3>
+                <span className="kpis-section-icon">⏱️</span>
+                Mes Métriques
+              </h3>
             </div>
 
-            <div className="kpi-card">
-              <div className="kpi-header">
-                <div className="kpi-icon">🎯</div>
+            <div className="kpis-metrics-list">
+              <div className="kpis-metric-item">
+                <div className="kpis-metric-icon primary">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </div>
+                <div className="kpis-metric-content">
+                  <div className="kpis-metric-label">Délai moy. réservation</div>
+                  <div className="kpis-metric-value">{performance?.average_durations?.available_to_reserved || 0}j</div>
+                </div>
               </div>
-              <div className="kpi-value">{performance?.average_durations?.reserved_to_sold || 0}j</div>
-              <div className="kpi-label">Délai moy. vente</div>
+
+              <div className="kpis-metric-item">
+                <div className="kpis-metric-icon success">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                </div>
+                <div className="kpis-metric-content">
+                  <div className="kpis-metric-label">Délai moy. vente</div>
+                  <div className="kpis-metric-value">{performance?.average_durations?.reserved_to_sold || 0}j</div>
+                </div>
+              </div>
             </div>
-          </>
+          </div>
         )}
       </div>
 
@@ -357,7 +559,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                   <span>⚠️</span> {isCommercial() ? 'Mes Alertes' : 'Alertes commerciales'}
                 </h2>
                 <span className="text-warning font-semibold">
-                  {alerts.summary.total_at_risk} réservation(s) à risque
+                  {alerts.summary.total_at_risk} réservation(s) expirant dans 3 jours ou moins
                 </span>
               </div>
 
@@ -435,12 +637,18 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                     <th>Prix</th>
                     <th>Statut</th>
                     <th>Jours</th>
+                    <th>Temps restant</th>
                     <th>Client</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {lots.slice(0, 15).map((lot) => (
+                  {lots.slice(0, 15).map((lot) => {
+                    const daysRemaining = lot.status === 'reserved' ? getDaysRemaining(lot.expiration_date) : null;
+                    const isExpiringSoon = daysRemaining !== null && daysRemaining <= 3 && daysRemaining > 0;
+                    const isExpired = daysRemaining !== null && daysRemaining <= 0;
+
+                    return (
                     <tr key={lot.id} onClick={() => onSelectLot && onSelectLot(lot)} style={{ cursor: 'pointer' }}>
                       <td>
                         <span className="lot-numero">{lot.numero}</span>
@@ -456,6 +664,18 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                       </td>
                       <td className="text-muted">
                         {lot.days_in_status ? Math.round(lot.days_in_status) : 0}j
+                      </td>
+                      <td>
+                        {lot.status === 'reserved' && daysRemaining !== null ? (
+                          <span style={{
+                            color: isExpired ? 'var(--color-danger)' : isExpiringSoon ? 'var(--color-warning)' : 'var(--text-primary)',
+                            fontWeight: (isExpired || isExpiringSoon) ? '600' : '400'
+                          }}>
+                            {isExpired ? `Expiré (${Math.abs(daysRemaining)}j)` : `${daysRemaining}j`}
+                          </span>
+                        ) : (
+                          <span className="text-muted">-</span>
+                        )}
                       </td>
                       <td className="text-muted">
                         {lot.client_name || '-'}
@@ -480,6 +700,26 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                                   <button className="btn btn-sm btn-success" onClick={(e) => { e.stopPropagation(); }}>
                                     Vendre
                                   </button>
+                                  <button
+                                    className="btn btn-sm btn-primary"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const days = prompt('Combien de jours voulez-vous ajouter à la réservation ?', '7');
+                                      if (days && !isNaN(parseInt(days)) && parseInt(days) > 0) {
+                                        try {
+                                          await apiPost(`/api/reservations/${lot.reservation_id}/extend`, {
+                                            additional_days: parseInt(days)
+                                          });
+                                          alert('Réservation prolongée avec succès!');
+                                          loadDashboardData();
+                                        } catch (error) {
+                                          alert(error.message || 'Erreur lors de la prolongation');
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    Prolonger
+                                  </button>
                                   <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); }}>
                                     Libérer
                                   </button>
@@ -494,7 +734,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>

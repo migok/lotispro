@@ -48,6 +48,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
   const [depositAmount, setDepositAmount] = useState('');
+  const [reservationDays, setReservationDays] = useState('7');
   const [finalPrice, setFinalPrice] = useState('');
   const [notes, setNotes] = useState('');
   const [mode, setMode] = useState(null); // 'reserve' | 'sell' | null
@@ -122,6 +123,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
     setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
     setSelectedClient(null);
     setDepositAmount('');
+    setReservationDays('7');
     setNotes('');
   };
 
@@ -139,19 +141,30 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
       return;
     }
 
+    const days = parseInt(reservationDays) || 7;
+    if (days < 1 || days > 365) {
+      alert('Le nombre de jours doit être entre 1 et 365');
+      return;
+    }
+
     setLoading(true);
     try {
       await apiPost('/api/reservations', {
         lot_id: lot.id,
         client_id: selectedClient.id,
+        reservation_days: days,
         deposit: depositAmount ? parseFloat(depositAmount) : 0,
         notes: notes || undefined,
       });
 
       alert('Lot réservé avec succès!');
       setMode(null);
-      onRefresh && onRefresh();
-      onClose();
+      if (onRefresh) {
+        await onRefresh();
+      }
+      setTimeout(() => {
+        onClose();
+      }, 200);
     } catch (error) {
       console.error('Error reserving lot:', error);
       alert(error.message || 'Erreur lors de la réservation');
@@ -186,8 +199,13 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
 
       alert('Vente enregistrée avec succès!');
       setMode(null);
-      onRefresh && onRefresh();
-      onClose();
+      if (onRefresh) {
+        await onRefresh();
+      }
+      // Petit délai pour laisser la carte se rafraîchir avant de fermer
+      setTimeout(() => {
+        onClose();
+      }, 200);
     } catch (error) {
       console.error('Error selling lot:', error);
       alert(error.message || 'Erreur lors de la vente');
@@ -204,8 +222,12 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
       await apiPost(`/api/reservations/${lot.reservation_id}/release`, {});
 
       alert('Réservation libérée avec succès!');
-      onRefresh && onRefresh();
-      onClose();
+      if (onRefresh) {
+        await onRefresh();
+      }
+      setTimeout(() => {
+        onClose();
+      }, 200);
     } catch (error) {
       console.error('Error releasing reservation:', error);
       alert(error.message || 'Erreur lors de la libération');
@@ -259,6 +281,15 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
               <div className="lot-detail-item-value">{lot.surface ? `${lot.surface} m²` : '-'}</div>
               <div className="lot-detail-item-label">Surface</div>
             </div>
+            {lot.price && lot.surface && lot.surface > 0 && (
+              <div className="lot-detail-item">
+                <div className="lot-detail-item-icon">📊</div>
+                <div className="lot-detail-item-value">
+                  {Math.round(lot.price / lot.surface).toLocaleString('fr-FR')} MAD
+                </div>
+                <div className="lot-detail-item-label">Prix/m²</div>
+              </div>
+            )}
             <div className="lot-detail-item">
               <div className="lot-detail-item-icon">📍</div>
               <div className="lot-detail-item-value">{lot.zone || '-'}</div>
@@ -269,6 +300,27 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
               <div className="lot-detail-item-value">{lot.days_in_status ? Math.round(lot.days_in_status) : 0}j</div>
               <div className="lot-detail-item-label">Dans ce statut</div>
             </div>
+            {lot.type_lot && (
+              <div className="lot-detail-item">
+                <div className="lot-detail-item-icon">🏷️</div>
+                <div className="lot-detail-item-value">{lot.type_lot}</div>
+                <div className="lot-detail-item-label">Type de lot</div>
+              </div>
+            )}
+            {lot.emplacement && (
+              <div className="lot-detail-item">
+                <div className="lot-detail-item-icon">🧭</div>
+                <div className="lot-detail-item-value">{lot.emplacement}</div>
+                <div className="lot-detail-item-label">Emplacement</div>
+              </div>
+            )}
+            {lot.type_maison && (
+              <div className="lot-detail-item">
+                <div className="lot-detail-item-icon">🏠</div>
+                <div className="lot-detail-item-value">{lot.type_maison}</div>
+                <div className="lot-detail-item-label">Type maison</div>
+              </div>
+            )}
           </div>
 
           {/* Reservation Info */}
@@ -434,6 +486,21 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
                   </div>
                 </div>
               )}
+              <div className="form-group">
+                <label className="form-label">Durée de réservation (jours) *</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="7"
+                  min="1"
+                  max="365"
+                  value={reservationDays}
+                  onChange={(e) => setReservationDays(e.target.value)}
+                />
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Le lot redeviendra disponible après cette période si non vendu
+                </div>
+              </div>
               <div className="form-group">
                 <label className="form-label">Montant acompte (optionnel)</label>
                 <input
