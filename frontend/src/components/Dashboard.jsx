@@ -113,6 +113,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [users, setUsers] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(null);
+  const [selectedStatuses, setSelectedStatuses] = useState(['sold', 'reserved', 'blocked']); // Filtre par statut (pas de disponible)
 
   // Utiliser le projectId passé en props ou celui sélectionné
   const effectiveProjectId = propsProjectId || selectedProjectId;
@@ -290,56 +291,75 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         )}
       </div>
 
-      {/* Hero KPIs - Chiffre d'Affaires */}
-      <div className="kpis-hero" style={{ marginBottom: 'var(--spacing-lg)' }}>
-        <div className="kpis-hero-grid">
-          <div className="kpis-hero-card gradient-success">
-            <div className="kpis-hero-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+      {/* Performance Financière */}
+      <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
+        <div className="kpis-section-header">
+          <h3>
+            <span className="kpis-section-icon">💰</span>
+            {isCommercial() ? 'Ma Performance' : 'Performance Financière'}
+          </h3>
+          <span className="kpis-section-badge">{formatNumber(stats?.ca_total, 'MAD')} total</span>
+        </div>
+
+        <div className="kpis-stock-grid">
+          <div className="kpis-stock-card sold">
+            <div className="kpis-stock-visual">
+              <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                <path
+                  className="kpis-circle-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="kpis-circle sold"
+                  strokeDasharray={`${stats?.ca_total ? ((stats?.ca_realise || 0) / stats.ca_total * 100).toFixed(2) : 0}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
               </svg>
+              <div className="kpis-stock-percent">{stats?.ca_total ? ((stats?.ca_realise || 0) / stats.ca_total * 100).toFixed(2) : '0.00'}%</div>
             </div>
-            <div className="kpis-hero-content">
-              <div className="kpis-hero-value">{formatNumber(stats?.ca_realise, 'MAD')}</div>
-              <div className="kpis-hero-label">{isCommercial() ? 'Mon CA Réalisé' : 'CA Réalisé'}</div>
+            <div className="kpis-stock-info">
+              <div className="kpis-stock-value">{formatNumber(stats?.ca_realise, 'MAD')}</div>
+              <div className="kpis-stock-label">
+                {isCommercial() ? 'Mon CA Réalisé' : 'CA Réalisé'}
+                <span className="kpis-info-icon kpis-info-icon-dark" title="Somme des lots vendus">ⓘ</span>
+              </div>
             </div>
           </div>
 
-          <div className="kpis-hero-card gradient-primary">
-            <div className="kpis-hero-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 16v-4M12 8h.01"/>
+          <div className="kpis-stock-card reserved">
+            <div className="kpis-stock-visual">
+              <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                <path
+                  className="kpis-circle-bg"
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path
+                  className="kpis-circle reserved"
+                  strokeDasharray={`${stats?.ca_total ? ((stats?.ca_potentiel || 0) / stats.ca_total * 100).toFixed(2) : 0}, 100`}
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
               </svg>
+              <div className="kpis-stock-percent">{stats?.ca_total ? ((stats?.ca_potentiel || 0) / stats.ca_total * 100).toFixed(2) : '0.00'}%</div>
             </div>
-            <div className="kpis-hero-content">
-              <div className="kpis-hero-value">{formatNumber(stats?.ca_potentiel, 'MAD')}</div>
-              <div className="kpis-hero-label">CA Potentiel</div>
+            <div className="kpis-stock-info">
+              <div className="kpis-stock-value">{formatNumber(stats?.ca_potentiel, 'MAD')}</div>
+              <div className="kpis-stock-label">
+                CA Potentiel
+                <span className="kpis-info-icon kpis-info-icon-dark" title="Valeur des lots réservés">ⓘ</span>
+              </div>
             </div>
           </div>
 
-          <div className="kpis-hero-card gradient-warning">
-            <div className="kpis-hero-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-              </svg>
+          <div className="kpis-stock-card available">
+            <div className="kpis-stock-visual">
+              <div className="kpis-financial-icon">📈</div>
             </div>
-            <div className="kpis-hero-content">
-              <div className="kpis-hero-value">{isCommercial() ? (stats?.taux_transformation || 0) : (stats?.taux_vente || 0)}%</div>
-              <div className="kpis-hero-label">{isCommercial() ? 'Taux transformation' : 'Taux de vente'}</div>
-            </div>
-          </div>
-
-          <div className="kpis-hero-card gradient-info">
-            <div className="kpis-hero-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <path d="M3 9h18M9 21V9"/>
-              </svg>
-            </div>
-            <div className="kpis-hero-content">
-              <div className="kpis-hero-value">{formatNumber(stats?.surfaces?.total, 'm²')}</div>
-              <div className="kpis-hero-label">Surface Totale</div>
+            <div className="kpis-stock-info">
+              <div className="kpis-stock-value">{isCommercial() ? (stats?.taux_transformation || 0) : (stats?.taux_vente || 0)}%</div>
+              <div className="kpis-stock-label">
+                {isCommercial() ? 'Taux transformation' : 'Taux de vente'}
+                <span className="kpis-info-icon kpis-info-icon-dark" title={isCommercial() ? 'Réservations converties en ventes' : 'Lots vendus / Total lots'}>ⓘ</span>
+              </div>
             </div>
           </div>
         </div>
@@ -373,7 +393,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
             </div>
             <div className="kpis-stock-info">
               <div className="kpis-stock-value">{stats?.counts?.available || 0}</div>
-              <div className="kpis-stock-label">Disponibles</div>
+              <div className="kpis-stock-label">
+                Disponibles
+                <span className="kpis-info-icon kpis-info-icon-dark" title="Lots prêts à la vente">ⓘ</span>
+              </div>
             </div>
           </div>
 
@@ -394,7 +417,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
             </div>
             <div className="kpis-stock-info">
               <div className="kpis-stock-value">{stats?.counts?.reserved || 0}</div>
-              <div className="kpis-stock-label">{isCommercial() ? 'Mes réserv.' : 'Réservés'}</div>
+              <div className="kpis-stock-label">
+                {isCommercial() ? 'Mes réserv.' : 'Réservés'}
+                <span className="kpis-info-icon kpis-info-icon-dark" title="Lots avec réservation active">ⓘ</span>
+              </div>
             </div>
           </div>
 
@@ -415,7 +441,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
             </div>
             <div className="kpis-stock-info">
               <div className="kpis-stock-value">{stats?.counts?.sold || 0}</div>
-              <div className="kpis-stock-label">{isCommercial() ? 'Mes ventes' : 'Vendus'}</div>
+              <div className="kpis-stock-label">
+                {isCommercial() ? 'Mes ventes' : 'Vendus'}
+                <span className="kpis-info-icon kpis-info-icon-dark" title="Lots vendus définitivement">ⓘ</span>
+              </div>
             </div>
           </div>
 
@@ -437,115 +466,104 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
               </div>
               <div className="kpis-stock-info">
                 <div className="kpis-stock-value">{stats?.counts?.blocked || 0}</div>
-                <div className="kpis-stock-label">Bloqués</div>
+                <div className="kpis-stock-label">
+                  Bloqués
+                  <span className="kpis-info-icon kpis-info-icon-dark" title="Lots temporairement indisponibles">ⓘ</span>
+                </div>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Surfaces Section - Metrics List Style */}
-      <div className="kpis-dual-section" style={{ marginBottom: 'var(--spacing-lg)' }}>
-        <div className="kpis-section-v2">
-          <div className="kpis-section-header">
-            <h3>
-              <span className="kpis-section-icon">📐</span>
-              Surfaces
-            </h3>
+      {/* Répartition par Catégorie */}
+      <div className="kpis-categories-section" style={{ marginBottom: 'var(--spacing-lg)' }}>
+        <div className="kpis-section-header" style={{ marginBottom: 'var(--spacing-md)' }}>
+          <h3>
+            <span className="kpis-section-icon">📊</span>
+            Répartition par Catégorie
+          </h3>
+        </div>
+
+        <div className="kpis-categories-grid">
+          {/* Par Type de Lot */}
+          <div className="kpis-section-v2">
+            <div className="kpis-section-header">
+              <h4 style={{ fontSize: '0.875rem', margin: 0 }}>
+                <span className="kpis-section-icon">🏷️</span>
+                Par Type de Lot
+              </h4>
+            </div>
+            <div className="kpis-category-list">
+              {stats?.by_type_lot && Object.entries(stats.by_type_lot).length > 0 ? (
+                Object.entries(stats.by_type_lot).map(([typeLot, data]) => (
+                  <div key={typeLot} className="kpis-category-item">
+                    <div className="kpis-category-name">{typeLot || 'Non défini'}</div>
+                    <div className="kpis-category-stats">
+                      <span className="stat-sold" title="Vendus">{data.sold || 0} vendus</span>
+                      <span className="stat-reserved" title="Réservés">{data.reserved || 0} réservés</span>
+                      <span className="stat-available" title="Disponibles">{data.available || 0} dispo</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="kpis-category-empty">Aucune donnée</div>
+              )}
+            </div>
           </div>
 
-          <div className="kpis-metrics-list">
-            <div className="kpis-metric-item">
-              <div className="kpis-metric-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2"/>
-                </svg>
-              </div>
-              <div className="kpis-metric-content">
-                <div className="kpis-metric-label">Surface Totale</div>
-                <div className="kpis-metric-value">{formatNumber(stats?.surfaces?.total, 'm²')}</div>
-              </div>
+          {/* Par Emplacement */}
+          <div className="kpis-section-v2">
+            <div className="kpis-section-header">
+              <h4 style={{ fontSize: '0.875rem', margin: 0 }}>
+                <span className="kpis-section-icon">📍</span>
+                Par Emplacement
+              </h4>
             </div>
-
-            <div className="kpis-metric-item">
-              <div className="kpis-metric-icon success">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </div>
-              <div className="kpis-metric-content">
-                <div className="kpis-metric-label">Disponible</div>
-                <div className="kpis-metric-value">{formatNumber(stats?.surfaces?.available, 'm²')}</div>
-              </div>
+            <div className="kpis-category-list">
+              {stats?.by_emplacement && Object.entries(stats.by_emplacement).length > 0 ? (
+                Object.entries(stats.by_emplacement).map(([emplacement, data]) => (
+                  <div key={emplacement} className="kpis-category-item">
+                    <div className="kpis-category-name">{emplacement || 'Non défini'}</div>
+                    <div className="kpis-category-stats">
+                      <span className="stat-sold" title="Vendus">{data.sold || 0} vendus</span>
+                      <span className="stat-reserved" title="Réservés">{data.reserved || 0} réservés</span>
+                      <span className="stat-available" title="Disponibles">{data.available || 0} dispo</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="kpis-category-empty">Aucune donnée</div>
+              )}
             </div>
+          </div>
 
-            <div className="kpis-metric-item">
-              <div className="kpis-metric-icon warning">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12 6 12 12 16 14"/>
-                </svg>
-              </div>
-              <div className="kpis-metric-content">
-                <div className="kpis-metric-label">Réservée</div>
-                <div className="kpis-metric-value">{formatNumber(stats?.surfaces?.reserved, 'm²')}</div>
-              </div>
+          {/* Par Type de Maison */}
+          <div className="kpis-section-v2">
+            <div className="kpis-section-header">
+              <h4 style={{ fontSize: '0.875rem', margin: 0 }}>
+                <span className="kpis-section-icon">🏠</span>
+                Par Type de Maison
+              </h4>
             </div>
-
-            <div className="kpis-metric-item">
-              <div className="kpis-metric-icon danger">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                  <polyline points="22 4 12 14.01 9 11.01"/>
-                </svg>
-              </div>
-              <div className="kpis-metric-content">
-                <div className="kpis-metric-label">Vendue</div>
-                <div className="kpis-metric-value">{formatNumber(stats?.surfaces?.sold, 'm²')}</div>
-              </div>
+            <div className="kpis-category-list">
+              {stats?.by_type_maison && Object.entries(stats.by_type_maison).length > 0 ? (
+                Object.entries(stats.by_type_maison).map(([typeMaison, data]) => (
+                  <div key={typeMaison} className="kpis-category-item">
+                    <div className="kpis-category-name">{typeMaison || 'Non défini'}</div>
+                    <div className="kpis-category-stats">
+                      <span className="stat-sold" title="Vendus">{data.sold || 0} vendus</span>
+                      <span className="stat-reserved" title="Réservés">{data.reserved || 0} réservés</span>
+                      <span className="stat-available" title="Disponibles">{data.available || 0} dispo</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="kpis-category-empty">Aucune donnée</div>
+              )}
             </div>
           </div>
         </div>
-
-        {/* Additional Metrics for Commercials */}
-        {isCommercial() && (
-          <div className="kpis-section-v2">
-            <div className="kpis-section-header">
-              <h3>
-                <span className="kpis-section-icon">⏱️</span>
-                Mes Métriques
-              </h3>
-            </div>
-
-            <div className="kpis-metrics-list">
-              <div className="kpis-metric-item">
-                <div className="kpis-metric-icon primary">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12 6 12 12 16 14"/>
-                  </svg>
-                </div>
-                <div className="kpis-metric-content">
-                  <div className="kpis-metric-label">Délai moy. réservation</div>
-                  <div className="kpis-metric-value">{performance?.average_durations?.available_to_reserved || 0}j</div>
-                </div>
-              </div>
-
-              <div className="kpis-metric-item">
-                <div className="kpis-metric-icon success">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                    <polyline points="22 4 12 14.01 9 11.01"/>
-                  </svg>
-                </div>
-                <div className="kpis-metric-content">
-                  <div className="kpis-metric-label">Délai moy. vente</div>
-                  <div className="kpis-metric-value">{performance?.average_durations?.reserved_to_sold || 0}j</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="dashboard-grid">
@@ -620,7 +638,24 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 <span>📋</span> {isCommercial() ? 'Mes Lots & Opportunités' : 'Stock & Opportunités'}
               </h2>
               <div className="section-actions">
-                <button className="btn btn-ghost btn-sm">Filtrer</button>
+                <div style={{ display: 'flex', gap: 'var(--spacing-xs)', marginRight: 'var(--spacing-sm)' }}>
+                  {['sold', 'reserved', 'blocked'].map(status => (
+                    <button
+                      key={status}
+                      className={`btn btn-sm ${selectedStatuses.includes(status) ? 'btn-primary' : 'btn-ghost'}`}
+                      onClick={() => {
+                        setSelectedStatuses(prev =>
+                          prev.includes(status)
+                            ? prev.filter(s => s !== status)
+                            : [...prev, status]
+                        );
+                      }}
+                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                    >
+                      {STATUS_LABELS[status]}
+                    </button>
+                  ))}
+                </div>
                 <button className="btn btn-primary btn-sm" onClick={() => onNavigate && onNavigate('map')}>
                   Voir la carte
                 </button>
@@ -643,7 +678,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                   </tr>
                 </thead>
                 <tbody>
-                  {lots.slice(0, 15).map((lot) => {
+                  {lots.filter(lot => selectedStatuses.length === 0 || selectedStatuses.includes(lot.status)).slice(0, 15).map((lot) => {
                     const daysRemaining = lot.status === 'reserved' ? getDaysRemaining(lot.expiration_date) : null;
                     const isExpiringSoon = daysRemaining !== null && daysRemaining <= 3 && daysRemaining > 0;
                     const isExpired = daysRemaining !== null && daysRemaining <= 0;
@@ -654,7 +689,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                         <span className="lot-numero">{lot.numero}</span>
                       </td>
                       <td className="lot-zone">{lot.zone || '-'}</td>
-                      <td>{lot.surface ? `${lot.surface} m²` : '-'}</td>
+                      <td>{lot.surface ? `${Math.round(parseFloat(lot.surface))} m²` : '-'}</td>
                       <td className="font-semibold">{formatPrice(lot.price)}</td>
                       <td>
                         <span className={`status-badge ${lot.status}`}>
@@ -739,12 +774,12 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
               </table>
             </div>
 
-            {lots.length === 0 && (
+            {lots.filter(lot => selectedStatuses.length === 0 || selectedStatuses.includes(lot.status)).length === 0 && (
               <div className="empty-state">
                 <div className="empty-state-icon">📦</div>
                 <div className="empty-state-title">Aucun lot</div>
                 <div className="empty-state-description">
-                  Importez des lots depuis un fichier GeoJSON pour commencer.
+                  Aucun lot ne correspond aux filtres sélectionnés.
                 </div>
               </div>
             )}
@@ -780,27 +815,79 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
               </div>
             )}
 
-            {/* Sales Chart */}
+            {/* Sales History Table */}
             {performance?.sales_by_period?.length > 0 && (
               <div className={isManager() ? "mt-md" : ""}>
                 <h3 style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
                   {isCommercial() ? 'Mes ventes par mois' : 'Ventes par mois'}
                 </h3>
-                <div className="chart-container">
-                  {performance.sales_by_period.slice(0, 6).reverse().map((item, index) => {
-                    const maxAmount = Math.max(...performance.sales_by_period.map(p => p.count || 0));
-                    const height = maxAmount > 0 ? ((item.count || 0) / maxAmount) * 100 : 0;
-                    return (
-                      <div
-                        key={index}
-                        className="chart-bar"
-                        style={{ height: `${Math.max(height, 5)}%` }}
-                      >
-                        <span className="chart-bar-value">{item.count}</span>
-                        <span className="chart-bar-label">{item.period}</span>
-                      </div>
-                    );
-                  })}
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="lots-table">
+                    <thead>
+                      <tr>
+                        <th>Période</th>
+                        <th>Ventes</th>
+                        <th>CA</th>
+                        <th>Évolution</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const sortedPeriods = [...performance.sales_by_period].sort((a, b) => b.period.localeCompare(a.period));
+                        return sortedPeriods.slice(0, 6).map((item, index) => {
+                          const prevItem = sortedPeriods[index + 1];
+                          const countEvolution = prevItem && prevItem.count > 0
+                            ? ((item.count - prevItem.count) / prevItem.count * 100).toFixed(1)
+                            : null;
+                          const caEvolution = prevItem && prevItem.total_amount > 0
+                            ? ((item.total_amount - prevItem.total_amount) / prevItem.total_amount * 100).toFixed(1)
+                            : null;
+
+                          return (
+                            <tr key={item.period}>
+                              <td className="font-semibold">{item.period}</td>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                                  <span>{item.count}</span>
+                                  {countEvolution !== null && (
+                                    <span style={{
+                                      fontSize: '0.75rem',
+                                      color: parseFloat(countEvolution) >= 0 ? 'var(--success)' : 'var(--color-danger)',
+                                      fontWeight: '500'
+                                    }}>
+                                      {parseFloat(countEvolution) >= 0 ? '↑' : '↓'} {Math.abs(parseFloat(countEvolution))}%
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="font-semibold" style={{ color: 'var(--success)' }}>
+                                {formatNumber(item.total_amount, 'MAD')}
+                              </td>
+                              <td>
+                                {caEvolution !== null ? (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem',
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: '600',
+                                    backgroundColor: parseFloat(caEvolution) >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                    color: parseFloat(caEvolution) >= 0 ? 'var(--success)' : 'var(--color-danger)'
+                                  }}>
+                                    {parseFloat(caEvolution) >= 0 ? '↑' : '↓'} {Math.abs(parseFloat(caEvolution))}%
+                                  </span>
+                                ) : (
+                                  <span className="text-muted">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}

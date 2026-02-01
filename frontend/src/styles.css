@@ -2287,6 +2287,30 @@ body {
   margin-top: 2px;
 }
 
+/* Style pour les icônes ⓘ avec effet hover */
+.kpis-info-icon {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: help;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.kpis-info-icon:hover {
+  color: rgba(255, 255, 255, 0.9);
+  transform: scale(1.2);
+}
+
+/* Version sombre pour les fonds clairs */
+.kpis-info-icon.kpis-info-icon-dark {
+  color: var(--text-muted);
+}
+
+.kpis-info-icon.kpis-info-icon-dark:hover {
+  color: var(--text-primary);
+}
+
 .kpis-hero-subtitle {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.7);
@@ -2398,6 +2422,17 @@ body {
   flex-shrink: 0;
 }
 
+.kpis-financial-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+}
+
 .kpis-circular-chart {
   width: 100%;
   height: 100%;
@@ -2452,6 +2487,21 @@ body {
   font-size: 0.85rem;
   color: var(--text-secondary);
   margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kpis-stock-tooltip {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  cursor: help;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.kpis-stock-tooltip:hover {
+  opacity: 1;
 }
 
 /* Dual Section */
@@ -2577,10 +2627,110 @@ body {
   transition: width 0.6s ease-out;
 }
 
+/* Tooltips for KPIs */
+.kpis-hero-tooltip,
+.kpis-section-tooltip,
+.kpis-metric-tooltip {
+  cursor: help;
+  opacity: 0.6;
+  font-size: 0.75rem;
+  margin-left: var(--spacing-xs);
+  transition: opacity 0.2s ease;
+}
+
+.kpis-hero-tooltip:hover,
+.kpis-section-tooltip:hover,
+.kpis-metric-tooltip:hover {
+  opacity: 1;
+}
+
+.kpis-hero-content {
+  position: relative;
+}
+
+.kpis-hero-tooltip {
+  position: absolute;
+  top: 0;
+  right: -16px;
+  font-size: 0.7rem;
+}
+
+/* Categories Section */
+.kpis-categories-section {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  border: 1px solid var(--bg-tertiary);
+}
+
+.kpis-categories-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-lg);
+}
+
+.kpis-category-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.kpis-category-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bg-tertiary);
+  transition: all 0.2s ease;
+}
+
+.kpis-category-item:hover {
+  border-color: var(--color-primary);
+  background: var(--bg-tertiary);
+}
+
+.kpis-category-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.kpis-category-stats {
+  display: flex;
+  gap: var(--spacing-md);
+  font-size: 0.75rem;
+}
+
+.kpis-category-stats .stat-sold {
+  color: var(--color-sold);
+  font-weight: 500;
+}
+
+.kpis-category-stats .stat-reserved {
+  color: var(--color-reserved);
+  font-weight: 500;
+}
+
+.kpis-category-stats .stat-available {
+  color: var(--color-available);
+  font-weight: 500;
+}
+
+.kpis-category-empty {
+  text-align: center;
+  padding: var(--spacing-lg);
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
   .kpis-hero-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .kpis-stock-grid {
@@ -2592,6 +2742,10 @@ body {
   }
 
   .kpis-rates-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kpis-categories-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -2613,6 +2767,17 @@ body {
   .kpis-stock-visual {
     width: 60px;
     height: 60px;
+  }
+
+  .kpis-category-item {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    text-align: center;
+  }
+
+  .kpis-category-stats {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }
 
@@ -3244,6 +3409,131 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   opacity: 0.8;
+}
+
+/* Status Filter Buttons Row */
+.filters-status-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.btn-status-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-status-filter .status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.8);
+}
+
+/* Disponible - Vert */
+.btn-status-filter.available {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #15803d;
+}
+
+.btn-status-filter.available .status-dot {
+  background: var(--success);
+}
+
+.btn-status-filter.available:hover {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: var(--success);
+}
+
+/* Réservé - Orange */
+.btn-status-filter.reserved {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #b45309;
+}
+
+.btn-status-filter.reserved .status-dot {
+  background: var(--warning);
+}
+
+.btn-status-filter.reserved:hover {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: var(--warning);
+}
+
+/* Vendu - Bleu */
+.btn-status-filter.sold {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #1d4ed8;
+}
+
+.btn-status-filter.sold .status-dot {
+  background: var(--primary);
+}
+
+.btn-status-filter.sold:hover {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: var(--primary);
+}
+
+/* Bloqué - Rouge */
+.btn-status-filter.blocked {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #b91c1c;
+}
+
+.btn-status-filter.blocked .status-dot {
+  background: var(--color-danger);
+}
+
+.btn-status-filter.blocked:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: var(--color-danger);
+}
+
+/* État actif (sélectionné) */
+.btn-status-filter.active {
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.btn-status-filter.active .status-dot {
+  background: white;
+  box-shadow: none;
+}
+
+.btn-status-filter.active.available {
+  background: var(--success);
+}
+
+.btn-status-filter.active.reserved {
+  background: var(--warning);
+  color: #333;
+}
+
+.btn-status-filter.active.reserved .status-dot {
+  background: #333;
+}
+
+.btn-status-filter.active.sold {
+  background: var(--primary);
+}
+
+.btn-status-filter.active.blocked {
+  background: var(--color-danger);
 }
 
 /* Unified Filters Row */

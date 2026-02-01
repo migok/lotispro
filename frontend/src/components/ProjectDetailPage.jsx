@@ -62,7 +62,15 @@ export default function ProjectDetailPage() {
 
   // Initialize map when carte tab is active
   useEffect(() => {
-    if (activeTab === 'carte' && mapContainerRef.current && project) {
+    if (activeTab !== 'carte' || !project) return;
+
+    const initializeMap = () => {
+      if (!mapContainerRef.current) {
+        // Le conteneur n'est pas encore prêt, réessayer
+        setTimeout(initializeMap, 50);
+        return;
+      }
+
       if (!mapRef.current) {
         // Première initialisation de la carte
         const map = L.map(mapContainerRef.current, { minZoom: 2, maxZoom: 22 });
@@ -77,10 +85,13 @@ export default function ProjectDetailPage() {
       } else {
         // La carte existe déjà, on force le recalcul des dimensions
         setTimeout(() => {
-          mapRef.current.invalidateSize();
+          mapRef.current?.invalidateSize();
         }, 100);
       }
-    }
+    };
+
+    // Petit délai pour laisser le DOM se mettre à jour
+    setTimeout(initializeMap, 0);
   }, [activeTab, project]);
 
   // Reload when filters change
@@ -403,6 +414,8 @@ export default function ProjectDetailPage() {
       {/* Tabs */}
       <div className="tabs">
         {TABS.filter((tab) => {
+          // Masquer l'onglet KPIs pour les commerciaux (redondant avec Dashboard)
+          if (tab.id === 'kpis' && isCommercial()) return false;
           // Masquer l'onglet Performance pour les non-managers
           if (tab.id === 'performance' && !isManager()) return false;
           // Masquer l'onglet Paramètres pour les commerciaux
@@ -513,6 +526,17 @@ function CarteTab({
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const carteTabRef = useRef(null);
+
+  // Force la carte à se redimensionner au montage du composant
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapRef?.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // Gestion du plein écran natif du navigateur
   const toggleFullscreen = async () => {
@@ -647,6 +671,22 @@ function CarteTab({
               )}
             </button>
           </div>
+        </div>
+
+        {/* Status Filter Buttons */}
+        <div className="filters-status-row">
+          {['available', 'reserved', 'sold', 'blocked'].map(status => (
+            <button
+              key={status}
+              className={`btn-status-filter ${filterStatus === status ? 'active' : ''} ${status}`}
+              onClick={() => setFilterStatus(filterStatus === status ? null : status)}
+            >
+              <span className="status-dot"></span>
+              {status === 'available' ? 'Disponible' :
+               status === 'reserved' ? 'Réservé' :
+               status === 'sold' ? 'Vendu' : 'Bloqué'}
+            </button>
+          ))}
         </div>
 
         {/* All Filters in One Row */}

@@ -36,6 +36,14 @@ class DashboardPercentages(BaseSchema):
     blocked: float
 
 
+class CategoryStats(BaseSchema):
+    """Schema for statistics by category (sold/reserved/available counts)."""
+
+    sold: int = 0
+    reserved: int = 0
+    available: int = 0
+
+
 class DashboardStats(BaseSchema):
     """Schema for main dashboard statistics."""
 
@@ -46,9 +54,22 @@ class DashboardStats(BaseSchema):
         description="Surface statistics by status",
     )
     ca_realise: float = Field(description="Revenue realized from sales")
-    ca_potentiel: float = Field(description="Potential revenue from available lots")
+    ca_potentiel: float = Field(description="Potential revenue from reserved lots")
+    ca_total: float = Field(default=0, description="Total project value (sum of all lot prices)")
     taux_vente: float = Field(description="Sales rate percentage")
     taux_transformation: float = Field(description="Reservation to sale conversion rate")
+    by_type_lot: dict[str, CategoryStats] = Field(
+        default_factory=dict,
+        description="Statistics grouped by lot type",
+    )
+    by_emplacement: dict[str, CategoryStats] = Field(
+        default_factory=dict,
+        description="Statistics grouped by location/emplacement",
+    )
+    by_type_maison: dict[str, CategoryStats] = Field(
+        default_factory=dict,
+        description="Statistics grouped by house type",
+    )
 
 
 class SalesByPeriod(BaseSchema):

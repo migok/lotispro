@@ -9,6 +9,7 @@ from app.core.logging import get_logger
 from app.domain.schemas.dashboard import (
     AlertsSummary,
     AverageDurations,
+    CategoryStats,
     CommercialPerformance,
     DashboardCounts,
     DashboardPercentages,
@@ -217,11 +218,18 @@ class DashboardService:
         ca_result = await self.session.execute(ca_query)
         ca_realise = float(ca_result.scalar() or 0)
 
-        # CA potential (from available/reserved lots)
+        # CA total (sum of all lot prices - project value)
+        ca_total_query = select(func.coalesce(func.sum(LotModel.price), 0))
+        if project_id:
+            ca_total_query = ca_total_query.where(LotModel.project_id == project_id)
+        ca_total_result = await self.session.execute(ca_total_query)
+        ca_total = float(ca_total_result.scalar() or 0)
+
+        # CA potential (from active reservations - pending sales)
         if user_id:
-            # For user, potential = their reserved lots only
-            potential_query = select(func.sum(LotModel.price)).where(
-                LotModel.status == "reserved",
+            # For user, potential = sum of lot prices from their active reservations
+            # Don't check LotModel.status - rely on reservation status as source of truth
+            potential_query = select(func.coalesce(func.sum(LotModel.price), 0)).where(
                 LotModel.id.in_(
                     select(ReservationModel.lot_id).where(
                         ReservationModel.reserved_by_user_id == user_id,
@@ -230,8 +238,13 @@ class DashboardService:
                 ),
             )
         else:
-            potential_query = select(func.sum(LotModel.price)).where(
-                LotModel.status.in_(["available", "reserved"])
+            # CA potentiel = all lots with active reservations
+            potential_query = select(func.coalesce(func.sum(LotModel.price), 0)).where(
+                LotModel.id.in_(
+                    select(ReservationModel.lot_id).where(
+                        ReservationModel.status == "active",
+                    )
+                )
             )
         if project_id:
             potential_query = potential_query.where(LotModel.project_id == project_id)
@@ -262,14 +275,72 @@ class DashboardService:
         total_res = conversion_row.total or 1
         taux_transformation = round(conversion_row.converted / total_res * 100, 2)
 
+        # Statistics by category (type_lot, emplacement, type_maison)
+        by_type_lot: dict[str, CategoryStats] = {}
+        by_emplacement: dict[str, CategoryStats] = {}
+        by_type_maison: dict[str, CategoryStats] = {}
+
+        # Query lots with their metadata for category stats
+        # Always use global/project-level stats (not filtered by user)
+        # This ensures available lots are included in the distribution
+        category_query = select(
+            LotModel.type_lot,
+            LotModel.emplacement,
+            LotModel.type_maison,
+            LotModel.status,
+        )
+        if project_id:
+            category_query = category_query.where(LotModel.project_id == project_id)
+
+        category_result = await self.session.execute(category_query)
+        category_rows = category_result.all()
+
+        for type_lot, emplacement, type_maison, status in category_rows:
+            # By type_lot - skip NULL values
+            if type_lot:
+                if type_lot not in by_type_lot:
+                    by_type_lot[type_lot] = CategoryStats()
+                if status == "sold":
+                    by_type_lot[type_lot].sold += 1
+                elif status == "reserved":
+                    by_type_lot[type_lot].reserved += 1
+                elif status == "available":
+                    by_type_lot[type_lot].available += 1
+
+            # By emplacement - skip NULL values
+            if emplacement:
+                if emplacement not in by_emplacement:
+                    by_emplacement[emplacement] = CategoryStats()
+                if status == "sold":
+                    by_emplacement[emplacement].sold += 1
+                elif status == "reserved":
+                    by_emplacement[emplacement].reserved += 1
+                elif status == "available":
+                    by_emplacement[emplacement].available += 1
+
+            # By type_maison - skip NULL values
+            if type_maison:
+                if type_maison not in by_type_maison:
+                    by_type_maison[type_maison] = CategoryStats()
+                if status == "sold":
+                    by_type_maison[type_maison].sold += 1
+                elif status == "reserved":
+                    by_type_maison[type_maison].reserved += 1
+                elif status == "available":
+                    by_type_maison[type_maison].available += 1
+
         return DashboardStats(
             counts=counts,
             percentages=percentages,
             surfaces=surfaces,
             ca_realise=ca_realise,
             ca_potentiel=ca_potentiel,
+            ca_total=ca_total,
             taux_vente=taux_vente,
             taux_transformation=taux_transformation,
+            by_type_lot=by_type_lot,
+            by_emplacement=by_emplacement,
+            by_type_maison=by_type_maison,
         )
 
     async def get_alerts(
