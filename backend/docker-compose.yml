@@ -1,0 +1,100 @@
+# ============================================
+# Lots API - Docker Compose Configuration
+# ============================================
+# Usage:
+#   Development: docker compose up -d
+#   Production:  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: "3.9"
+
+services:
+  # ----------------------------------------
+  # FastAPI Application
+  # ----------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: lots-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=console
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production-min-32-chars}
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/lots_db
+      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000
+    volumes:
+      - ./app:/app/app:ro
+      - ./data:/app/data
+      - ./alembic:/app/alembic
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - lots-network
+
+  # ----------------------------------------
+  # PostgreSQL Database
+  # ----------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: lots-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=lots_db
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lots_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - lots-network
+
+  # ----------------------------------------
+  # Adminer (Database UI) - Optional
+  # ----------------------------------------
+  adminer:
+    image: adminer:latest
+    container_name: lots-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    networks:
+      - lots-network
+    profiles:
+      - tools
+
+# ----------------------------------------
+# Networks
+# ----------------------------------------
+networks:
+  lots-network:
+    driver: bridge
+
+# ----------------------------------------
+# Volumes
+# ----------------------------------------
+volumes:
+  postgres_data:
+    driver: local
