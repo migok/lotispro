@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { apiGet, apiDelete } from '../utils/api';
 import { formatPrice, formatDate, formatCompactPrice } from '../utils/formatters';
 import CreateProjectModal from './CreateProjectModal';
@@ -10,6 +11,7 @@ import AssignCommercialsModal from './AssignCommercialsModal';
 export default function ProjectsPage() {
   const navigate = useNavigate();
   const { isManager } = useAuth();
+  const toast = useToast();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -41,8 +43,9 @@ export default function ProjectsPage() {
     try {
       await apiDelete(`/api/projects/${projectId}`);
       await loadProjects();
+      toast.success('Projet supprimé avec succès');
     } catch (error) {
-      alert(error.message || 'Erreur lors de la suppression du projet');
+      toast.error(error.message || 'Erreur lors de la suppression du projet');
     }
   };
 

@@ -110,11 +110,10 @@ export default function ClientDetailPage() {
   return (
     <div className="client-detail-page">
       {/* Header */}
-      <div className="page-header" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)' }}>
+      <div className="page-header flex items-center gap-md">
         <button
-          className="btn btn-ghost"
+          className="btn btn-ghost p-sm"
           onClick={() => navigate('/clients')}
-          style={{ padding: 'var(--spacing-sm)' }}
         >
           ← Retour
         </button>
@@ -132,7 +131,7 @@ export default function ClientDetailPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="kpi-grid" style={{ marginBottom: 'var(--spacing-lg)' }}>
+      <div className="kpi-grid mb-lg">
         <div className="kpi-card">
           <div className="kpi-value" style={{ color: 'var(--color-success)' }}>
             {formatPrice(client.stats?.total_purchases || 0)}
@@ -158,7 +157,7 @@ export default function ClientDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="tabs" style={{ marginBottom: 'var(--spacing-lg)' }}>
+      <div className="tabs mb-lg">
         <button
           className={`tab ${activeTab === 'info' ? 'active' : ''}`}
           onClick={() => setActiveTab('info')}
@@ -246,7 +245,7 @@ export default function ClientDetailPage() {
                     />
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 'var(--spacing-sm)', marginTop: 'var(--spacing-lg)' }}>
+                <div className="flex gap-sm mt-lg">
                   <button className="btn btn-ghost" onClick={() => setIsEditing(false)}>
                     Annuler
                   </button>
@@ -282,7 +281,7 @@ export default function ClientDetailPage() {
                     e.currentTarget.style.boxShadow = 'none';
                     e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.15)';
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                    <div className="flex items-start gap-md">
                       <div style={{
                         width: '48px',
                         height: '48px',
@@ -339,7 +338,7 @@ export default function ClientDetailPage() {
                     e.currentTarget.style.boxShadow = 'none';
                     e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.15)';
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                    <div className="flex items-start gap-md">
                       <div style={{
                         width: '48px',
                         height: '48px',
@@ -396,7 +395,7 @@ export default function ClientDetailPage() {
                     e.currentTarget.style.boxShadow = 'none';
                     e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.15)';
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                    <div className="flex items-start gap-md">
                       <div style={{
                         width: '48px',
                         height: '48px',
@@ -453,7 +452,7 @@ export default function ClientDetailPage() {
                     e.currentTarget.style.boxShadow = 'none';
                     e.currentTarget.style.borderColor = 'rgba(249, 115, 22, 0.15)';
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                    <div className="flex items-start gap-md">
                       <div style={{
                         width: '48px',
                         height: '48px',
@@ -511,7 +510,7 @@ export default function ClientDetailPage() {
                       e.currentTarget.style.boxShadow = 'none';
                       e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.15)';
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                      <div className="flex items-start gap-md">
                         <div style={{
                           width: '48px',
                           height: '48px',
@@ -569,7 +568,7 @@ export default function ClientDetailPage() {
                     e.currentTarget.style.boxShadow = 'none';
                     e.currentTarget.style.borderColor = 'rgba(236, 72, 153, 0.15)';
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                    <div className="flex items-start gap-md">
                       <div style={{
                         width: '48px',
                         height: '48px',

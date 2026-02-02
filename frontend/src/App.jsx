@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import "./styles.css";
 
 // Import contexts
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { ToastProvider } from "./contexts/ToastContext";
 
 // Import components
 import ClientsPage from "./components/ClientsPage";
@@ -12,7 +14,6 @@ import Login from "./components/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProjectsPage from "./components/ProjectsPage";
 import ProjectDetailPage from "./components/ProjectDetailPage";
-import HistoryPage from "./components/HistoryPage";
 
 // Navigation items with role-based access
 const NAV_ITEMS = [
@@ -37,19 +38,13 @@ const NAV_ITEMS = [
     icon: "👔",
     allowedRoles: ["manager"]
   },
-  {
-    id: "history",
-    path: "/history",
-    label: "Historique",
-    icon: "📋",
-    allowedRoles: ["manager"]
-  },
 ];
 
 function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Déterminer la page actuelle depuis l'URL
   const currentPage = location.pathname.split('/')[1] || 'dashboard';
@@ -59,10 +54,24 @@ function AppContent() {
     navigate("/login");
   };
 
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
+  };
+
   return (
     <div className="app-container">
+      {/* Mobile Menu Toggle Button */}
+      <button
+        className="mobile-menu-toggle"
+        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+        aria-label={mobileMenuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+        aria-expanded={mobileMenuOpen}
+      >
+        {mobileMenuOpen ? '✕' : '☰'}
+      </button>
+
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${mobileMenuOpen ? 'sidebar-mobile-open' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo">
             <span>🏗️</span>
@@ -78,6 +87,7 @@ function AppContent() {
               key={item.id}
               to={item.path}
               className={`nav-item ${currentPage === item.id ? "active" : ""}`}
+              onClick={closeMobileMenu}
             >
               <span>{item.icon}</span>
               <span>{item.label}</span>
@@ -85,24 +95,17 @@ function AppContent() {
           ))}
         </nav>
 
-        <div style={{ padding: "var(--spacing-md)", borderTop: "1px solid var(--bg-tertiary)" }}>
+        <div className="p-md border-top">
           {/* User Info */}
           {user && (
-            <div style={{ marginBottom: "var(--spacing-md)" }}>
-              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 600 }}>
+            <div className="mb-md">
+              <div className="text-sm text-secondary font-semibold">
                 {user.name}
               </div>
-              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+              <div className="text-xs text-muted">
                 {user.email}
               </div>
-              <div
-                style={{
-                  fontSize: "0.7rem",
-                  color: "var(--text-muted)",
-                  marginTop: "var(--spacing-xs)",
-                  textTransform: "uppercase",
-                }}
-              >
+              <div className="text-xs text-muted mt-xs uppercase">
                 {user.role}
               </div>
             </div>
@@ -111,18 +114,12 @@ function AppContent() {
           {/* Logout Button */}
           <button
             onClick={handleLogout}
-            className="btn btn-ghost"
-            style={{
-              width: "100%",
-              fontSize: "0.85rem",
-              padding: "var(--spacing-sm)",
-              marginBottom: "var(--spacing-md)",
-            }}
+            className="btn btn-ghost w-full text-sm p-sm mb-md"
           >
             🚪 Déconnexion
           </button>
 
-          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+          <div className="text-xs text-muted">
             LotisPro v2.0
           </div>
         </div>
@@ -173,14 +170,6 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/history"
-            element={
-              <ProtectedRoute allowedRoles={["manager"]}>
-                <HistoryPage />
-              </ProtectedRoute>
-            }
-          />
         </Routes>
       </main>
     </div>
@@ -197,12 +186,14 @@ function AppRoutes() {
   );
 }
 
-// Composant principal avec BrowserRouter et AuthProvider
+// Composant principal avec BrowserRouter, AuthProvider et ToastProvider
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ToastProvider>
+          <AppRoutes />
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );
