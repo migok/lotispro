@@ -1,59 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-
-const API_URL = 'http://localhost:8000';
-
-// Helper pour faire des requêtes GET avec authentification
-const apiGet = async (endpoint) => {
-  const token = localStorage.getItem('auth_token');
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    }
-  });
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-  return response.json();
-};
-
-// Format currency
-const formatPrice = (price) => {
-  if (!price) return '0 MAD';
-  return new Intl.NumberFormat('fr-MA', {
-    style: 'decimal',
-    maximumFractionDigits: 0,
-  }).format(price) + ' MAD';
-};
-
-// Format number with K/M suffix
-const formatNumber = (num, suffix = '') => {
-  if (!num || num === 0) return `0${suffix ? ' ' + suffix : ''}`;
-
-  const absNum = Math.abs(num);
-
-  if (absNum >= 1000000) {
-    const formatted = (num / 1000000).toFixed(1).replace(/\.0$/, '');
-    return `${formatted}M${suffix ? ' ' + suffix : ''}`;
-  }
-
-  if (absNum >= 1000) {
-    const formatted = (num / 1000).toFixed(1).replace(/\.0$/, '');
-    return `${formatted}K${suffix ? ' ' + suffix : ''}`;
-  }
-
-  return `${Math.round(num)}${suffix ? ' ' + suffix : ''}`;
-};
-
-// Format date
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-};
+import { apiGet, apiPost } from '../utils/api';
+import { formatPrice, formatDate, formatNumber } from '../utils/formatters';
+import { STATUS_LABELS, PIPELINE_LABELS } from '../utils/constants';
 
 // Calculate days remaining until expiration
 const getDaysRemaining = (expirationDate) => {
@@ -63,39 +12,6 @@ const getDaysRemaining = (expirationDate) => {
   const diffTime = expDate - now;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return diffDays;
-};
-
-// Helper pour faire des requêtes POST avec authentification
-const apiPost = async (endpoint, data) => {
-  const token = localStorage.getItem('auth_token');
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || `HTTP error! status: ${response.status}`);
-  }
-  return response.json();
-};
-
-// Status labels
-const STATUS_LABELS = {
-  available: 'Disponible',
-  reserved: 'Reservé',
-  sold: 'Vendu',
-  blocked: 'Bloqué',
-};
-
-const PIPELINE_LABELS = {
-  buyer: 'Acheteur',
-  active_reservation: 'Reservation active',
-  past_reservation: 'Ancienne reservation',
-  prospect: 'Prospect',
 };
 
 export default function Dashboard({ onSelectLot, onNavigate, projectId: propsProjectId }) {

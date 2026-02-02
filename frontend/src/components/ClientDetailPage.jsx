@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-
-const API_URL = 'http://localhost:8000';
+import { API_BASE_URL } from '../utils/config';
+import { formatPrice, formatDate } from '../utils/formatters';
+import { CLIENT_TYPES } from '../utils/constants';
 
 const CLIENT_TYPE_LABELS = {
   proprietaire: 'Propriétaire',
@@ -11,36 +12,11 @@ const CLIENT_TYPE_LABELS = {
   autre: 'Autre',
 };
 
-const CLIENT_TYPES = [
-  { value: 'proprietaire', label: 'Propriétaire' },
-  { value: 'revendeur', label: 'Revendeur' },
-  { value: 'investisseur', label: 'Investisseur' },
-  { value: 'autre', label: 'Autre' },
-];
-
 const RESERVATION_STATUS_LABELS = {
   active: 'Active',
   converted: 'Convertie',
   released: 'Libérée',
   expired: 'Expirée',
-};
-
-const formatPrice = (price) => {
-  if (!price) return '0 MAD';
-  return new Intl.NumberFormat('fr-MA', {
-    style: 'decimal',
-    maximumFractionDigits: 0,
-  }).format(price) + ' MAD';
-};
-
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
 };
 
 export default function ClientDetailPage() {
@@ -63,7 +39,7 @@ export default function ClientDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_URL}/api/clients/${clientId}/details`, {
+      const response = await fetch(`${API_BASE_URL}/api/clients/${clientId}/details`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -91,7 +67,7 @@ export default function ClientDetailPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/api/clients/${clientId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/clients/${clientId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

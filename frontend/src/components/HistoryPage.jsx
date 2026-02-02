@@ -1,50 +1,7 @@
 import { useState, useEffect } from 'react';
-
-const API_URL = 'http://localhost:8000';
-
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
-const ACTION_ICONS = {
-  create: '➕',
-  update: '✏️',
-  status_change: '🔄',
-  reserve: '📋',
-  sell: '✅',
-  release: '🔓',
-};
-
-const ACTION_LABELS = {
-  create: 'Création',
-  update: 'Modification',
-  status_change: 'Changement de statut',
-  reserve: 'Réservation',
-  sell: 'Vente',
-  release: 'Libération',
-};
-
-const ENTITY_LABELS = {
-  lot: 'Lot',
-  client: 'Client',
-  reservation: 'Réservation',
-  sale: 'Vente',
-};
-
-const STATUS_LABELS = {
-  available: 'Disponible',
-  reserved: 'Réservé',
-  sold: 'Vendu',
-  blocked: 'Bloqué',
-};
+import { API_BASE_URL } from '../utils/config';
+import { formatDate } from '../utils/formatters';
+import { ACTION_ICONS, ACTION_LABELS, ENTITY_LABELS, STATUS_LABELS } from '../utils/constants';
 
 export default function HistoryPage() {
   const [logs, setLogs] = useState([]);
@@ -66,7 +23,7 @@ export default function HistoryPage() {
       if (filter.action) params.append('action', filter.action);
       params.append('limit', '100');
 
-      const response = await fetch(`${API_URL}/api/audit-logs?${params}`);
+      const response = await fetch(`${API_BASE_URL}/api/audit-logs?${params}`);
       const data = await response.json();
       setLogs(data);
     } catch (error) {
@@ -152,7 +109,7 @@ export default function HistoryPage() {
                     <span className="history-action">
                       {ACTION_LABELS[log.action] || log.action}
                     </span>
-                    <span className="history-time">{formatDate(log.created_at)}</span>
+                    <span className="history-time">{formatDate(log.created_at, true)}</span>
                   </div>
                   <div className="history-entity">
                     {ENTITY_LABELS[log.entity_type] || log.entity_type} #{log.entity_id}

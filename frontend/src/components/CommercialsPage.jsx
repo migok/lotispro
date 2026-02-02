@@ -1,25 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-
-const API_URL = 'http://localhost:8000';
-
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-};
-
-const formatPrice = (price) => {
-  if (!price) return '0 MAD';
-  return new Intl.NumberFormat('fr-MA', {
-    style: 'decimal',
-    maximumFractionDigits: 0,
-  }).format(price) + ' MAD';
-};
+import { API_BASE_URL } from '../utils/config';
+import { formatDate, formatPrice } from '../utils/formatters';
 
 export default function CommercialsPage() {
   const { token } = useAuth();
@@ -48,7 +30,7 @@ export default function CommercialsPage() {
   const loadCommercials = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/users?role=commercial`, {
+      const response = await fetch(`${API_BASE_URL}/api/users?role=commercial`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -66,7 +48,7 @@ export default function CommercialsPage() {
 
   const loadCommercialStats = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/dashboard/commercial-stats`, {
+      const response = await fetch(`${API_BASE_URL}/api/dashboard/commercial-stats`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -111,7 +93,7 @@ export default function CommercialsPage() {
 
     setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/api/users`, {
+      const response = await fetch(`${API_BASE_URL}/api/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -147,7 +129,7 @@ export default function CommercialsPage() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/users/${commercialId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${commercialId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

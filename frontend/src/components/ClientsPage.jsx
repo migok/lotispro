@@ -1,36 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-
-const API_URL = 'http://localhost:8000';
-
-const CLIENT_TYPES = [
-  { value: 'proprietaire', label: 'Propriétaire' },
-  { value: 'revendeur', label: 'Revendeur' },
-  { value: 'investisseur', label: 'Investisseur' },
-  { value: 'autre', label: 'Autre' },
-];
+import { API_BASE_URL } from '../utils/config';
+import { formatPrice } from '../utils/formatters';
+import { CLIENT_TYPES, PIPELINE_LABELS } from '../utils/constants';
 
 const CLIENT_TYPE_LABELS = {
   proprietaire: 'Propriétaire',
   revendeur: 'Revendeur',
   investisseur: 'Investisseur',
   autre: 'Autre',
-};
-
-const formatPrice = (price) => {
-  if (!price) return '0 MAD';
-  return new Intl.NumberFormat('fr-MA', {
-    style: 'decimal',
-    maximumFractionDigits: 0,
-  }).format(price) + ' MAD';
-};
-
-const PIPELINE_LABELS = {
-  buyer: 'Acheteur',
-  active_reservation: 'Reservation active',
-  past_reservation: 'Ancienne reservation',
-  prospect: 'Prospect',
 };
 
 export default function ClientsPage() {
@@ -60,7 +39,7 @@ export default function ClientsPage() {
   const loadClients = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/dashboard/clients-pipeline`, {
+      const response = await fetch(`${API_BASE_URL}/api/dashboard/clients-pipeline`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -84,7 +63,7 @@ export default function ClientsPage() {
 
     setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/api/clients`, {
+      const response = await fetch(`${API_BASE_URL}/api/clients`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

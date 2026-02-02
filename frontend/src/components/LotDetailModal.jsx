@@ -1,47 +1,8 @@
 import { useState, useEffect } from 'react';
 import { apiGet, apiPost } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
-
-const CLIENT_TYPES = [
-  { value: 'proprietaire', label: 'Propriétaire' },
-  { value: 'revendeur', label: 'Revendeur' },
-  { value: 'investisseur', label: 'Investisseur' },
-  { value: 'autre', label: 'Autre' },
-];
-
-const formatPrice = (price) => {
-  if (!price) return '0 MAD';
-  return new Intl.NumberFormat('fr-MA', {
-    style: 'decimal',
-    maximumFractionDigits: 0,
-  }).format(price) + ' MAD';
-};
-
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
-const STATUS_LABELS = {
-  available: 'Disponible',
-  reserved: 'Réservé',
-  sold: 'Vendu',
-  blocked: 'Bloqué',
-};
-
-const STATUS_COLORS = {
-  available: 'var(--color-available)',
-  reserved: 'var(--color-warning)',
-  sold: 'var(--color-danger)',
-  blocked: 'var(--color-blocked)',
-};
+import { formatPrice, formatDate } from '../utils/formatters';
+import { CLIENT_TYPES, STATUS_LABELS } from '../utils/constants';
 
 export default function LotDetailModal({ lot, onClose, onRefresh }) {
   const { token, user, isManager } = useAuth();

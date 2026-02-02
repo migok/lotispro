@@ -12,6 +12,7 @@ import Login from "./components/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProjectsPage from "./components/ProjectsPage";
 import ProjectDetailPage from "./components/ProjectDetailPage";
+import HistoryPage from "./components/HistoryPage";
 
 // Navigation items with role-based access
 const NAV_ITEMS = [
@@ -34,6 +35,13 @@ const NAV_ITEMS = [
     path: "/commerciaux",
     label: "Commerciaux",
     icon: "👔",
+    allowedRoles: ["manager"]
+  },
+  {
+    id: "history",
+    path: "/history",
+    label: "Historique",
+    icon: "📋",
     allowedRoles: ["manager"]
   },
 ];
@@ -162,6 +170,14 @@ function AppContent() {
             element={
               <ProtectedRoute allowedRoles={["manager"]}>
                 <CommercialsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute allowedRoles={["manager"]}>
+                <HistoryPage />
               </ProtectedRoute>
             }
           />

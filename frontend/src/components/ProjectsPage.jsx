@@ -2,46 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiGet, apiDelete } from '../utils/api';
+import { formatPrice, formatDate, formatCompactPrice } from '../utils/formatters';
 import CreateProjectModal from './CreateProjectModal';
 import UploadGeojsonModal from './UploadGeojsonModal';
 import AssignCommercialsModal from './AssignCommercialsModal';
-
-const formatPrice = (price) => {
-  if (!price) return '0 MAD';
-  return new Intl.NumberFormat('fr-MA', {
-    style: 'decimal',
-    maximumFractionDigits: 0,
-  }).format(price) + ' MAD';
-};
-
-const formatCompactPrice = (price) => {
-  if (!price) return '0 MAD';
-
-  // Format en millions (M)
-  if (price >= 1000000) {
-    const millions = price / 1000000;
-    return millions.toFixed(1).replace(/\.0$/, '') + 'M MAD';
-  }
-
-  // Format en milliers (K)
-  if (price >= 1000) {
-    const thousands = price / 1000;
-    return thousands.toFixed(1).replace(/\.0$/, '') + 'K MAD';
-  }
-
-  // Format normal pour les petits montants
-  return Math.round(price) + ' MAD';
-};
-
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-};
 
 export default function ProjectsPage() {
   const navigate = useNavigate();

@@ -1,6 +1,5 @@
 import { useState } from 'react';
-
-const API_BASE = 'http://127.0.0.1:8000';
+import { API_BASE_URL } from '../utils/config';
 
 export default function UploadGeojsonModal({ project, onClose, onUploaded }) {
   const [file, setFile] = useState(null);
@@ -47,7 +46,7 @@ export default function UploadGeojsonModal({ project, onClose, onUploaded }) {
 
       const token = localStorage.getItem('auth_token');
       const response = await fetch(
-        `${API_BASE}/api/projects/${project.id}/upload-geojson`,
+        `${API_BASE_URL}/api/projects/${project.id}/upload-geojson`,
         {
           method: 'POST',
           headers: {
