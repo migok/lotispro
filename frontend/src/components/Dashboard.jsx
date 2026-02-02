@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { apiGet, apiPost } from '../utils/api';
 import { formatPrice, formatDate, formatNumber } from '../utils/formatters';
 import { STATUS_LABELS, PIPELINE_LABELS } from '../utils/constants';
@@ -16,6 +17,7 @@ const getDaysRemaining = (expirationDate) => {
 
 export default function Dashboard({ onSelectLot, onNavigate, projectId: propsProjectId }) {
   const { user, isManager, isCommercial, isClient } = useAuth();
+  const toast = useToast();
   const [stats, setStats] = useState(null);
   const [lots, setLots] = useState([]);
   const [alerts, setAlerts] = useState({ reservations: [], summary: {} });
@@ -171,7 +173,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   // Vendre un lot réservé (convertir la réservation en vente)
   const handleSellReservedLot = async (lot) => {
     if (!lot.reservation_id) {
-      alert('Erreur: Aucune réservation associée à ce lot');
+      toast.error('Erreur: Aucune réservation associée à ce lot');
       return;
     }
 
@@ -187,17 +189,17 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         price: parseFloat(price),
         notes: notes
       });
-      alert('Lot vendu avec succès!');
+      toast.success('Lot vendu avec succès');
       loadDashboardData();
     } catch (error) {
-      alert(error.message || 'Erreur lors de la vente du lot');
+      toast.error(error.message || 'Erreur lors de la vente du lot');
     }
   };
 
   // Soumettre la vente d'un lot disponible
   const handleSubmitSale = async () => {
     if (!saleData.client_id || !saleData.price) {
-      alert('Veuillez remplir tous les champs obligatoires');
+      toast.warning('Veuillez remplir tous les champs obligatoires');
       return;
     }
 
@@ -208,20 +210,20 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         price: parseFloat(saleData.price),
         notes: saleData.notes || null
       });
-      alert('Lot vendu avec succès!');
+      toast.success('Lot vendu avec succès');
       setShowSaleModal(false);
       setSelectedLotForSale(null);
       setSaleData({ client_id: '', price: '', notes: '' });
       loadDashboardData();
     } catch (error) {
-      alert(error.message || 'Erreur lors de la vente du lot');
+      toast.error(error.message || 'Erreur lors de la vente du lot');
     }
   };
 
   // Libérer une réservation
   const handleReleaseLot = async (lot) => {
     if (!lot.reservation_id) {
-      alert('Erreur: Aucune réservation associée à ce lot');
+      toast.error('Erreur: Aucune réservation associée à ce lot');
       return;
     }
 
@@ -231,10 +233,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
 
     try {
       await apiPost(`/api/reservations/${lot.reservation_id}/release`, {});
-      alert('Réservation libérée avec succès!');
+      toast.success('Réservation libérée avec succès');
       loadDashboardData();
     } catch (error) {
-      alert(error.message || 'Erreur lors de la libération du lot');
+      toast.error(error.message || 'Erreur lors de la libération du lot');
     }
   };
 
@@ -252,10 +254,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         price: parseFloat(price),
         notes: notes
       });
-      alert('Réservation convertie en vente avec succès!');
+      toast.success('Réservation convertie en vente avec succès');
       loadDashboardData();
     } catch (error) {
-      alert(error.message || 'Erreur lors de la conversion en vente');
+      toast.error(error.message || 'Erreur lors de la conversion en vente');
     }
   };
 
@@ -267,10 +269,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
 
     try {
       await apiPost(`/api/reservations/${alertItem.id}/release`, {});
-      alert('Réservation libérée avec succès!');
+      toast.success('Réservation libérée avec succès');
       loadDashboardData();
     } catch (error) {
-      alert(error.message || 'Erreur lors de la libération');
+      toast.error(error.message || 'Erreur lors de la libération');
     }
   };
 
@@ -952,10 +954,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                                           await apiPost(`/api/reservations/${lot.reservation_id}/extend`, {
                                             additional_days: parseInt(days)
                                           });
-                                          alert('Réservation prolongée avec succès!');
+                                          toast.success('Réservation prolongée avec succès');
                                           loadDashboardData();
                                         } catch (error) {
-                                          alert(error.message || 'Erreur lors de la prolongation');
+                                          toast.error(error.message || 'Erreur lors de la prolongation');
                                         }
                                       }
                                     }}

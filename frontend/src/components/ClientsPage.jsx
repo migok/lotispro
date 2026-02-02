@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../utils/config';
 import { formatPrice } from '../utils/formatters';
 import { CLIENT_TYPES, PIPELINE_LABELS } from '../utils/constants';
@@ -15,6 +16,7 @@ const CLIENT_TYPE_LABELS = {
 export default function ClientsPage() {
   const navigate = useNavigate();
   const { token } = useAuth();
+  const toast = useToast();
   const [clients, setClients] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClientType, setSelectedClientType] = useState(null);
@@ -57,7 +59,7 @@ export default function ClientsPage() {
 
   const handleCreateClient = async () => {
     if (!newClient.name.trim()) {
-      alert('Le nom est requis');
+      toast.warning('Le nom est requis');
       return;
     }
 
@@ -77,9 +79,10 @@ export default function ClientsPage() {
       setShowModal(false);
       setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
       loadClients();
+      toast.success('Client créé avec succès');
     } catch (error) {
       console.error('Error creating client:', error);
-      alert('Erreur lors de la création du client');
+      toast.error('Erreur lors de la création du client');
     } finally {
       setSaving(false);
     }

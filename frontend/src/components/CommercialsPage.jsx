@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../utils/config';
 import { formatDate, formatPrice } from '../utils/formatters';
 
 export default function CommercialsPage() {
   const { token } = useAuth();
+  const toast = useToast();
   const [commercials, setCommercials] = useState([]);
   const [commercialStats, setCommercialStats] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -115,6 +117,7 @@ export default function CommercialsPage() {
       setShowModal(false);
       setNewCommercial({ name: '', email: '', password: '', confirmPassword: '' });
       loadCommercials();
+      toast.success('Commercial créé avec succès');
     } catch (error) {
       console.error('Error creating commercial:', error);
       setError(error.message || 'Erreur lors de la création du commercial');
@@ -141,10 +144,11 @@ export default function CommercialsPage() {
         throw new Error(errorData.detail || 'Erreur lors de la suppression');
       }
 
+      toast.success('Commercial supprimé avec succès');
       loadCommercials();
     } catch (error) {
       console.error('Error deleting commercial:', error);
-      alert(error.message || 'Erreur lors de la suppression');
+      toast.error(error.message || 'Erreur lors de la suppression');
     }
   };
 

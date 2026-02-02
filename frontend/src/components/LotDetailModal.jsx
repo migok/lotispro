@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { apiGet, apiPost } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { formatPrice, formatDate } from '../utils/formatters';
 import { CLIENT_TYPES, STATUS_LABELS } from '../utils/constants';
 
 export default function LotDetailModal({ lot, onClose, onRefresh }) {
   const { token, user, isManager } = useAuth();
+  const toast = useToast();
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
   const [depositAmount, setDepositAmount] = useState('');
@@ -45,7 +47,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
 
   const handleCreateClient = async () => {
     if (!newClient.name.trim()) {
-      alert('Le nom est requis');
+      toast.warning('Le nom est requis');
       return;
     }
 
@@ -71,9 +73,10 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
       // Reset form and close
       setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
       setShowAddClient(false);
+      toast.success('Client créé avec succès');
     } catch (error) {
       console.error('Error creating client:', error);
-      alert('Erreur lors de la création du client');
+      toast.error('Erreur lors de la création du client');
     } finally {
       setSavingClient(false);
     }
@@ -98,19 +101,19 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
 
   const handleReserve = async () => {
     if (!selectedClient) {
-      alert('Veuillez sélectionner un client');
+      toast.warning('Veuillez sélectionner un client');
       return;
     }
 
     const days = parseInt(reservationDays) || 7;
     if (days < 1 || days > 365) {
-      alert('Le nombre de jours doit être entre 1 et 365');
+      toast.warning('Le nombre de jours doit être entre 1 et 365');
       return;
     }
 
     const deposit = depositAmount ? parseFloat(depositAmount) : 0;
     if (lot.price && deposit >= lot.price) {
-      alert(`L'acompte (${formatPrice(deposit)}) doit être inférieur au prix du lot (${formatPrice(lot.price)})`);
+      toast.warning(`L'acompte (${formatPrice(deposit)}) doit être inférieur au prix du lot (${formatPrice(lot.price)})`);
       return;
     }
 
@@ -124,7 +127,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
         notes: notes || undefined,
       });
 
-      alert('Lot réservé avec succès!');
+      toast.success('Lot réservé avec succès');
       setMode(null);
       if (onRefresh) {
         await onRefresh();
@@ -134,7 +137,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
       }, 200);
     } catch (error) {
       console.error('Error reserving lot:', error);
-      alert(error.message || 'Erreur lors de la réservation');
+      toast.error(error.message || 'Erreur lors de la réservation');
     } finally {
       setLoading(false);
     }
@@ -142,7 +145,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
 
   const handleSell = async () => {
     if (!finalPrice) {
-      alert('Veuillez entrer le prix final');
+      toast.warning('Veuillez entrer le prix final');
       return;
     }
 
@@ -150,7 +153,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
     const clientId = lot.status === 'reserved' ? lot.client_id : selectedClient?.id;
 
     if (!clientId) {
-      alert('Veuillez sélectionner un client');
+      toast.warning('Veuillez sélectionner un client');
       return;
     }
 
@@ -164,7 +167,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
         notes: notes || undefined,
       });
 
-      alert('Vente enregistrée avec succès!');
+      toast.success('Vente enregistrée avec succès');
       setMode(null);
       if (onRefresh) {
         await onRefresh();
@@ -175,7 +178,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
       }, 200);
     } catch (error) {
       console.error('Error selling lot:', error);
-      alert(error.message || 'Erreur lors de la vente');
+      toast.error(error.message || 'Erreur lors de la vente');
     } finally {
       setLoading(false);
     }
@@ -188,7 +191,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
     try {
       await apiPost(`/api/reservations/${lot.reservation_id}/release`, {});
 
-      alert('Réservation libérée avec succès!');
+      toast.success('Réservation libérée avec succès');
       if (onRefresh) {
         await onRefresh();
       }
@@ -197,7 +200,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
       }, 200);
     } catch (error) {
       console.error('Error releasing reservation:', error);
-      alert(error.message || 'Erreur lors de la libération');
+      toast.error(error.message || 'Erreur lors de la libération');
     } finally {
       setLoading(false);
     }

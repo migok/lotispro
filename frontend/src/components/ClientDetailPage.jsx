@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../utils/config';
 import { formatPrice, formatDate } from '../utils/formatters';
 import { CLIENT_TYPES } from '../utils/constants';
@@ -23,6 +24,7 @@ export default function ClientDetailPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const { token } = useAuth();
+  const toast = useToast();
   const [client, setClient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -78,8 +80,9 @@ export default function ClientDetailPage() {
       if (!response.ok) throw new Error('Erreur lors de la mise à jour');
       await loadClientDetails();
       setIsEditing(false);
+      toast.success('Client mis à jour avec succès');
     } catch (err) {
-      alert('Erreur lors de la mise à jour du client');
+      toast.error('Erreur lors de la mise à jour du client');
     } finally {
       setSaving(false);
     }
