@@ -16,9 +16,10 @@ const STATUS_COLORS = {
   blocked: '#6b7280',
 };
 
-const TABS = [
+// Fonction pour générer les onglets dynamiquement selon le rôle
+const getTabs = (isManager) => [
   { id: 'carte', label: 'Carte', icon: '🗺️' },
-  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { id: 'dashboard', label: isManager ? 'Tableau de Bord' : 'Dashboard', icon: '📊' },
   { id: 'kpis', label: 'KPIs', icon: '📈' },
   { id: 'performance', label: 'Performance', icon: '👔' },
   { id: 'historique', label: 'Historique', icon: '📋' },
@@ -320,10 +321,12 @@ export default function ProjectDetailPage() {
               numero: String(lotId),
               status: status,
               reserved_by: props.reserved_by ?? null,
+              reserved_by_user_id: props.reserved_by_user_id ?? null,
               reserved_until: props.reserved_until ?? null,
               surface: area ? parseFloat(area) : null,
               price: props.price || null,
               zone: props.zone || null,
+              client_id: props.client_id || null,
               client_name: props.client_name || null,
               client_phone: props.client_phone || null,
               reservation_id: props.reservation_id || null,
@@ -413,9 +416,9 @@ export default function ProjectDetailPage() {
 
       {/* Tabs */}
       <div className="tabs">
-        {TABS.filter((tab) => {
-          // Masquer l'onglet KPIs pour les commerciaux (redondant avec Dashboard)
-          if (tab.id === 'kpis' && isCommercial()) return false;
+        {getTabs(isManager()).filter((tab) => {
+          // Masquer l'onglet KPIs pour les managers (intégré dans Tableau de Bord) et commerciaux
+          if (tab.id === 'kpis' && (isManager() || isCommercial())) return false;
           // Masquer l'onglet Performance pour les non-managers
           if (tab.id === 'performance' && !isManager()) return false;
           // Masquer l'onglet Paramètres pour les commerciaux
@@ -438,9 +441,10 @@ export default function ProjectDetailPage() {
         {activeTab === 'dashboard' && (
           <Dashboard
             projectId={parseInt(projectId)}
-            onNavigate={(page) => {
+            onNavigate={(page, clientId) => {
               if (page === 'map') setActiveTab('carte');
-              if (page === 'clients') navigate('/clients');
+              if (page === 'clients' && clientId) navigate(`/clients/${clientId}`);
+              else if (page === 'clients') navigate('/clients');
             }}
           />
         )}
@@ -525,6 +529,7 @@ function CarteTab({
   onRefresh,
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const carteTabRef = useRef(null);
 
   // Force la carte à se redimensionner au montage du composant
@@ -537,6 +542,17 @@ function CarteTab({
 
     return () => clearTimeout(timer);
   }, []);
+
+  // Redimensionner la carte quand on toggle les filtres
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapRef?.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [showFilters]);
 
   // Gestion du plein écran natif du navigateur
   const toggleFullscreen = async () => {
@@ -656,6 +672,21 @@ function CarteTab({
               </button>
             )}
             <button
+              className="btn-fullscreen"
+              onClick={() => setShowFilters(!showFilters)}
+              title={showFilters ? 'Masquer les filtres' : 'Afficher les filtres'}
+            >
+              {showFilters ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 15l-6-6-6 6"/>
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              )}
+            </button>
+            <button
               className={`btn-fullscreen ${isFullscreen ? 'active' : ''}`}
               onClick={toggleFullscreen}
               title={isFullscreen ? 'Quitter le plein écran (Échap)' : 'Plein écran'}
@@ -674,23 +705,25 @@ function CarteTab({
         </div>
 
         {/* Status Filter Buttons */}
-        <div className="filters-status-row">
-          {['available', 'reserved', 'sold', 'blocked'].map(status => (
-            <button
-              key={status}
-              className={`btn-status-filter ${filterStatus === status ? 'active' : ''} ${status}`}
-              onClick={() => setFilterStatus(filterStatus === status ? null : status)}
-            >
-              <span className="status-dot"></span>
-              {status === 'available' ? 'Disponible' :
-               status === 'reserved' ? 'Réservé' :
-               status === 'sold' ? 'Vendu' : 'Bloqué'}
-            </button>
-          ))}
-        </div>
+        {showFilters && (
+          <>
+            <div className="filters-status-row">
+              {['available', 'reserved', 'sold', 'blocked'].map(status => (
+                <button
+                  key={status}
+                  className={`btn-status-filter ${filterStatus === status ? 'active' : ''} ${status}`}
+                  onClick={() => setFilterStatus(filterStatus === status ? null : status)}
+                >
+                  <span className="status-dot"></span>
+                  {status === 'available' ? 'Disponible' :
+                   status === 'reserved' ? 'Réservé' :
+                   status === 'sold' ? 'Vendu' : 'Bloqué'}
+                </button>
+              ))}
+            </div>
 
-        {/* All Filters in One Row */}
-        <div className="filters-unified-row">
+            {/* All Filters in One Row */}
+            <div className="filters-unified-row">
           <div className="filter-inline-group">
             <label className="filter-inline-label">Surface</label>
             <div className="filter-inline-inputs">
@@ -783,6 +816,8 @@ function CarteTab({
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
 
       {/* Map Container */}
@@ -1322,9 +1357,18 @@ function PerformanceTab({ project }) {
   const summary = {
     total_ventes: commercials.reduce((sum, c) => sum + (c.total_sales || 0), 0),
     total_ca: commercials.reduce((sum, c) => sum + (c.ca_total || 0), 0),
-    taux_moyen: commercials.length > 0
-      ? Math.round(commercials.reduce((sum, c) => sum + (c.taux_transformation || 0), 0) / commercials.length)
+    ca_moyen: commercials.length > 0
+      ? Math.round(commercials.reduce((sum, c) => sum + (c.ca_total || 0), 0) / commercials.length)
       : 0,
+  };
+
+  // Calculer le CA moyen pour le score de performance
+  const caAverage = commercials.length > 0 ? summary.total_ca / commercials.length : 0;
+
+  // Fonction pour calculer le score de performance bas&eacute; sur le CA
+  const getPerformanceScore = (commercial) => {
+    if (caAverage === 0) return 0;
+    return Math.round((commercial.ca_total / caAverage) * 100);
   };
 
   // Trier les commerciaux par CA pour le classement
@@ -1346,10 +1390,10 @@ function PerformanceTab({ project }) {
     return { icon: null, color: 'var(--text-muted)', label: `${index + 1}e` };
   };
 
-  const getTransformationColor = (rate) => {
-    if (rate >= 60) return 'var(--color-success)';
-    if (rate >= 30) return 'var(--color-warning)';
-    return 'var(--color-danger)';
+  const getPerformanceColor = (score) => {
+    if (score >= 100) return 'var(--color-success)'; // Au-dessus ou &eacute;gal &agrave; la moyenne
+    if (score >= 70) return 'var(--color-warning)'; // En dessous mais acceptable
+    return 'var(--color-danger)'; // Bien en dessous de la moyenne
   };
 
   if (loading) {
@@ -1399,8 +1443,8 @@ function PerformanceTab({ project }) {
                 </svg>
               </div>
               <div className="perf-summary-content">
-                <div className="perf-summary-value">{summary.taux_moyen}%</div>
-                <div className="perf-summary-label">Taux Conversion</div>
+                <div className="perf-summary-value">{formatNumberPerf(summary.ca_moyen, '')}</div>
+                <div className="perf-summary-label">CA Moyen / Commercial</div>
               </div>
             </div>
 
@@ -1493,17 +1537,17 @@ function PerformanceTab({ project }) {
                     </div>
                   </div>
 
-                  {/* Transformation Rate Circle */}
+                  {/* Performance Score Circle */}
                   <div className="perf-transformation">
                     <div className="perf-circle-container">
                       <CircularProgress
-                        value={commercial.taux_transformation || 0}
+                        value={Math.min(getPerformanceScore(commercial), 100)}
                         size={56}
                         strokeWidth={5}
-                        color={getTransformationColor(commercial.taux_transformation || 0)}
+                        color={getPerformanceColor(getPerformanceScore(commercial))}
                       />
                       <div className="perf-circle-value">
-                        {commercial.taux_transformation || 0}%
+                        {getPerformanceScore(commercial)}%
                       </div>
                     </div>
                   </div>
@@ -1574,17 +1618,20 @@ function PerformanceTab({ project }) {
                       {/* Performance Progress */}
                       <div className="perf-progress-section">
                         <div className="perf-progress-header">
-                          <span>Performance globale</span>
-                          <span className="perf-progress-value" style={{ color: getTransformationColor(commercial.taux_transformation || 0) }}>
-                            {commercial.taux_transformation || 0}%
+                          <span>
+                            Score de Performance (vs moyenne)
+                            <span className="kpis-info-icon kpis-info-icon-dark" title="Score calculé par rapport à la moyenne des commerciaux (100% = moyenne). Au-dessus de 100% : performance supérieure à la moyenne">ⓘ</span>
+                          </span>
+                          <span className="perf-progress-value" style={{ color: getPerformanceColor(getPerformanceScore(commercial)) }}>
+                            {getPerformanceScore(commercial)}%
                           </span>
                         </div>
                         <div className="perf-progress-bar">
                           <div
                             className="perf-progress-fill"
                             style={{
-                              width: `${Math.min(commercial.taux_transformation || 0, 100)}%`,
-                              background: `linear-gradient(90deg, ${getTransformationColor(commercial.taux_transformation || 0)}, ${getTransformationColor(commercial.taux_transformation || 0)}88)`
+                              width: `${Math.min(getPerformanceScore(commercial), 100)}%`,
+                              background: `linear-gradient(90deg, ${getPerformanceColor(getPerformanceScore(commercial))}, ${getPerformanceColor(getPerformanceScore(commercial))}88)`
                             }}
                           />
                         </div>
@@ -1903,7 +1950,6 @@ function ParametresTab({ project, onUpdate }) {
     name: project.name || '',
     description: project.description || '',
     visibility: project.visibility || 'private',
-    ca_objectif: project.ca_objectif || '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -1934,7 +1980,6 @@ function ParametresTab({ project, onUpdate }) {
         name: formData.name.trim(),
         description: formData.description.trim() || null,
         visibility: formData.visibility,
-        ca_objectif: formData.ca_objectif ? parseFloat(formData.ca_objectif) : null,
       };
 
       await apiPut(`/api/projects/${project.id}`, payload);
@@ -2045,19 +2090,6 @@ function ParametresTab({ project, onUpdate }) {
               <option value="private">🔒 Privé</option>
               <option value="public">🌐 Public</option>
             </select>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Objectif de CA (MAD)</label>
-            <input
-              type="number"
-              name="ca_objectif"
-              className="form-input"
-              value={formData.ca_objectif}
-              onChange={handleChange}
-              min="0"
-              step="1000"
-            />
           </div>
 
           <button

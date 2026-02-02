@@ -164,6 +164,7 @@ class LotRepository(BaseRepository[LotModel]):
         from app.infrastructure.database.models import (
             ClientModel,
             ReservationModel,
+            UserModel,
         )
 
         now = datetime.now(timezone.utc)
@@ -173,6 +174,7 @@ class LotRepository(BaseRepository[LotModel]):
                 LotModel,
                 ReservationModel,
                 ClientModel,
+                UserModel,
             )
             .outerjoin(
                 ReservationModel,
@@ -182,6 +184,7 @@ class LotRepository(BaseRepository[LotModel]):
                 ),
             )
             .outerjoin(ClientModel, ClientModel.id == ReservationModel.client_id)
+            .outerjoin(UserModel, UserModel.id == ReservationModel.reserved_by_user_id)
             .where(LotModel.project_id == project_id)
             .order_by(LotModel.numero)
         )
@@ -189,7 +192,7 @@ class LotRepository(BaseRepository[LotModel]):
         result = await self.session.execute(query)
         lots_data = []
 
-        for lot, reservation, client in result.all():
+        for lot, reservation, client, reserved_by_user in result.all():
             # Calculate days_in_status based on the lot's updated_at timestamp
             if lot.updated_at:
                 lot_updated = lot.updated_at
@@ -227,6 +230,7 @@ class LotRepository(BaseRepository[LotModel]):
                         "deposit": reservation.deposit,
                         "reservation_status": reservation.status,
                         "reserved_by_user_id": reservation.reserved_by_user_id,
+                        "reserved_by": reserved_by_user.name if reserved_by_user else None,
                     }
                 )
 

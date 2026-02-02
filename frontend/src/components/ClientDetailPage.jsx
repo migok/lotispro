@@ -281,65 +281,401 @@ export default function ClientDetailPage() {
               </div>
             ) : (
               <div className="info-display">
-                <div className="info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--spacing-lg)' }}>
-                  <div className="info-item">
-                    <div className="info-label" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-                      Téléphone
-                    </div>
-                    <div className="info-value" style={{ fontSize: '1rem', fontWeight: 500 }}>
-                      {client.phone || '-'}
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <div className="info-label" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-                      Email
-                    </div>
-                    <div className="info-value" style={{ fontSize: '1rem', fontWeight: 500 }}>
-                      {client.email || '-'}
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <div className="info-label" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-                      CIN
-                    </div>
-                    <div className="info-value" style={{ fontSize: '1rem', fontWeight: 500 }}>
-                      {client.cin || '-'}
-                    </div>
-                  </div>
-                  <div className="info-item">
-                    <div className="info-label" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-                      Type de client
-                    </div>
-                    <div className="info-value" style={{ fontSize: '1rem', fontWeight: 500 }}>
-                      {CLIENT_TYPE_LABELS[client.client_type] || 'Autre'}
-                    </div>
-                  </div>
-                  {client.created_by && (
-                    <div className="info-item">
-                      <div className="info-label" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-                        Ajouté par
+                <div className="info-grid" style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                  gap: 'var(--spacing-md)'
+                }}>
+                  <div className="info-card" style={{
+                    background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0.02) 100%)',
+                    border: '1px solid rgba(59, 130, 246, 0.15)',
+                    borderRadius: 'var(--radius-lg)',
+                    padding: 'var(--spacing-lg)',
+                    transition: 'all 0.3s ease',
+                    cursor: 'default',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(59, 130, 246, 0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.15)';
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                      <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.5rem',
+                        flexShrink: 0
+                      }}>
+                        📱
                       </div>
-                      <div className="info-value" style={{ fontSize: '1rem', fontWeight: 500 }}>
-                        {client.created_by.name}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="info-label" style={{
+                          color: 'var(--text-muted)',
+                          fontSize: '0.75rem',
+                          marginBottom: '6px',
+                          textTransform: 'uppercase',
+                          fontWeight: 600,
+                          letterSpacing: '0.5px'
+                        }}>
+                          Téléphone
+                        </div>
+                        <div className="info-value" style={{
+                          fontSize: '1.1rem',
+                          fontWeight: 600,
+                          color: 'var(--text-primary)',
+                          wordBreak: 'break-all'
+                        }}>
+                          {client.phone || '-'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="info-card" style={{
+                    background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(168, 85, 247, 0.02) 100%)',
+                    border: '1px solid rgba(168, 85, 247, 0.15)',
+                    borderRadius: 'var(--radius-lg)',
+                    padding: 'var(--spacing-lg)',
+                    transition: 'all 0.3s ease',
+                    cursor: 'default',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(168, 85, 247, 0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.15)';
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                      <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.5rem',
+                        flexShrink: 0
+                      }}>
+                        📧
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="info-label" style={{
+                          color: 'var(--text-muted)',
+                          fontSize: '0.75rem',
+                          marginBottom: '6px',
+                          textTransform: 'uppercase',
+                          fontWeight: 600,
+                          letterSpacing: '0.5px'
+                        }}>
+                          Email
+                        </div>
+                        <div className="info-value" style={{
+                          fontSize: '1.1rem',
+                          fontWeight: 600,
+                          color: 'var(--text-primary)',
+                          wordBreak: 'break-all'
+                        }}>
+                          {client.email || '-'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="info-card" style={{
+                    background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0.02) 100%)',
+                    border: '1px solid rgba(34, 197, 94, 0.15)',
+                    borderRadius: 'var(--radius-lg)',
+                    padding: 'var(--spacing-lg)',
+                    transition: 'all 0.3s ease',
+                    cursor: 'default',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(34, 197, 94, 0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.15)';
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                      <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.5rem',
+                        flexShrink: 0
+                      }}>
+                        🆔
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="info-label" style={{
+                          color: 'var(--text-muted)',
+                          fontSize: '0.75rem',
+                          marginBottom: '6px',
+                          textTransform: 'uppercase',
+                          fontWeight: 600,
+                          letterSpacing: '0.5px'
+                        }}>
+                          CIN
+                        </div>
+                        <div className="info-value" style={{
+                          fontSize: '1.1rem',
+                          fontWeight: 600,
+                          color: 'var(--text-primary)',
+                          wordBreak: 'break-all'
+                        }}>
+                          {client.cin || '-'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="info-card" style={{
+                    background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.08) 0%, rgba(249, 115, 22, 0.02) 100%)',
+                    border: '1px solid rgba(249, 115, 22, 0.15)',
+                    borderRadius: 'var(--radius-lg)',
+                    padding: 'var(--spacing-lg)',
+                    transition: 'all 0.3s ease',
+                    cursor: 'default',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(249, 115, 22, 0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(249, 115, 22, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(249, 115, 22, 0.15)';
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                      <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.5rem',
+                        flexShrink: 0
+                      }}>
+                        👤
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="info-label" style={{
+                          color: 'var(--text-muted)',
+                          fontSize: '0.75rem',
+                          marginBottom: '6px',
+                          textTransform: 'uppercase',
+                          fontWeight: 600,
+                          letterSpacing: '0.5px'
+                        }}>
+                          Type de client
+                        </div>
+                        <div className="info-value" style={{
+                          fontSize: '1.1rem',
+                          fontWeight: 600,
+                          color: 'var(--text-primary)',
+                          wordBreak: 'break-all'
+                        }}>
+                          {CLIENT_TYPE_LABELS[client.client_type] || 'Autre'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {client.created_by && (
+                    <div className="info-card" style={{
+                      background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0.02) 100%)',
+                      border: '1px solid rgba(99, 102, 241, 0.15)',
+                      borderRadius: 'var(--radius-lg)',
+                      padding: 'var(--spacing-lg)',
+                      transition: 'all 0.3s ease',
+                      cursor: 'default',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px)';
+                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(99, 102, 241, 0.15)';
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.15)';
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                        <div style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: 'var(--radius-md)',
+                          background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '1.5rem',
+                          flexShrink: 0
+                        }}>
+                          👨‍💼
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="info-label" style={{
+                            color: 'var(--text-muted)',
+                            fontSize: '0.75rem',
+                            marginBottom: '6px',
+                            textTransform: 'uppercase',
+                            fontWeight: 600,
+                            letterSpacing: '0.5px'
+                          }}>
+                            Ajouté par
+                          </div>
+                          <div className="info-value" style={{
+                            fontSize: '1.1rem',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                            wordBreak: 'break-all'
+                          }}>
+                            {client.created_by.name}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
-                  <div className="info-item">
-                    <div className="info-label" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-                      Date de création
-                    </div>
-                    <div className="info-value" style={{ fontSize: '1rem', fontWeight: 500 }}>
-                      {formatDate(client.created_at)}
+
+                  <div className="info-card" style={{
+                    background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.08) 0%, rgba(236, 72, 153, 0.02) 100%)',
+                    border: '1px solid rgba(236, 72, 153, 0.15)',
+                    borderRadius: 'var(--radius-lg)',
+                    padding: 'var(--spacing-lg)',
+                    transition: 'all 0.3s ease',
+                    cursor: 'default',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(236, 72, 153, 0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(236, 72, 153, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = 'rgba(236, 72, 153, 0.15)';
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-md)' }}>
+                      <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.5rem',
+                        flexShrink: 0
+                      }}>
+                        📅
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="info-label" style={{
+                          color: 'var(--text-muted)',
+                          fontSize: '0.75rem',
+                          marginBottom: '6px',
+                          textTransform: 'uppercase',
+                          fontWeight: 600,
+                          letterSpacing: '0.5px'
+                        }}>
+                          Date de création
+                        </div>
+                        <div className="info-value" style={{
+                          fontSize: '1.1rem',
+                          fontWeight: 600,
+                          color: 'var(--text-primary)',
+                          wordBreak: 'break-all'
+                        }}>
+                          {formatDate(client.created_at)}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
                 {client.notes && (
-                  <div className="info-item" style={{ marginTop: 'var(--spacing-lg)' }}>
-                    <div className="info-label" style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '4px' }}>
-                      Notes
-                    </div>
-                    <div className="info-value" style={{ fontSize: '1rem', whiteSpace: 'pre-wrap', backgroundColor: 'var(--bg-secondary)', padding: 'var(--spacing-md)', borderRadius: 'var(--radius-md)' }}>
-                      {client.notes}
+                  <div className="info-card" style={{
+                    marginTop: 'var(--spacing-md)',
+                    background: 'linear-gradient(135deg, rgba(156, 163, 175, 0.08) 0%, rgba(156, 163, 175, 0.02) 100%)',
+                    border: '1px solid rgba(156, 163, 175, 0.15)',
+                    borderRadius: 'var(--radius-lg)',
+                    padding: 'var(--spacing-lg)',
+                    transition: 'all 0.3s ease',
+                  }}>
+                    <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
+                      <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.5rem',
+                        flexShrink: 0
+                      }}>
+                        📝
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div className="info-label" style={{
+                          color: 'var(--text-muted)',
+                          fontSize: '0.75rem',
+                          marginBottom: '8px',
+                          textTransform: 'uppercase',
+                          fontWeight: 600,
+                          letterSpacing: '0.5px'
+                        }}>
+                          Notes
+                        </div>
+                        <div className="info-value" style={{
+                          fontSize: '1rem',
+                          whiteSpace: 'pre-wrap',
+                          backgroundColor: 'var(--bg-secondary)',
+                          padding: 'var(--spacing-md)',
+                          borderRadius: 'var(--radius-md)',
+                          lineHeight: 1.6,
+                          color: 'var(--text-secondary)'
+                        }}>
+                          {client.notes}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

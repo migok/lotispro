@@ -137,6 +137,13 @@ class ReservationService:
         if not client:
             raise NotFoundError("Client", data.client_id)
 
+        # Validate deposit amount
+        if lot.price is not None and data.deposit >= lot.price:
+            raise BusinessRuleError(
+                message=f"Deposit ({data.deposit}) must be less than lot price ({lot.price})",
+                rule="deposit_exceeds_price",
+            )
+
         # Set expiration date (use reservation_days or explicit expiration_date)
         expiration_date = data.expiration_date or (
             datetime.now(timezone.utc) + timedelta(days=data.reservation_days)
@@ -183,18 +190,25 @@ class ReservationService:
             updated_at=reservation.updated_at,
         )
 
-    async def release_reservation(self, reservation_id: int) -> ReservationResponse:
+    async def release_reservation(
+        self,
+        reservation_id: int,
+        user_id: int,
+        user_role: str,
+    ) -> ReservationResponse:
         """Release (cancel) an active reservation.
 
         Args:
             reservation_id: Reservation ID
+            user_id: User requesting the release
+            user_role: Role of the user (manager or commercial)
 
         Returns:
             Updated reservation response
 
         Raises:
             NotFoundError: If reservation not found
-            BusinessRuleError: If reservation is not active
+            BusinessRuleError: If reservation is not active or user doesn't have permission
         """
         reservation = await self.reservation_repo.get_by_id(reservation_id)
         if not reservation:
@@ -204,6 +218,13 @@ class ReservationService:
             raise BusinessRuleError(
                 message=f"Cannot release reservation with status '{reservation.status}'",
                 rule="reservation_not_active",
+            )
+
+        # Check permissions: only manager or the commercial who reserved can release
+        if user_role != "manager" and reservation.reserved_by_user_id != user_id:
+            raise BusinessRuleError(
+                message="You don't have permission to release this reservation",
+                rule="insufficient_permissions",
             )
 
         # Update reservation status
@@ -308,6 +329,7 @@ class ReservationService:
         reservation_id: int,
         sale_data: SaleFromReservation,
         user_id: int | None = None,
+        user_role: str | None = None,
     ) -> SaleResponse:
         """Convert reservation to sale.
 
@@ -315,13 +337,14 @@ class ReservationService:
             reservation_id: Reservation ID
             sale_data: Sale data
             user_id: User performing conversion
+            user_role: Role of the user (manager or commercial)
 
         Returns:
             Created sale response
 
         Raises:
             NotFoundError: If reservation not found
-            BusinessRuleError: If reservation cannot be converted
+            BusinessRuleError: If reservation cannot be converted or user doesn't have permission
         """
         reservation = await self.reservation_repo.get_by_id(reservation_id)
         if not reservation:
@@ -331,6 +354,13 @@ class ReservationService:
             raise BusinessRuleError(
                 message=f"Cannot convert reservation with status '{reservation.status}'",
                 rule="reservation_not_active",
+            )
+
+        # Check permissions: only manager or the commercial who reserved can finalize
+        if user_role and user_role != "manager" and reservation.reserved_by_user_id != user_id:
+            raise BusinessRuleError(
+                message="You don't have permission to finalize this reservation",
+                rule="insufficient_permissions",
             )
 
         # Create sale

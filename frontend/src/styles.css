@@ -430,6 +430,19 @@ body {
   margin-bottom: var(--spacing-lg);
 }
 
+.section-header h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 1.25rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--color-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+}
+
 .section-title {
   font-size: 1.125rem;
   font-weight: 600;
@@ -1751,19 +1764,23 @@ body {
   pointer-events: none;
 }
 
-.perf-summary-card.gradient-primary {
+.perf-summary-card.gradient-primary,
+.kpis-hero-card.gradient-primary {
   background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
 }
 
-.perf-summary-card.gradient-success {
+.perf-summary-card.gradient-success,
+.kpis-hero-card.gradient-success {
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
 }
 
-.perf-summary-card.gradient-warning {
+.perf-summary-card.gradient-warning,
+.kpis-hero-card.gradient-warning {
   background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
 }
 
-.perf-summary-card.gradient-info {
+.perf-summary-card.gradient-info,
+.kpis-hero-card.gradient-info {
   background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
 }
 
@@ -2287,7 +2304,18 @@ body {
   margin-top: 2px;
 }
 
-/* Style pour les icônes ⓘ avec effet hover */
+/* Style pour les icônes ⓘ avec effet hover
+ * Utilisation : Ajouter une icône d'information avec tooltip pour expliquer les métriques
+ *
+ * Exemples d'utilisation :
+ * - Score de performance (vs moyenne) : "Score calculé par rapport à la moyenne des commerciaux (100% = moyenne)"
+ * - CA Réalisé : "Somme des lots vendus"
+ * - CA Potentiel : "Valeur des lots réservés"
+ * - Taux de transformation : "Réservations converties en ventes"
+ *
+ * Usage JSX :
+ * <span className="kpis-info-icon kpis-info-icon-dark" title="Votre explication ici">ⓘ</span>
+ */
 .kpis-info-icon {
   display: inline-block;
   margin-left: 6px;
@@ -2302,7 +2330,7 @@ body {
   transform: scale(1.2);
 }
 
-/* Version sombre pour les fonds clairs */
+/* Version sombre pour les fonds clairs (à utiliser sur fond blanc/clair) */
 .kpis-info-icon.kpis-info-icon-dark {
   color: var(--text-muted);
 }
@@ -2368,9 +2396,12 @@ body {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--color-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin: 0;
 }
 
@@ -2725,6 +2756,295 @@ body {
   color: var(--text-secondary);
   font-style: italic;
   font-size: 0.875rem;
+}
+
+/* ============================================
+   MANAGER DASHBOARD - HARMONIZED STYLES
+   ============================================ */
+
+/* Container principal du tableau de bord manager */
+.manager-kpis-summary {
+  background: linear-gradient(145deg, var(--bg-secondary) 0%, rgba(59, 130, 246, 0.05) 100%);
+  border-radius: var(--radius-xl, 16px);
+  padding: var(--spacing-xl, 24px);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Header avec titre et badge */
+.manager-kpis-summary .kpis-section-header {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: var(--spacing-lg);
+}
+
+.manager-kpis-summary .kpis-section-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--color-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Hero Cards améliorées */
+.manager-kpis-summary .kpis-hero {
+  margin-bottom: var(--spacing-lg);
+}
+
+.manager-kpis-summary .kpis-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-md);
+}
+
+.manager-kpis-summary .kpis-hero-card {
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.manager-kpis-summary .kpis-hero-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.manager-kpis-summary .kpis-hero-card::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.manager-kpis-summary .kpis-hero-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.manager-kpis-summary .kpis-hero-value {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: white;
+  line-height: 1.1;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+.manager-kpis-summary .kpis-hero-label {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 500;
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.manager-kpis-summary .kpis-hero-trend {
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.2);
+  display: inline-block;
+}
+
+.manager-kpis-summary .kpis-hero-progress-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: var(--spacing-sm);
+}
+
+.manager-kpis-summary .kpis-hero-progress-fill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 4px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+/* Rates Grid harmonisé */
+.manager-kpis-summary .kpis-rates-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+}
+
+.manager-kpis-summary .kpis-rate-card {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  border: 1px solid transparent;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.manager-kpis-summary .kpis-rate-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-success));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.manager-kpis-summary .kpis-rate-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
+}
+
+.manager-kpis-summary .kpis-rate-card:hover::before {
+  opacity: 1;
+}
+
+.manager-kpis-summary .kpis-rate-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.manager-kpis-summary .kpis-rate-header span:first-child {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.manager-kpis-summary .kpis-rate-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.manager-kpis-summary .kpis-rate-bar {
+  height: 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.manager-kpis-summary .kpis-rate-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Decision Metrics Grid harmonisé */
+.manager-kpis-summary .kpis-decision-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--bg-tertiary);
+}
+
+.manager-kpis-summary .kpis-decision-metrics > div {
+  text-align: center;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.manager-kpis-summary .kpis-decision-metrics > div:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 20%;
+  height: 60%;
+  width: 1px;
+  background: var(--bg-tertiary);
+}
+
+.manager-kpis-summary .kpis-decision-metrics > div:hover {
+  background: var(--bg-tertiary);
+  transform: scale(1.05);
+}
+
+.manager-kpis-summary .kpis-decision-metrics > div > div:first-child {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.manager-kpis-summary .kpis-decision-metrics > div > div:last-child {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Responsive pour le dashboard manager */
+@media (max-width: 1200px) {
+  .manager-kpis-summary .kpis-hero-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .manager-kpis-summary .kpis-rates-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .manager-kpis-summary .kpis-decision-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .manager-kpis-summary .kpis-decision-metrics > div:nth-child(2)::after {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .manager-kpis-summary {
+    padding: var(--spacing-md);
+  }
+
+  .manager-kpis-summary .kpis-hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-kpis-summary .kpis-rates-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-kpis-summary .kpis-decision-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .manager-kpis-summary .kpis-decision-metrics > div::after {
+    display: none;
+  }
 }
 
 /* Responsive */
@@ -3471,36 +3791,36 @@ body {
   border-color: var(--warning);
 }
 
-/* Vendu - Bleu */
+/* Vendu - Rouge */
 .btn-status-filter.sold {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.3);
-  color: #1d4ed8;
-}
-
-.btn-status-filter.sold .status-dot {
-  background: var(--primary);
-}
-
-.btn-status-filter.sold:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: var(--primary);
-}
-
-/* Bloqué - Rouge */
-.btn-status-filter.blocked {
   background: rgba(239, 68, 68, 0.15);
   border-color: rgba(239, 68, 68, 0.3);
   color: #b91c1c;
 }
 
+.btn-status-filter.sold .status-dot {
+  background: #ef4444;
+}
+
+.btn-status-filter.sold:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+}
+
+/* Bloqué - Gris */
+.btn-status-filter.blocked {
+  background: rgba(107, 114, 128, 0.15);
+  border-color: rgba(107, 114, 128, 0.3);
+  color: #4b5563;
+}
+
 .btn-status-filter.blocked .status-dot {
-  background: var(--color-danger);
+  background: #6b7280;
 }
 
 .btn-status-filter.blocked:hover {
-  background: rgba(239, 68, 68, 0.25);
-  border-color: var(--color-danger);
+  background: rgba(107, 114, 128, 0.25);
+  border-color: #6b7280;
 }
 
 /* État actif (sélectionné) */
@@ -3529,11 +3849,11 @@ body {
 }
 
 .btn-status-filter.active.sold {
-  background: var(--primary);
+  background: #ef4444;
 }
 
 .btn-status-filter.active.blocked {
-  background: var(--color-danger);
+  background: #6b7280;
 }
 
 /* Unified Filters Row */

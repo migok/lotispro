@@ -74,15 +74,19 @@ async def create_reservation(
     "/{reservation_id}/release",
     response_model=ReservationResponse,
     summary="Release reservation",
-    description="Cancel/release an active reservation",
+    description="Cancel/release an active reservation (manager or reservation owner only)",
 )
 async def release_reservation(
     reservation_id: int,
     current_user: CurrentUser,
     reservation_service: ReservationServiceDep,
 ) -> ReservationResponse:
-    """Release (cancel) an active reservation."""
-    return await reservation_service.release_reservation(reservation_id)
+    """Release (cancel) an active reservation. Only managers or the commercial who created the reservation can release it."""
+    return await reservation_service.release_reservation(
+        reservation_id=reservation_id,
+        user_id=current_user.id,
+        user_role=current_user.role,
+    )
 
 
 @router.post(
@@ -108,7 +112,7 @@ async def extend_reservation(
     "/{reservation_id}/convert-to-sale",
     response_model=SaleResponse,
     summary="Convert to sale",
-    description="Convert active reservation to a sale",
+    description="Convert active reservation to a sale (manager or reservation owner only)",
 )
 async def convert_reservation_to_sale(
     reservation_id: int,
@@ -116,11 +120,12 @@ async def convert_reservation_to_sale(
     current_user: CurrentUser,
     reservation_service: ReservationServiceDep,
 ) -> SaleResponse:
-    """Convert reservation to sale."""
+    """Convert reservation to sale. Only managers or the commercial who created the reservation can finalize it."""
     return await reservation_service.convert_to_sale(
         reservation_id,
         data,
         user_id=current_user.id,
+        user_role=current_user.role,
     )
 
 

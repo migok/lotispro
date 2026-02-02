@@ -59,7 +59,13 @@ export const apiFetch = async (endpoint, options = {}) => {
  */
 export const apiGet = async (endpoint) => {
   const response = await apiFetch(endpoint);
-  return response.json();
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.message || `Erreur ${response.status}`);
+  }
+
+  return data;
 };
 
 /**
@@ -70,7 +76,13 @@ export const apiPost = async (endpoint, data) => {
     method: 'POST',
     body: JSON.stringify(data),
   });
-  return response.json();
+  const responseData = await response.json();
+
+  if (!response.ok) {
+    throw new Error(responseData.detail || responseData.message || `Erreur ${response.status}`);
+  }
+
+  return responseData;
 };
 
 /**
@@ -81,7 +93,13 @@ export const apiPut = async (endpoint, data) => {
     method: 'PUT',
     body: JSON.stringify(data),
   });
-  return response.json();
+  const responseData = await response.json();
+
+  if (!response.ok) {
+    throw new Error(responseData.detail || responseData.message || `Erreur ${response.status}`);
+  }
+
+  return responseData;
 };
 
 /**
@@ -91,7 +109,13 @@ export const apiDelete = async (endpoint) => {
   const response = await apiFetch(endpoint, {
     method: 'DELETE',
   });
-  return response.json();
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.message || `Erreur ${response.status}`);
+  }
+
+  return data;
 };
 
 /**

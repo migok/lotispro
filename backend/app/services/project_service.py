@@ -64,6 +64,22 @@ class ProjectService:
         """
         projects = await self.project_repo.get_all_for_user(user_id, user_role)
 
+        # Calculate ca_objectif for each project (sum of all lot prices)
+        project_ids = [p.id for p in projects]
+        ca_objectifs = {}
+
+        if project_ids:
+            # Get sum of lot prices grouped by project
+            result = await self.session.execute(
+                select(
+                    LotModel.project_id,
+                    func.coalesce(func.sum(LotModel.price), 0).label("total_price")
+                ).where(
+                    LotModel.project_id.in_(project_ids)
+                ).group_by(LotModel.project_id)
+            )
+            ca_objectifs = {row[0]: float(row[1]) for row in result.all()}
+
         return [
             ProjectResponse(
                 id=p.id,
@@ -72,7 +88,7 @@ class ProjectService:
                 visibility=p.visibility,
                 total_lots=p.total_lots,
                 sold_lots=p.sold_lots,
-                ca_objectif=p.ca_objectif,
+                ca_objectif=ca_objectifs.get(p.id, 0.0),
                 created_by=p.created_by,
                 created_at=p.created_at,
                 updated_at=p.updated_at,
@@ -114,6 +130,14 @@ class ProjectService:
                 message="You don't have access to this project",
             )
 
+        # Calculate ca_objectif as sum of all lot prices
+        ca_objectif_result = await self.session.execute(
+            select(func.coalesce(func.sum(LotModel.price), 0)).where(
+                LotModel.project_id == project_id
+            )
+        )
+        ca_objectif = float(ca_objectif_result.scalar() or 0)
+
         return ProjectResponse(
             id=project.id,
             name=project.name,
@@ -121,7 +145,7 @@ class ProjectService:
             visibility=project.visibility,
             total_lots=project.total_lots,
             sold_lots=project.sold_lots,
-            ca_objectif=project.ca_objectif,
+            ca_objectif=ca_objectif,
             created_by=project.created_by,
             created_at=project.created_at,
             updated_at=project.updated_at,
@@ -145,7 +169,7 @@ class ProjectService:
             name=data.name,
             description=data.description,
             visibility=data.visibility,
-            ca_objectif=data.ca_objectif,
+            ca_objectif=None,  # Will be calculated from lot prices
             created_by=user_id,
         )
 
@@ -156,6 +180,7 @@ class ProjectService:
             created_by=user_id,
         )
 
+        # New project has no lots yet, so ca_objectif is 0
         return ProjectResponse(
             id=project.id,
             name=project.name,
@@ -163,7 +188,7 @@ class ProjectService:
             visibility=project.visibility,
             total_lots=project.total_lots,
             sold_lots=project.sold_lots,
-            ca_objectif=project.ca_objectif,
+            ca_objectif=0.0,
             created_by=project.created_by,
             created_at=project.created_at,
             updated_at=project.updated_at,
@@ -195,10 +220,18 @@ class ProjectService:
             name=data.name,
             description=data.description,
             visibility=data.visibility,
-            ca_objectif=data.ca_objectif,
+            ca_objectif=None,  # Will be calculated from lot prices
         )
 
         logger.info("Project updated", project_id=project_id)
+
+        # Calculate ca_objectif as sum of all lot prices
+        ca_objectif_result = await self.session.execute(
+            select(func.coalesce(func.sum(LotModel.price), 0)).where(
+                LotModel.project_id == project_id
+            )
+        )
+        ca_objectif = float(ca_objectif_result.scalar() or 0)
 
         return ProjectResponse(
             id=updated.id,
@@ -207,7 +240,7 @@ class ProjectService:
             visibility=updated.visibility,
             total_lots=updated.total_lots,
             sold_lots=updated.sold_lots,
-            ca_objectif=updated.ca_objectif,
+            ca_objectif=ca_objectif,
             created_by=updated.created_by,
             created_at=updated.created_at,
             updated_at=updated.updated_at,
@@ -338,6 +371,7 @@ class ProjectService:
         project_id: int,
         user_id: int,
         user_role: str,
+        filter_user_id: int | None = None,
     ) -> ProjectKPIs:
         """Get KPIs for a specific project.
 
@@ -345,6 +379,7 @@ class ProjectService:
             project_id: Project ID
             user_id: Current user ID
             user_role: Current user role
+            filter_user_id: Optional filter by commercial user ID
 
         Returns:
             Project KPIs
@@ -363,6 +398,10 @@ class ProjectService:
         )
         if not can_access:
             raise AuthorizationError(message="You don't have access to this project")
+
+        # If filtering by user, calculate user-specific KPIs
+        if filter_user_id:
+            return await self._get_user_filtered_kpis(project, filter_user_id)
 
         # Count lots by status
         status_counts = await self.lot_repo.count_by_status(project_id)
@@ -390,11 +429,16 @@ class ProjectService:
         )
         ca_realise = float(ca_result.scalar() or 0)
 
-        # CA potential (from available + reserved lots)
+        # CA potential (from active reservations - more accurate than lot status)
         potential_result = await self.session.execute(
-            select(func.sum(LotModel.price)).where(
+            select(func.coalesce(func.sum(LotModel.price), 0)).where(
                 LotModel.project_id == project_id,
-                LotModel.status.in_(["available", "reserved"]),
+                LotModel.id.in_(
+                    select(ReservationModel.lot_id).where(
+                        ReservationModel.project_id == project_id,
+                        ReservationModel.status == "active",
+                    )
+                ),
             )
         )
         ca_potentiel = float(potential_result.scalar() or 0)
@@ -419,11 +463,19 @@ class ProjectService:
         total_res = conv_row.total or 1
         taux_transformation = round((conv_row.converted / total_res) * 100, 2)
 
+        # Calculate ca_objectif as total price of all lots
+        ca_objectif_result = await self.session.execute(
+            select(func.coalesce(func.sum(LotModel.price), 0)).where(
+                LotModel.project_id == project_id
+            )
+        )
+        ca_objectif = float(ca_objectif_result.scalar() or 0)
+
         # Financial calculations
         surface_vendue = float(surface_row.sold or 0)
         progression_ca = 0.0
-        if project.ca_objectif and project.ca_objectif > 0:
-            progression_ca = round((ca_realise / project.ca_objectif) * 100, 2)
+        if ca_objectif > 0:
+            progression_ca = round((ca_realise / ca_objectif) * 100, 2)
 
         prix_moyen_lot = 0.0
         if sold_lots > 0:
@@ -443,29 +495,25 @@ class ProjectService:
         total_deposits = float(deposits_result.scalar() or 0)
 
         # Monthly stats - current month
-        from datetime import datetime, timezone
+        from datetime import date
 
-        now = datetime.now(timezone.utc)
-        first_day_this_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        today = date.today()
+        first_day_this_month = date(today.year, today.month, 1)
 
         # Calculate first day of previous month
-        if now.month == 1:
-            first_day_prev_month = now.replace(
-                year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0
-            )
+        if today.month == 1:
+            first_day_prev_month = date(today.year - 1, 12, 1)
         else:
-            first_day_prev_month = now.replace(
-                month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0
-            )
+            first_day_prev_month = date(today.year, today.month - 1, 1)
 
-        # Sales this month
+        # Sales this month - use func.date() to compare dates without timezone issues
         sales_this_month_result = await self.session.execute(
             select(
                 func.count().label("count"),
                 func.coalesce(func.sum(SaleModel.price), 0).label("total"),
             ).where(
                 SaleModel.project_id == project_id,
-                SaleModel.sale_date >= first_day_this_month,
+                func.date(SaleModel.sale_date) >= first_day_this_month,
             )
         )
         sales_this_month = sales_this_month_result.one()
@@ -479,8 +527,8 @@ class ProjectService:
                 func.coalesce(func.sum(SaleModel.price), 0).label("total"),
             ).where(
                 SaleModel.project_id == project_id,
-                SaleModel.sale_date >= first_day_prev_month,
-                SaleModel.sale_date < first_day_this_month,
+                func.date(SaleModel.sale_date) >= first_day_prev_month,
+                func.date(SaleModel.sale_date) < first_day_this_month,
             )
         )
         sales_prev_month = sales_prev_month_result.one()
@@ -513,7 +561,232 @@ class ProjectService:
             surface_vendue=round(surface_vendue, 2),
             ca_realise=ca_realise,
             ca_potentiel=ca_potentiel,
-            ca_objectif=project.ca_objectif,
+            ca_objectif=ca_objectif,
+            progression_ca=progression_ca,
+            prix_moyen_lot=prix_moyen_lot,
+            prix_moyen_m2=prix_moyen_m2,
+            taux_vente=taux_vente,
+            taux_reservation=taux_reservation,
+            taux_transformation=taux_transformation,
+            taux_conversion=taux_transformation,
+            total_deposits=total_deposits,
+            ventes_mois=ventes_mois,
+            ca_mois=ca_mois,
+            tendance_ventes=tendance_ventes,
+            tendance_ca=tendance_ca,
+        )
+
+    async def _get_user_filtered_kpis(
+        self,
+        project,
+        filter_user_id: int,
+    ) -> ProjectKPIs:
+        """Get KPIs filtered by a specific commercial user."""
+        from datetime import date
+
+        project_id = project.id
+
+        # Get lots associated with this user (via reservations or sales)
+        user_reserved_lots = select(ReservationModel.lot_id).where(
+            ReservationModel.project_id == project_id,
+            ReservationModel.reserved_by_user_id == filter_user_id,
+        )
+        user_sold_lots = select(SaleModel.lot_id).where(
+            SaleModel.project_id == project_id,
+            SaleModel.sold_by_user_id == filter_user_id,
+        )
+
+        # Count user's reservations (active)
+        reserved_count_result = await self.session.execute(
+            select(func.count()).where(
+                ReservationModel.project_id == project_id,
+                ReservationModel.reserved_by_user_id == filter_user_id,
+                ReservationModel.status == "active",
+            )
+        )
+        reserved_lots = reserved_count_result.scalar() or 0
+
+        # Count user's sales
+        sold_count_result = await self.session.execute(
+            select(func.count()).where(
+                SaleModel.project_id == project_id,
+                SaleModel.sold_by_user_id == filter_user_id,
+            )
+        )
+        sold_lots = sold_count_result.scalar() or 0
+
+        # CA realized (from user's sales)
+        ca_result = await self.session.execute(
+            select(func.coalesce(func.sum(SaleModel.price), 0)).where(
+                SaleModel.project_id == project_id,
+                SaleModel.sold_by_user_id == filter_user_id,
+            )
+        )
+        ca_realise = float(ca_result.scalar() or 0)
+
+        # CA potential (from user's active reservations)
+        potential_result = await self.session.execute(
+            select(func.coalesce(func.sum(LotModel.price), 0)).where(
+                LotModel.id.in_(
+                    select(ReservationModel.lot_id).where(
+                        ReservationModel.project_id == project_id,
+                        ReservationModel.reserved_by_user_id == filter_user_id,
+                        ReservationModel.status == "active",
+                    )
+                ),
+            )
+        )
+        ca_potentiel = float(potential_result.scalar() or 0)
+
+        # Get global lot count for percentage calculation
+        total_lots_result = await self.session.execute(
+            select(func.count()).where(LotModel.project_id == project_id)
+        )
+        total_lots = total_lots_result.scalar() or 1
+
+        # Calculate rates based on user's performance
+        taux_vente = round((sold_lots / total_lots) * 100, 2)
+        taux_reservation = round((reserved_lots / total_lots) * 100, 2)
+
+        # Conversion rate for this user
+        conversion_result = await self.session.execute(
+            select(
+                func.count().label("total"),
+                func.count().filter(ReservationModel.status == "converted").label(
+                    "converted"
+                ),
+            ).where(
+                ReservationModel.project_id == project_id,
+                ReservationModel.reserved_by_user_id == filter_user_id,
+            )
+        )
+        conv_row = conversion_result.one()
+        total_res = conv_row.total or 1
+        taux_transformation = round((conv_row.converted / total_res) * 100, 2)
+
+        # Surfaces for user's lots
+        surface_reserved_result = await self.session.execute(
+            select(func.coalesce(func.sum(LotModel.surface), 0)).where(
+                LotModel.id.in_(
+                    select(ReservationModel.lot_id).where(
+                        ReservationModel.project_id == project_id,
+                        ReservationModel.reserved_by_user_id == filter_user_id,
+                        ReservationModel.status == "active",
+                    )
+                ),
+            )
+        )
+        surface_reservee = float(surface_reserved_result.scalar() or 0)
+
+        surface_sold_result = await self.session.execute(
+            select(func.coalesce(func.sum(LotModel.surface), 0)).where(
+                LotModel.id.in_(
+                    select(SaleModel.lot_id).where(
+                        SaleModel.project_id == project_id,
+                        SaleModel.sold_by_user_id == filter_user_id,
+                    )
+                ),
+            )
+        )
+        surface_vendue = float(surface_sold_result.scalar() or 0)
+
+        # Calculate ca_objectif as total price of all lots
+        ca_objectif_result = await self.session.execute(
+            select(func.coalesce(func.sum(LotModel.price), 0)).where(
+                LotModel.project_id == project_id
+            )
+        )
+        ca_objectif = float(ca_objectif_result.scalar() or 0)
+
+        # Financial calculations
+        progression_ca = 0.0
+        if ca_objectif > 0:
+            progression_ca = round((ca_realise / ca_objectif) * 100, 2)
+
+        prix_moyen_lot = 0.0
+        if sold_lots > 0:
+            prix_moyen_lot = round(ca_realise / sold_lots, 2)
+
+        prix_moyen_m2 = 0.0
+        if surface_vendue > 0:
+            prix_moyen_m2 = round(ca_realise / surface_vendue, 2)
+
+        # Total deposits from user's active reservations
+        deposits_result = await self.session.execute(
+            select(func.coalesce(func.sum(ReservationModel.deposit), 0)).where(
+                ReservationModel.project_id == project_id,
+                ReservationModel.reserved_by_user_id == filter_user_id,
+                ReservationModel.status == "active",
+            )
+        )
+        total_deposits = float(deposits_result.scalar() or 0)
+
+        # Monthly stats for this user
+        today = date.today()
+        first_day_this_month = date(today.year, today.month, 1)
+        if today.month == 1:
+            first_day_prev_month = date(today.year - 1, 12, 1)
+        else:
+            first_day_prev_month = date(today.year, today.month - 1, 1)
+
+        # Sales this month
+        sales_this_month_result = await self.session.execute(
+            select(
+                func.count().label("count"),
+                func.coalesce(func.sum(SaleModel.price), 0).label("total"),
+            ).where(
+                SaleModel.project_id == project_id,
+                SaleModel.sold_by_user_id == filter_user_id,
+                func.date(SaleModel.sale_date) >= first_day_this_month,
+            )
+        )
+        sales_this_month = sales_this_month_result.one()
+        ventes_mois = sales_this_month.count or 0
+        ca_mois = float(sales_this_month.total or 0)
+
+        # Sales previous month
+        sales_prev_month_result = await self.session.execute(
+            select(
+                func.count().label("count"),
+                func.coalesce(func.sum(SaleModel.price), 0).label("total"),
+            ).where(
+                SaleModel.project_id == project_id,
+                SaleModel.sold_by_user_id == filter_user_id,
+                func.date(SaleModel.sale_date) >= first_day_prev_month,
+                func.date(SaleModel.sale_date) < first_day_this_month,
+            )
+        )
+        sales_prev_month = sales_prev_month_result.one()
+        ventes_prev = sales_prev_month.count or 0
+        ca_prev = float(sales_prev_month.total or 0)
+
+        # Calculate trends
+        tendance_ventes = 0.0
+        if ventes_prev > 0:
+            tendance_ventes = round(((ventes_mois - ventes_prev) / ventes_prev) * 100, 2)
+        elif ventes_mois > 0:
+            tendance_ventes = 100.0
+
+        tendance_ca = 0.0
+        if ca_prev > 0:
+            tendance_ca = round(((ca_mois - ca_prev) / ca_prev) * 100, 2)
+        elif ca_mois > 0:
+            tendance_ca = 100.0
+
+        return ProjectKPIs(
+            project_id=project_id,
+            total_lots=total_lots,
+            available_lots=0,  # Not relevant for user filter
+            reserved_lots=reserved_lots,
+            sold_lots=sold_lots,
+            blocked_lots=0,  # Not relevant for user filter
+            surface_totale=0,  # Not relevant for user filter
+            surface_disponible=0,  # Not relevant for user filter
+            surface_reservee=round(surface_reservee, 2),
+            surface_vendue=round(surface_vendue, 2),
+            ca_realise=ca_realise,
+            ca_potentiel=ca_potentiel,
+            ca_objectif=ca_objectif,
             progression_ca=progression_ca,
             prix_moyen_lot=prix_moyen_lot,
             prix_moyen_m2=prix_moyen_m2,
@@ -990,8 +1263,14 @@ class ProjectService:
             }
 
             # Add reservation info if present
+            if lot.get("client_id"):
+                properties["client_id"] = lot["client_id"]
             if lot.get("client_name"):
                 properties["client_name"] = lot["client_name"]
+            if lot.get("client_phone"):
+                properties["client_phone"] = lot["client_phone"]
+            if lot.get("reservation_id"):
+                properties["reservation_id"] = lot["reservation_id"]
             if lot.get("reservation_date"):
                 properties["reservation_date"] = (
                     lot["reservation_date"].isoformat()
@@ -1004,6 +1283,14 @@ class ProjectService:
                     if hasattr(lot["expiration_date"], "isoformat")
                     else str(lot["expiration_date"])
                 )
+            if lot.get("deposit") is not None:
+                properties["deposit"] = lot["deposit"]
+            if lot.get("reserved_by_user_id"):
+                properties["reserved_by_user_id"] = lot["reserved_by_user_id"]
+            if lot.get("reserved_by"):
+                properties["reserved_by"] = lot["reserved_by"]
+            if lot.get("days_in_status") is not None:
+                properties["days_in_status"] = lot["days_in_status"]
 
             features.append(
                 {

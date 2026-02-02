@@ -105,8 +105,11 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [alerts, setAlerts] = useState({ reservations: [], summary: {} });
   const [performance, setPerformance] = useState(null);
   const [clientsPipeline, setClientsPipeline] = useState([]);
-  const [commercialsPerformance, setCommercialsPerformance] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+
+  // KPIs du projet (uniquement pour managers avec projectId)
+  const [projectKpis, setProjectKpis] = useState(null);
 
   // Filtres
   const [projects, setProjects] = useState([]);
@@ -114,6 +117,16 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [selectedStatuses, setSelectedStatuses] = useState(['sold', 'reserved', 'blocked']); // Filtre par statut (pas de disponible)
+
+  // Modal de vente
+  const [showSaleModal, setShowSaleModal] = useState(false);
+  const [selectedLotForSale, setSelectedLotForSale] = useState(null);
+  const [clients, setClients] = useState([]);
+  const [saleData, setSaleData] = useState({
+    client_id: '',
+    price: '',
+    notes: ''
+  });
 
   // Utiliser le projectId passé en props ou celui sélectionné
   const effectiveProjectId = propsProjectId || selectedProjectId;
@@ -126,6 +139,13 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       loadUsers();
     }
   }, [propsProjectId]);
+
+  // Charger les KPIs du projet pour les managers
+  useEffect(() => {
+    if (isManager() && propsProjectId) {
+      loadProjectKpis();
+    }
+  }, [propsProjectId, selectedUserId]);
 
   useEffect(() => {
     loadDashboardData();
@@ -147,6 +167,25 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
     } catch (error) {
       console.error('Error loading users:', error);
     }
+  };
+
+  const loadProjectKpis = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (selectedUserId) params.append('user_id', selectedUserId);
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      const kpisData = await apiGet(`/api/projects/${propsProjectId}/kpis${queryString}`);
+      setProjectKpis(kpisData);
+    } catch (error) {
+      console.error('Error loading project KPIs:', error);
+    }
+  };
+
+  // Helper pour les tendances KPIs
+  const getTendanceIcon = (value) => {
+    if (value > 0) return { icon: '↑', color: 'var(--color-success)', label: `+${value}%` };
+    if (value < 0) return { icon: '↓', color: 'var(--color-danger)', label: `${value}%` };
+    return { icon: '→', color: 'var(--text-secondary)', label: '0%' };
   };
 
   const loadDashboardData = async () => {
@@ -184,23 +223,138 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       setAlerts(alertsData);
       setPerformance(perfData);
       setClientsPipeline(clientsData);
-
-      // Charger les performances des commerciaux (uniquement pour les managers)
-      if (isManager()) {
-        try {
-          const commercialsParams = new URLSearchParams();
-          if (effectiveProjectId) commercialsParams.append('project_id', effectiveProjectId);
-          const commercialsQuery = commercialsParams.toString() ? `?${commercialsParams.toString()}` : '';
-          const commercialsData = await apiGet(`/api/dashboard/commercials-performance${commercialsQuery}`);
-          setCommercialsPerformance(commercialsData);
-        } catch (err) {
-          console.error('Error loading commercials performance:', err);
-        }
-      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Charger la liste des clients
+  const loadClients = async () => {
+    try {
+      const clientsData = await apiGet('/api/clients');
+      setClients(clientsData);
+    } catch (error) {
+      console.error('Error loading clients:', error);
+    }
+  };
+
+  // Ouvrir le modal de vente pour un lot disponible
+  const handleSellAvailableLot = (lot) => {
+    setSelectedLotForSale(lot);
+    setSaleData({
+      client_id: '',
+      price: lot.price || '',
+      notes: ''
+    });
+    setShowSaleModal(true);
+    loadClients();
+  };
+
+  // Vendre un lot réservé (convertir la réservation en vente)
+  const handleSellReservedLot = async (lot) => {
+    if (!lot.reservation_id) {
+      alert('Erreur: Aucune réservation associée à ce lot');
+      return;
+    }
+
+    const price = prompt('Prix de vente final:', lot.price || '');
+    if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
+      return;
+    }
+
+    const notes = prompt('Notes (optionnel):') || '';
+
+    try {
+      await apiPost(`/api/reservations/${lot.reservation_id}/convert-to-sale`, {
+        price: parseFloat(price),
+        notes: notes
+      });
+      alert('Lot vendu avec succès!');
+      loadDashboardData();
+    } catch (error) {
+      alert(error.message || 'Erreur lors de la vente du lot');
+    }
+  };
+
+  // Soumettre la vente d'un lot disponible
+  const handleSubmitSale = async () => {
+    if (!saleData.client_id || !saleData.price) {
+      alert('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    try {
+      await apiPost('/api/sales', {
+        lot_id: selectedLotForSale.id,
+        client_id: parseInt(saleData.client_id),
+        price: parseFloat(saleData.price),
+        notes: saleData.notes || null
+      });
+      alert('Lot vendu avec succès!');
+      setShowSaleModal(false);
+      setSelectedLotForSale(null);
+      setSaleData({ client_id: '', price: '', notes: '' });
+      loadDashboardData();
+    } catch (error) {
+      alert(error.message || 'Erreur lors de la vente du lot');
+    }
+  };
+
+  // Libérer une réservation
+  const handleReleaseLot = async (lot) => {
+    if (!lot.reservation_id) {
+      alert('Erreur: Aucune réservation associée à ce lot');
+      return;
+    }
+
+    if (!confirm(`Êtes-vous sûr de vouloir libérer le lot ${lot.numero} ?`)) {
+      return;
+    }
+
+    try {
+      await apiPost(`/api/reservations/${lot.reservation_id}/release`, {});
+      alert('Réservation libérée avec succès!');
+      loadDashboardData();
+    } catch (error) {
+      alert(error.message || 'Erreur lors de la libération du lot');
+    }
+  };
+
+  // Convertir une alerte (réservation) en vente
+  const handleConvertAlertToSale = async (alertItem) => {
+    const price = prompt('Prix de vente final:', alertItem.lot_price || '');
+    if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
+      return;
+    }
+
+    const notes = prompt('Notes (optionnel):') || '';
+
+    try {
+      await apiPost(`/api/reservations/${alertItem.id}/convert-to-sale`, {
+        price: parseFloat(price),
+        notes: notes
+      });
+      alert('Réservation convertie en vente avec succès!');
+      loadDashboardData();
+    } catch (error) {
+      alert(error.message || 'Erreur lors de la conversion en vente');
+    }
+  };
+
+  // Libérer une alerte (réservation)
+  const handleReleaseAlert = async (alertItem) => {
+    if (!confirm(`Êtes-vous sûr de vouloir libérer le lot ${alertItem.lot_numero} ?`)) {
+      return;
+    }
+
+    try {
+      await apiPost(`/api/reservations/${alertItem.id}/release`, {});
+      alert('Réservation libérée avec succès!');
+      loadDashboardData();
+    } catch (error) {
+      alert(error.message || 'Erreur lors de la libération');
     }
   };
 
@@ -218,7 +372,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       <div className="page-header">
         <div>
           <h1 className="page-title">
-            {isCommercial() ? 'Mon Activité' : 'Dashboard Commercial'}
+            {isCommercial() ? 'Mon Activité' : 'Tableau de Bord'}
           </h1>
           <p className="page-subtitle">
             {isCommercial()
@@ -291,7 +445,119 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         )}
       </div>
 
-      {/* Performance Financière */}
+      {/* KPIs Stratégiques - Uniquement pour les managers avec un projet sélectionné */}
+      {isManager() && propsProjectId && projectKpis && (
+        <div className="manager-kpis-summary" style={{ marginBottom: 'var(--spacing-lg)' }}>
+          <div className="kpis-section-header" style={{ marginBottom: 'var(--spacing-md)' }}>
+            <h3>
+              <span className="kpis-section-icon">🎯</span>
+              Indicateurs Clés de Décision
+            </h3>
+            {projectKpis?.ca_objectif > 0 && (
+              <span className="kpis-section-badge" style={{
+                background: (projectKpis?.progression_ca || 0) >= 75 ? 'var(--color-success)' : (projectKpis?.progression_ca || 0) >= 50 ? 'var(--color-warning)' : 'var(--color-danger)',
+                color: 'white'
+              }}>
+                {projectKpis?.progression_ca || 0}% de l'objectif
+              </span>
+            )}
+          </div>
+
+          {/* Hero KPIs Cards */}
+          <div className="kpis-hero">
+            <div className="kpis-hero-grid">
+              <div className="kpis-hero-card gradient-success">
+                <div className="kpis-hero-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
+                </div>
+                <div className="kpis-hero-content">
+                  <div className="kpis-hero-value">{formatNumber(projectKpis?.ca_realise, 'MAD')}</div>
+                  <div className="kpis-hero-label">CA Réalisé</div>
+                  {projectKpis?.ca_objectif > 0 && (
+                    <div className="kpis-hero-progress">
+                      <div className="kpis-hero-progress-bar">
+                        <div
+                          className="kpis-hero-progress-fill"
+                          style={{ width: `${Math.min(projectKpis?.progression_ca || 0, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="kpis-hero-card gradient-primary">
+                <div className="kpis-hero-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4M12 8h.01"/>
+                  </svg>
+                </div>
+                <div className="kpis-hero-content">
+                  <div className="kpis-hero-value">{formatNumber(projectKpis?.ca_potentiel, 'MAD')}</div>
+                  <div className="kpis-hero-label">CA Potentiel</div>
+                  <div className="kpis-hero-subtitle">Lots réservés</div>
+                </div>
+              </div>
+
+              <div className="kpis-hero-card gradient-warning">
+                <div className="kpis-hero-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 20V10M18 20V4M6 20v-4"/>
+                  </svg>
+                </div>
+                <div className="kpis-hero-content">
+                  <div className="kpis-hero-value">{projectKpis?.ventes_mois || 0}</div>
+                  <div className="kpis-hero-label">Ventes ce Mois</div>
+                  <div className="kpis-hero-trend" style={{ color: getTendanceIcon(projectKpis?.tendance_ventes || 0).color }}>
+                    {getTendanceIcon(projectKpis?.tendance_ventes || 0).icon} {getTendanceIcon(projectKpis?.tendance_ventes || 0).label}
+                  </div>
+                </div>
+              </div>
+
+              <div className="kpis-hero-card gradient-info">
+                <div className="kpis-hero-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                  </svg>
+                </div>
+                <div className="kpis-hero-content">
+                  <div className="kpis-hero-value">{formatNumber(projectKpis?.ca_mois, 'MAD')}</div>
+                  <div className="kpis-hero-label">CA ce Mois</div>
+                  <div className="kpis-hero-trend" style={{ color: getTendanceIcon(projectKpis?.tendance_ca || 0).color }}>
+                    {getTendanceIcon(projectKpis?.tendance_ca || 0).icon} {getTendanceIcon(projectKpis?.tendance_ca || 0).label}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Métriques additionnelles pour décision */}
+          <div className="kpis-decision-metrics">
+            <div>
+              <div>{formatNumber(projectKpis?.prix_moyen_lot, 'MAD')}</div>
+              <div>Prix Moyen / Lot</div>
+            </div>
+            <div>
+              <div>{formatNumber(projectKpis?.prix_moyen_m2, 'MAD')}</div>
+              <div>Prix Moyen / m²</div>
+            </div>
+            <div>
+              <div>{formatNumber(projectKpis?.total_deposits, 'MAD')}</div>
+              <div>Total Acomptes</div>
+            </div>
+            <div>
+              <div>{formatNumber(projectKpis?.ca_objectif, 'MAD')}</div>
+              <div>CA Objectif</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Performance Financière - Masquer si Indicateurs Clés de Décision est affiché */}
+      {!(isManager() && propsProjectId && projectKpis) && (
       <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
         <div className="kpis-section-header">
           <h3>
@@ -364,6 +630,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           </div>
         </div>
       </div>
+      )}
 
       {/* Stock de Lots - Modern Cards */}
       <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
@@ -489,10 +756,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           {/* Par Type de Lot */}
           <div className="kpis-section-v2">
             <div className="kpis-section-header">
-              <h4 style={{ fontSize: '0.875rem', margin: 0 }}>
+              <h3>
                 <span className="kpis-section-icon">🏷️</span>
                 Par Type de Lot
-              </h4>
+              </h3>
             </div>
             <div className="kpis-category-list">
               {stats?.by_type_lot && Object.entries(stats.by_type_lot).length > 0 ? (
@@ -515,10 +782,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           {/* Par Emplacement */}
           <div className="kpis-section-v2">
             <div className="kpis-section-header">
-              <h4 style={{ fontSize: '0.875rem', margin: 0 }}>
+              <h3>
                 <span className="kpis-section-icon">📍</span>
                 Par Emplacement
-              </h4>
+              </h3>
             </div>
             <div className="kpis-category-list">
               {stats?.by_emplacement && Object.entries(stats.by_emplacement).length > 0 ? (
@@ -541,10 +808,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           {/* Par Type de Maison */}
           <div className="kpis-section-v2">
             <div className="kpis-section-header">
-              <h4 style={{ fontSize: '0.875rem', margin: 0 }}>
+              <h3>
                 <span className="kpis-section-icon">🏠</span>
                 Par Type de Maison
-              </h4>
+              </h3>
             </div>
             <div className="kpis-category-list">
               {stats?.by_type_maison && Object.entries(stats.by_type_maison).length > 0 ? (
@@ -573,9 +840,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           {(isManager() || isCommercial()) && alerts.summary.total_at_risk > 0 && (
             <div className="section-card">
               <div className="section-header">
-                <h2 className="section-title">
-                  <span>⚠️</span> {isCommercial() ? 'Mes Alertes' : 'Alertes commerciales'}
-                </h2>
+                <h3>
+                  <span className="kpis-section-icon">⚠️</span>
+                  {isCommercial() ? 'Mes Alertes' : 'Alertes commerciales'}
+                </h3>
                 <span className="text-warning font-semibold">
                   {alerts.summary.total_at_risk} réservation(s) expirant dans 3 jours ou moins
                 </span>
@@ -620,9 +888,19 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                         {alert.deposit > 0 && ` • Acompte: ${formatPrice(alert.deposit)}`}
                       </div>
                       <div className="alert-actions">
-                        <button className="btn btn-sm btn-success">Convertir en vente</button>
+                        <button
+                          className="btn btn-sm btn-success"
+                          onClick={() => handleConvertAlertToSale(alert)}
+                        >
+                          Convertir en vente
+                        </button>
                         <button className="btn btn-sm btn-ghost">Relancer</button>
-                        <button className="btn btn-sm btn-ghost">Libérer</button>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => handleReleaseAlert(alert)}
+                        >
+                          Libérer
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -634,9 +912,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           {/* Lots Table */}
           <div className="section-card">
             <div className="section-header">
-              <h2 className="section-title">
-                <span>📋</span> {isCommercial() ? 'Mes Lots & Opportunités' : 'Stock & Opportunités'}
-              </h2>
+              <h3>
+                <span className="kpis-section-icon">📋</span>
+                {isCommercial() ? 'Mes Lots & Opportunités' : 'Stock & Opportunités'}
+              </h3>
               <div className="section-actions">
                 <div style={{ display: 'flex', gap: 'var(--spacing-xs)', marginRight: 'var(--spacing-sm)' }}>
                   {['sold', 'reserved', 'blocked'].map(status => (
@@ -725,14 +1004,26 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                                   <button className="btn btn-sm btn-warning" onClick={(e) => { e.stopPropagation(); }}>
                                     Réserver
                                   </button>
-                                  <button className="btn btn-sm btn-success" onClick={(e) => { e.stopPropagation(); }}>
+                                  <button
+                                    className="btn btn-sm btn-success"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSellAvailableLot(lot);
+                                    }}
+                                  >
                                     Vendre
                                   </button>
                                 </>
                               )}
                               {lot.status === 'reserved' && (
                                 <>
-                                  <button className="btn btn-sm btn-success" onClick={(e) => { e.stopPropagation(); }}>
+                                  <button
+                                    className="btn btn-sm btn-success"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSellReservedLot(lot);
+                                    }}
+                                  >
                                     Vendre
                                   </button>
                                   <button
@@ -755,7 +1046,13 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                                   >
                                     Prolonger
                                   </button>
-                                  <button className="btn btn-sm btn-ghost" onClick={(e) => { e.stopPropagation(); }}>
+                                  <button
+                                    className="btn btn-sm btn-ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleReleaseLot(lot);
+                                    }}
+                                  >
                                     Libérer
                                   </button>
                                 </>
@@ -785,181 +1082,6 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
             )}
           </div>
 
-          {/* Performance Section - Masquer les stats générales pour les commerciaux (déjà dans "Ma Performance") */}
-          <div className="section-card">
-            <div className="section-header">
-              <h2 className="section-title">
-                <span>📈</span> {isCommercial() ? 'Mon Historique de Ventes' : 'Performance commerciale'}
-              </h2>
-            </div>
-
-            {/* Stats générales - seulement pour les managers */}
-            {isManager() && (
-              <div className="stats-grid">
-                <div className="stat-item">
-                  <div className="stat-value">{performance?.average_durations?.available_to_reserved || 0}j</div>
-                  <div className="stat-label">Durée moy. disponible → réservé</div>
-                </div>
-                <div className="stat-item">
-                  <div className="stat-value">{performance?.average_durations?.reserved_to_sold || 0}j</div>
-                  <div className="stat-label">Durée moy. réservé → vendu</div>
-                </div>
-                <div className="stat-item">
-                  <div className="stat-value">{stats?.taux_transformation || 0}%</div>
-                  <div className="stat-label">Taux de transformation</div>
-                </div>
-                <div className="stat-item">
-                  <div className="stat-value">{stats?.counts?.total || 0}</div>
-                  <div className="stat-label">Total des lots</div>
-                </div>
-              </div>
-            )}
-
-            {/* Sales History Table */}
-            {performance?.sales_by_period?.length > 0 && (
-              <div className={isManager() ? "mt-md" : ""}>
-                <h3 style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
-                  {isCommercial() ? 'Mes ventes par mois' : 'Ventes par mois'}
-                </h3>
-                <div style={{ overflowX: 'auto' }}>
-                  <table className="lots-table">
-                    <thead>
-                      <tr>
-                        <th>Période</th>
-                        <th>Ventes</th>
-                        <th>CA</th>
-                        <th>Évolution</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        const sortedPeriods = [...performance.sales_by_period].sort((a, b) => b.period.localeCompare(a.period));
-                        return sortedPeriods.slice(0, 6).map((item, index) => {
-                          const prevItem = sortedPeriods[index + 1];
-                          const countEvolution = prevItem && prevItem.count > 0
-                            ? ((item.count - prevItem.count) / prevItem.count * 100).toFixed(1)
-                            : null;
-                          const caEvolution = prevItem && prevItem.total_amount > 0
-                            ? ((item.total_amount - prevItem.total_amount) / prevItem.total_amount * 100).toFixed(1)
-                            : null;
-
-                          return (
-                            <tr key={item.period}>
-                              <td className="font-semibold">{item.period}</td>
-                              <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-                                  <span>{item.count}</span>
-                                  {countEvolution !== null && (
-                                    <span style={{
-                                      fontSize: '0.75rem',
-                                      color: parseFloat(countEvolution) >= 0 ? 'var(--success)' : 'var(--color-danger)',
-                                      fontWeight: '500'
-                                    }}>
-                                      {parseFloat(countEvolution) >= 0 ? '↑' : '↓'} {Math.abs(parseFloat(countEvolution))}%
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="font-semibold" style={{ color: 'var(--success)' }}>
-                                {formatNumber(item.total_amount, 'MAD')}
-                              </td>
-                              <td>
-                                {caEvolution !== null ? (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.25rem',
-                                    padding: '0.25rem 0.5rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.8rem',
-                                    fontWeight: '600',
-                                    backgroundColor: parseFloat(caEvolution) >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                    color: parseFloat(caEvolution) >= 0 ? 'var(--success)' : 'var(--color-danger)'
-                                  }}>
-                                    {parseFloat(caEvolution) >= 0 ? '↑' : '↓'} {Math.abs(parseFloat(caEvolution))}%
-                                  </span>
-                                ) : (
-                                  <span className="text-muted">-</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        });
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Performance des Commerciaux - Uniquement pour les managers */}
-          {isManager() && (
-            <div className="section-card">
-              <div className="section-header">
-                <h2 className="section-title">
-                  <span>👔</span> Performance des Commerciaux
-                </h2>
-              </div>
-
-              {commercialsPerformance.length > 0 ? (
-                <div style={{ overflowX: 'auto' }}>
-                  <table className="lots-table">
-                    <thead>
-                      <tr>
-                        <th>Commercial</th>
-                        <th>Ventes</th>
-                        <th>CA Réalisé</th>
-                        <th>Réservations</th>
-                        <th>Taux Transfo.</th>
-                        <th>CA Moyen</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {commercialsPerformance.map((commercial) => (
-                        <tr key={commercial.user_id}>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
-                              <div className="client-avatar" style={{ width: '32px', height: '32px', fontSize: '0.75rem' }}>
-                                {commercial.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'}
-                              </div>
-                              <div>
-                                <div className="font-semibold">{commercial.name}</div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{commercial.email}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            <span className="font-semibold">{commercial.total_sales}</span>
-                          </td>
-                          <td>
-                            <span className="font-semibold" style={{ color: 'var(--success)' }}>
-                              {formatNumber(commercial.ca_total, 'MAD')}
-                            </span>
-                          </td>
-                          <td>{commercial.total_reservations}</td>
-                          <td>
-                            <span className={`status-badge ${commercial.taux_transformation >= 50 ? 'sold' : commercial.taux_transformation >= 25 ? 'reserved' : 'available'}`}>
-                              {commercial.taux_transformation}%
-                            </span>
-                          </td>
-                          <td>{formatNumber(commercial.ca_moyen, 'MAD')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="empty-state">
-                  <div className="empty-state-icon">👔</div>
-                  <div className="empty-state-title">Aucune donnée</div>
-                  <div className="empty-state-description">
-                    Les performances apparaîtront quand les commerciaux auront réalisé des ventes.
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Sidebar Column */}
@@ -968,23 +1090,86 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           {(isManager() || isCommercial()) && (
           <div className="section-card">
             <div className="section-header">
-              <h2 className="section-title">
-                <span>👥</span> {isCommercial() ? 'Mes Clients' : 'Pipeline clients'}
-              </h2>
+              <h3>
+                <span className="kpis-section-icon">👥</span>
+                {isCommercial() ? 'Mes Clients' : 'Pipeline clients'}
+              </h3>
               <button className="btn btn-ghost btn-sm" onClick={() => onNavigate && onNavigate('clients')}>
                 Voir tout
               </button>
             </div>
 
+            {/* Recherche rapide de client */}
+            <div style={{ marginBottom: 'var(--spacing-md)', padding: '0 var(--spacing-sm)' }}>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder="Rechercher un client..."
+                  value={clientSearchQuery}
+                  onChange={(e) => setClientSearchQuery(e.target.value)}
+                  className="form-input"
+                  style={{
+                    width: '100%',
+                    padding: 'var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) 2.5rem',
+                    fontSize: '0.875rem',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)'
+                  }}
+                />
+                <span style={{
+                  position: 'absolute',
+                  left: '0.75rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: '1rem',
+                  pointerEvents: 'none'
+                }}>
+                  🔍
+                </span>
+              </div>
+            </div>
+
             <div className="client-list">
-              {clientsPipeline.slice(0, 8).map((client) => (
-                <div key={client.id} className="client-card">
+              {clientsPipeline
+                .filter(client => {
+                  if (!clientSearchQuery) return true;
+                  const query = clientSearchQuery.toLowerCase();
+                  return (
+                    client.name?.toLowerCase().includes(query) ||
+                    client.phone?.includes(query) ||
+                    client.email?.toLowerCase().includes(query)
+                  );
+                })
+                .slice(0, 8)
+                .map((client) => (
+                <div
+                  key={client.id}
+                  className="client-card"
+                  onClick={() => onNavigate && onNavigate('clients', client.id)}
+                  style={{
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateX(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
                   <div className="client-avatar">
                     {client.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'}
                   </div>
                   <div className="client-info">
                     <div className="client-name">{client.name}</div>
                     <div className="client-details">
+                      {client.phone && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          📱 {client.phone}
+                        </span>
+                      )}
                       {client.active_reservations > 0 && (
                         <span>{client.active_reservations} réserv.</span>
                       )}
@@ -1003,7 +1188,31 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
               ))}
             </div>
 
-            {clientsPipeline.length === 0 && (
+            {clientsPipeline.filter(client => {
+              if (!clientSearchQuery) return true;
+              const query = clientSearchQuery.toLowerCase();
+              return (
+                client.name?.toLowerCase().includes(query) ||
+                client.phone?.includes(query) ||
+                client.email?.toLowerCase().includes(query)
+              );
+            }).length === 0 && (
+              <div className="empty-state">
+                <div className="empty-state-icon">🔍</div>
+                <div className="empty-state-title">Aucun client trouvé</div>
+                {clientSearchQuery && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setClientSearchQuery('')}
+                    style={{ marginTop: 'var(--spacing-sm)' }}
+                  >
+                    Effacer la recherche
+                  </button>
+                )}
+              </div>
+            )}
+
+            {clientsPipeline.length === 0 && !clientSearchQuery && (
               <div className="empty-state">
                 <div className="empty-state-icon">👥</div>
                 <div className="empty-state-title">Aucun client</div>
@@ -1016,6 +1225,94 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           )}
         </div>
       </div>
+
+      {/* Modal de vente */}
+      {showSaleModal && selectedLotForSale && (
+        <div className="modal-overlay" onClick={() => setShowSaleModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Vendre le lot {selectedLotForSale.numero}</h2>
+              <button className="modal-close" onClick={() => setShowSaleModal(false)}>×</button>
+            </div>
+
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Client *</label>
+                <select
+                  value={saleData.client_id}
+                  onChange={(e) => setSaleData({ ...saleData, client_id: e.target.value })}
+                  className="form-input"
+                >
+                  <option value="">Sélectionnez un client</option>
+                  {clients.map(client => (
+                    <option key={client.id} value={client.id}>
+                      {client.name} {client.phone ? `(${client.phone})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Prix de vente *</label>
+                <input
+                  type="number"
+                  value={saleData.price}
+                  onChange={(e) => setSaleData({ ...saleData, price: e.target.value })}
+                  className="form-input"
+                  placeholder="Prix de vente"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Notes</label>
+                <textarea
+                  value={saleData.notes}
+                  onChange={(e) => setSaleData({ ...saleData, notes: e.target.value })}
+                  className="form-input"
+                  placeholder="Notes additionnelles (optionnel)"
+                  rows="3"
+                />
+              </div>
+
+              <div className="lot-info-summary" style={{
+                background: 'var(--bg-secondary)',
+                padding: 'var(--spacing-md)',
+                borderRadius: 'var(--radius-md)',
+                marginTop: 'var(--spacing-md)'
+              }}>
+                <h4 style={{ marginBottom: 'var(--spacing-sm)', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                  Informations du lot
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-sm)', fontSize: '0.875rem' }}>
+                  <div>
+                    <strong>Numéro:</strong> {selectedLotForSale.numero}
+                  </div>
+                  <div>
+                    <strong>Zone:</strong> {selectedLotForSale.zone || '-'}
+                  </div>
+                  <div>
+                    <strong>Surface:</strong> {selectedLotForSale.surface ? `${Math.round(parseFloat(selectedLotForSale.surface))} m²` : '-'}
+                  </div>
+                  <div>
+                    <strong>Prix catalogue:</strong> {formatPrice(selectedLotForSale.price)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setShowSaleModal(false)}>
+                Annuler
+              </button>
+              <button className="btn btn-success" onClick={handleSubmitSale}>
+                Confirmer la vente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

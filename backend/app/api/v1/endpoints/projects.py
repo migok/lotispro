@@ -166,12 +166,18 @@ async def get_project_kpis(
     project_id: int,
     current_user: CurrentUser,
     project_service: ProjectServiceDep,
+    user_id: int | None = None,
 ) -> ProjectKPIs:
-    """Get project KPIs including sales rates, revenue, and lot statistics."""
+    """Get project KPIs including sales rates, revenue, and lot statistics.
+
+    Args:
+        user_id: Optional filter by commercial user ID (managers only)
+    """
     return await project_service.get_project_kpis(
         project_id=project_id,
         user_id=current_user.id,
         user_role=current_user.role,
+        filter_user_id=user_id if current_user.role == "manager" else None,
     )
 
 

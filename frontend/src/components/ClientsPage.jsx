@@ -38,6 +38,7 @@ export default function ClientsPage() {
   const { token } = useAuth();
   const [clients, setClients] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedClientType, setSelectedClientType] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [newClient, setNewClient] = useState({
@@ -109,11 +110,19 @@ export default function ClientsPage() {
     navigate(`/clients/${clientId}`);
   };
 
-  const filteredClients = clients.filter((client) =>
-    client.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.phone?.includes(searchQuery) ||
-    client.cin?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredClients = clients.filter((client) => {
+    // Filtre par recherche
+    const matchesSearch = !searchQuery || (
+      client.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      client.phone?.includes(searchQuery) ||
+      client.cin?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    // Filtre par type de client
+    const matchesType = !selectedClientType || client.client_type === selectedClientType;
+
+    return matchesSearch && matchesType;
+  });
 
   if (loading) {
     return (
@@ -146,6 +155,56 @@ export default function ClientsPage() {
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           + Nouveau client
         </button>
+      </div>
+
+      {/* Filtres par type de client */}
+      <div style={{
+        display: 'flex',
+        gap: 'var(--spacing-sm)',
+        marginBottom: 'var(--spacing-md)',
+        flexWrap: 'wrap',
+        alignItems: 'center'
+      }}>
+        <span style={{
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          color: 'var(--text-secondary)'
+        }}>
+          Type de client:
+        </span>
+        <button
+          className={`btn btn-sm ${!selectedClientType ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setSelectedClientType(null)}
+          style={{ padding: '0.375rem 0.75rem' }}
+        >
+          Tous
+        </button>
+        {CLIENT_TYPES.map((type) => (
+          <button
+            key={type.value}
+            className={`btn btn-sm ${selectedClientType === type.value ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setSelectedClientType(type.value)}
+            style={{ padding: '0.375rem 0.75rem' }}
+          >
+            {type.label}
+          </button>
+        ))}
+        {(searchQuery || selectedClientType) && (
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => {
+              setSearchQuery('');
+              setSelectedClientType(null);
+            }}
+            style={{
+              padding: '0.375rem 0.75rem',
+              marginLeft: 'auto',
+              color: 'var(--color-danger)'
+            }}
+          >
+            ✕ Réinitialiser les filtres
+          </button>
+        )}
       </div>
 
       {/* Stats */}

@@ -44,7 +44,7 @@ const STATUS_COLORS = {
 };
 
 export default function LotDetailModal({ lot, onClose, onRefresh }) {
-  const { token } = useAuth();
+  const { token, user, isManager } = useAuth();
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
   const [depositAmount, setDepositAmount] = useState('');
@@ -144,6 +144,12 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
     const days = parseInt(reservationDays) || 7;
     if (days < 1 || days > 365) {
       alert('Le nombre de jours doit être entre 1 et 365');
+      return;
+    }
+
+    const deposit = depositAmount ? parseFloat(depositAmount) : 0;
+    if (lot.price && deposit >= lot.price) {
+      alert(`L'acompte (${formatPrice(deposit)}) doit être inférieur au prix du lot (${formatPrice(lot.price)})`);
       return;
     }
 
@@ -340,6 +346,12 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
                     <span>{lot.client_phone}</span>
                   </div>
                 )}
+                {lot.reserved_by && (
+                  <div className="flex justify-between">
+                    <span className="text-muted">Réservé par:</span>
+                    <span className="font-semibold">{lot.reserved_by}</span>
+                  </div>
+                )}
                 {lot.reservation_date && (
                   <div className="flex justify-between">
                     <span className="text-muted">Date réservation:</span>
@@ -510,6 +522,16 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
                   value={depositAmount}
                   onChange={(e) => setDepositAmount(e.target.value)}
                 />
+                {lot.price && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    L'acompte doit être inférieur au prix du lot ({formatPrice(lot.price)})
+                  </div>
+                )}
+                {depositAmount && lot.price && parseFloat(depositAmount) >= lot.price && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-danger)', marginTop: '4px' }}>
+                    ⚠️ L'acompte ne peut pas être égal ou supérieur au prix du lot
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">Notes</label>
@@ -715,16 +737,34 @@ export default function LotDetailModal({ lot, onClose, onRefresh }) {
                 </button>
               </>
             )}
-            {lot.status === 'reserved' && (
-              <>
-                <button className="btn btn-ghost" onClick={handleRelease} disabled={loading}>
-                  🔓 Libérer
-                </button>
-                <button className="btn btn-success" onClick={() => handleSetMode('sell')}>
-                  ✅ Finaliser la vente
-                </button>
-              </>
-            )}
+            {lot.status === 'reserved' && (() => {
+              // Check permissions: manager or the commercial who reserved the lot
+              const canManageReservation = isManager || (lot.reserved_by_user_id && lot.reserved_by_user_id === user?.id);
+              const permissionMessage = `Seul ${lot.reserved_by || 'le commercial qui a réservé'} peut libérer ou finaliser cette réservation`;
+
+              return (
+                <>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={handleRelease}
+                    disabled={loading || !canManageReservation}
+                    title={!canManageReservation ? permissionMessage : ''}
+                    style={!canManageReservation ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                  >
+                    🔓 Libérer
+                  </button>
+                  <button
+                    className="btn btn-success"
+                    onClick={() => handleSetMode('sell')}
+                    disabled={!canManageReservation}
+                    title={!canManageReservation ? permissionMessage : ''}
+                    style={!canManageReservation ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                  >
+                    ✅ Finaliser la vente
+                  </button>
+                </>
+              );
+            })()}
             <button className="btn btn-ghost" onClick={onClose}>
               Fermer
             </button>

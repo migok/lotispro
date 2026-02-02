@@ -251,8 +251,11 @@ class DashboardService:
         potential_result = await self.session.execute(potential_query)
         ca_potentiel = float(potential_result.scalar() or 0)
 
-        # Sales rate - based on global sold count for consistency
-        taux_vente = round(global_row.sold / total * 100, 2) if total > 0 else 0
+        # Sales rate - based on user's sold count if user_id is specified
+        if user_id:
+            taux_vente = round(counts.sold / total * 100, 2) if total > 0 else 0
+        else:
+            taux_vente = round(global_row.sold / total * 100, 2) if total > 0 else 0
 
         # Conversion rate (reservations to sales)
         conversion_query = select(
@@ -521,12 +524,18 @@ class DashboardService:
 
         for reservation_date, sale_date, lot_created_at in rows:
             if lot_created_at and reservation_date:
-                days_to_reserve = (reservation_date - lot_created_at.date()).days
+                # Convert both to date objects for comparison
+                reservation_date_only = reservation_date.date() if hasattr(reservation_date, 'date') else reservation_date
+                lot_created_date = lot_created_at.date() if hasattr(lot_created_at, 'date') else lot_created_at
+                days_to_reserve = (reservation_date_only - lot_created_date).days
                 if days_to_reserve >= 0:
                     available_to_reserved_days.append(days_to_reserve)
 
             if reservation_date and sale_date:
-                days_to_sell = (sale_date - reservation_date).days
+                # Convert both to date objects for comparison
+                sale_date_only = sale_date.date() if hasattr(sale_date, 'date') else sale_date
+                reservation_date_only = reservation_date.date() if hasattr(reservation_date, 'date') else reservation_date
+                days_to_sell = (sale_date_only - reservation_date_only).days
                 if days_to_sell >= 0:
                     reserved_to_sold_days.append(days_to_sell)
 
@@ -811,23 +820,33 @@ class DashboardService:
         Returns:
             List of lots with reservation and client details
         """
+        from sqlalchemy.orm import aliased
+
         from app.infrastructure.database.models import ClientModel
 
         now = datetime.now(timezone.utc)
 
-        # Build base query
+        # Create aliases for client joined via reservation vs sale
+        ReservationClient = aliased(ClientModel, name="reservation_client")
+        SaleClient = aliased(ClientModel, name="sale_client")
+
+        # Build base query - join with both reservation client and sale client
         query = (
             select(
                 LotModel,
                 ReservationModel,
-                ClientModel,
+                ReservationClient,
+                SaleModel,
+                SaleClient,
             )
             .outerjoin(
                 ReservationModel,
                 (ReservationModel.lot_id == LotModel.id)
                 & (ReservationModel.status == "active"),
             )
-            .outerjoin(ClientModel, ClientModel.id == ReservationModel.client_id)
+            .outerjoin(ReservationClient, ReservationClient.id == ReservationModel.client_id)
+            .outerjoin(SaleModel, SaleModel.lot_id == LotModel.id)
+            .outerjoin(SaleClient, SaleClient.id == SaleModel.client_id)
         )
 
         if project_id:
@@ -861,7 +880,7 @@ class DashboardService:
         result = await self.session.execute(query)
         lots_data = []
 
-        for lot, reservation, client in result.all():
+        for lot, reservation, reservation_client, sale, sale_client in result.all():
             # Calculate days_in_status based on the lot's updated_at timestamp
             if lot.updated_at:
                 lot_updated = lot.updated_at
@@ -898,6 +917,8 @@ class DashboardService:
                     }
                 )
 
+            # Determine client: use reservation client if available, otherwise sale client
+            client = reservation_client if reservation_client else sale_client
             if client:
                 lot_dict.update(
                     {

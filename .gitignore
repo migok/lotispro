@@ -17,3 +17,7 @@ build/
 # OS
 .DS_Store
 .claude
+
+#bdb
+*.bdb
+*.db

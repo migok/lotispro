@@ -13,6 +13,7 @@ class SaleCreate(BaseSchema):
     lot_id: int = Field(description="Lot being sold")
     client_id: int = Field(description="Client purchasing the lot")
     price: float = Field(ge=0, description="Sale price")
+    reservation_id: int | None = Field(default=None, description="Associated reservation ID (if converting from reservation)")
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
 
 

@@ -21,11 +21,6 @@ class ProjectCreate(BaseSchema):
         default="private",
         description="Project visibility",
     )
-    ca_objectif: float | None = Field(
-        default=None,
-        ge=0,
-        description="Revenue target (CA objectif)",
-    )
 
 
 class ProjectUpdate(BaseSchema):
@@ -45,11 +40,6 @@ class ProjectUpdate(BaseSchema):
     visibility: Literal["public", "private"] | None = Field(
         default=None,
         description="Project visibility",
-    )
-    ca_objectif: float | None = Field(
-        default=None,
-        ge=0,
-        description="Revenue target",
     )
 
 

@@ -14,6 +14,25 @@ const formatPrice = (price) => {
   }).format(price) + ' MAD';
 };
 
+const formatCompactPrice = (price) => {
+  if (!price) return '0 MAD';
+
+  // Format en millions (M)
+  if (price >= 1000000) {
+    const millions = price / 1000000;
+    return millions.toFixed(1).replace(/\.0$/, '') + 'M MAD';
+  }
+
+  // Format en milliers (K)
+  if (price >= 1000) {
+    const thousands = price / 1000;
+    return thousands.toFixed(1).replace(/\.0$/, '') + 'K MAD';
+  }
+
+  // Format normal pour les petits montants
+  return Math.round(price) + ' MAD';
+};
+
 const formatDate = (dateString) => {
   if (!dateString) return '-';
   const date = new Date(dateString);
@@ -196,7 +215,7 @@ export default function ProjectsPage() {
                       <div className="project-kpi-icon money">💰</div>
                       <div>
                         <div className="project-kpi-value" style={{ fontSize: '0.9rem' }}>
-                          {formatPrice(project.ca_objectif)}
+                          {formatCompactPrice(project.ca_objectif)}
                         </div>
                         <div className="project-kpi-label">Objectif CA</div>
                       </div>

@@ -32,15 +32,16 @@ async def list_sales(
     response_model=SaleResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create sale",
-    description="Create a direct sale (without prior reservation)",
+    description="Create a sale. If converting from reservation, only manager or reservation owner can proceed.",
 )
 async def create_sale(
     data: SaleCreate,
     current_user: CurrentUser,
     sale_service: SaleServiceDep,
 ) -> SaleResponse:
-    """Create a direct sale."""
+    """Create a sale. When finalizing a reservation, only the manager or the commercial who created the reservation can proceed."""
     return await sale_service.create_sale(
         data,
         user_id=current_user.id,
+        user_role=current_user.role,
     )
