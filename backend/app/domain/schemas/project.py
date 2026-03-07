@@ -53,6 +53,10 @@ class ProjectResponse(BaseSchema):
     total_lots: int
     sold_lots: int
     ca_objectif: float | None
+    geojson_file_url: str | None = Field(
+        default=None,
+        description="URL of the uploaded GeoJSON file in Supabase Storage",
+    )
     created_by: int
     created_at: datetime
     updated_at: datetime

@@ -2,13 +2,14 @@
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
     AuthorizationError,
     BusinessRuleError,
     NotFoundError,
+    StorageError,
 )
 from app.core.logging import get_logger
 from app.domain.schemas.project import (
@@ -20,7 +21,9 @@ from app.domain.schemas.project import (
 )
 from app.domain.schemas.user import UserResponse
 from app.infrastructure.database.models import (
+    AssignmentModel,
     LotModel,
+    ProjectModel,
     ReservationModel,
     SaleModel,
     UserModel,
@@ -247,28 +250,40 @@ class ProjectService:
         )
 
     async def delete_project(self, project_id: int) -> None:
-        """Delete a project.
+        """Delete a project and all its dependencies.
 
         Args:
             project_id: Project ID
 
         Raises:
             NotFoundError: If project not found
-            BusinessRuleError: If project has lots
         """
         project = await self.project_repo.get_by_id(project_id)
         if not project:
             raise NotFoundError("Project", project_id)
 
-        # Check if project has lots
-        lot_count = await self.lot_repo.count_by_project(project_id)
-        if lot_count > 0:
-            raise BusinessRuleError(
-                message=f"Cannot delete project with {lot_count} lots",
-                rule="project_has_lots",
-            )
-
-        await self.project_repo.delete(project_id)
+        # Delete in FK dependency order (bulk SQL deletes bypass ORM cascade):
+        # 1. Sales (reference reservations, lots, project)
+        await self.session.execute(
+            delete(SaleModel).where(SaleModel.project_id == project_id)
+        )
+        # 2. Reservations (reference lots, project)
+        await self.session.execute(
+            delete(ReservationModel).where(ReservationModel.project_id == project_id)
+        )
+        # 3. Lots (reference project)
+        await self.session.execute(
+            delete(LotModel).where(LotModel.project_id == project_id)
+        )
+        # 4. Assignments (reference project)
+        await self.session.execute(
+            delete(AssignmentModel).where(AssignmentModel.project_id == project_id)
+        )
+        # 5. Project
+        await self.session.execute(
+            delete(ProjectModel).where(ProjectModel.id == project_id)
+        )
+        await self.session.flush()
 
         logger.info("Project deleted", project_id=project_id)
 
@@ -1195,6 +1210,107 @@ class ProjectService:
             "skipped": skipped,
             "errors": errors,
         }
+
+    async def upload_geojson_file(
+        self,
+        project_id: int,
+        user_id: int,
+        user_role: str,
+        file: "UploadFile",
+    ) -> dict:
+        """Upload GeoJSON file to Supabase Storage and create/update lots.
+
+        Args:
+            project_id: Project ID
+            user_id: Current user ID
+            user_role: Current user role
+            file: Uploaded GeoJSON file
+
+        Returns:
+            Upload result with created/updated/skipped counts and file URL
+
+        Raises:
+            NotFoundError: If project not found
+            AuthorizationError: If user cannot access project
+            BusinessRuleError: If GeoJSON format is invalid
+            StorageError: If file upload to Supabase Storage fails
+        """
+        import json
+        from fastapi import UploadFile
+
+        from app.infrastructure.storage.supabase_storage import get_storage_client
+
+        project = await self.project_repo.get_by_id(project_id)
+        if not project:
+            raise NotFoundError("Project", project_id)
+
+        # Check access (only manager can upload)
+        if user_role != "manager":
+            raise AuthorizationError(message="Only managers can upload GeoJSON")
+
+        # Validate file type
+        if not file.filename or not file.filename.endswith(".geojson"):
+            if not file.filename or not file.filename.endswith(".json"):
+                raise BusinessRuleError(
+                    message="Invalid file type: must be a .geojson or .json file",
+                    rule="invalid_file_type",
+                )
+
+        # Read file content
+        content = await file.read()
+
+        # Parse GeoJSON
+        try:
+            geojson_data = json.loads(content)
+        except json.JSONDecodeError as e:
+            raise BusinessRuleError(
+                message=f"Invalid JSON format: {e}",
+                rule="invalid_json",
+            )
+
+        # Upload to Supabase Storage
+        storage_client = get_storage_client()
+        file_path = f"projects/{project_id}/{file.filename}"
+
+        try:
+            file_url = storage_client.upload_file(
+                file_path=file_path,
+                file_content=content,
+                content_type="application/geo+json",
+            )
+        except Exception as e:
+            logger.error(f"Failed to upload file to Supabase Storage: {e}")
+            raise StorageError(
+                message=f"Failed to upload file to storage: {e}",
+                storage_path=file_path,
+            )
+
+        # Update project with file URL
+        await self.project_repo.update(
+            project_id,
+            geojson_file_url=file_url,
+        )
+
+        # Process GeoJSON and create/update lots
+        result = await self.upload_geojson(
+            project_id=project_id,
+            user_id=user_id,
+            user_role=user_role,
+            geojson_data=geojson_data,
+        )
+
+        # Add file URL to result
+        result["file_url"] = file_url
+        result["file_path"] = file_path
+
+        logger.info(
+            "GeoJSON file uploaded to Supabase Storage",
+            project_id=project_id,
+            file_path=file_path,
+            file_url=file_url,
+        )
+
+        return result
 
     async def export_geojson(
         self,

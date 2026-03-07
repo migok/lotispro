@@ -5,7 +5,7 @@ import io
 
 from fastapi import APIRouter, File, Query, UploadFile, status
 
-from app.api.dependencies import CurrentUser, ManagerUser, ProjectServiceDep
+from app.api.dependencies import CurrentUser, LotServiceDep, ManagerUser, ProjectServiceDep
 from app.domain.schemas.common import MessageResponse
 from app.domain.schemas.project import (
     AssignUserRequest,
@@ -15,6 +15,7 @@ from app.domain.schemas.project import (
     ProjectResponse,
     ProjectUpdate,
 )
+from app.domain.schemas.lot import LotBulkMetadataUpdate
 from app.domain.schemas.user import UserResponse
 
 router = APIRouter()
@@ -255,6 +256,40 @@ async def upload_geojson(
     )
 
 
+@router.post(
+    "/{project_id}/upload-geojson-file",
+    summary="Upload GeoJSON File",
+    description="Upload a GeoJSON file to Supabase Storage and create/update lots (manager only)",
+)
+async def upload_geojson_file(
+    project_id: int,
+    current_user: ManagerUser,
+    project_service: ProjectServiceDep,
+    file: UploadFile = File(..., description="GeoJSON file"),
+) -> dict:
+    """Upload a GeoJSON file to Supabase Storage and create/update lots.
+
+    The file will be stored in Supabase Storage and the lots will be created/updated
+    from the GeoJSON FeatureCollection.
+
+    The GeoJSON must be a FeatureCollection where each Feature has:
+    - properties.numero (required): Lot identifier
+    - properties.zone (optional): Zone name
+    - properties.surface (optional): Surface area
+    - properties.price (optional): Lot price
+    - geometry (optional): GeoJSON geometry object
+
+    Returns:
+        Upload result with created/updated/skipped counts and file URL
+    """
+    return await project_service.upload_geojson_file(
+        project_id=project_id,
+        user_id=current_user.id,
+        user_role=current_user.role,
+        file=file,
+    )
+
+
 @router.get(
     "/{project_id}/lots.geojson",
     summary="Export lots as GeoJSON",
@@ -326,3 +361,26 @@ async def import_csv_metadata(
         user_role=current_user.role,
         csv_rows=rows,
     )
+
+
+@router.patch(
+    "/{project_id}/lots/bulk-metadata",
+    summary="Bulk update lot metadata",
+    description="Update metadata on multiple lots at once (manager only)",
+)
+async def bulk_update_lot_metadata(
+    project_id: int,
+    data: LotBulkMetadataUpdate,
+    current_user: ManagerUser,
+    lot_service: LotServiceDep,
+) -> dict:
+    """Bulk update metadata fields on a set of lots.
+
+    Only non-null fields in the request body are applied.
+    Lots not belonging to the project are silently skipped.
+    """
+    count = await lot_service.bulk_update_lot_metadata(
+        project_id=project_id,
+        data=data,
+    )
+    return {"updated": count, "message": f"{count} lot(s) mis à jour"}

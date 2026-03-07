@@ -18,6 +18,8 @@ export default function ProjectsPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [projectToDelete, setProjectToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadProjects();
@@ -35,17 +37,18 @@ export default function ProjectsPage() {
     }
   };
 
-  const handleDeleteProject = async (projectId) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer ce projet ?')) {
-      return;
-    }
-
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+    setDeleting(true);
     try {
-      await apiDelete(`/api/projects/${projectId}`);
+      await apiDelete(`/api/projects/${projectToDelete.id}`);
+      setProjectToDelete(null);
       await loadProjects();
       toast.success('Projet supprimé avec succès');
     } catch (error) {
       toast.error(error.message || 'Erreur lors de la suppression du projet');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -229,7 +232,7 @@ export default function ProjectsPage() {
                       className="btn btn-sm btn-danger"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteProject(project.id);
+                        setProjectToDelete(project);
                       }}
                       title="Supprimer le projet"
                     >
@@ -271,6 +274,41 @@ export default function ProjectsPage() {
           }}
           onAssigned={handleCommercialsAssigned}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {projectToDelete && (
+        <div className="modal-overlay" onClick={() => !deleting && setProjectToDelete(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">Supprimer le projet</h2>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '0.5rem' }}>
+                Êtes-vous sûr de vouloir supprimer le projet <strong>"{projectToDelete.name}"</strong> ?
+              </p>
+              <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.875rem' }}>
+                ⚠️ Cette action supprimera définitivement le projet et toutes ses données (lots, réservations, ventes).
+              </p>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setProjectToDelete(null)}
+                disabled={deleting}
+              >
+                Annuler
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={handleDeleteProject}
+                disabled={deleting}
+              >
+                {deleting ? 'Suppression...' : 'Supprimer'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

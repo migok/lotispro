@@ -195,3 +195,20 @@ class FileError(AppException):
             details={"filename": filename, **(details or {})},
         )
         self.filename = filename
+
+
+class StorageError(AppException):
+    """Storage operation exception."""
+
+    def __init__(
+        self,
+        message: str,
+        storage_path: str | None = None,
+        details: dict[str, Any] | None = None,
+    ):
+        super().__init__(
+            message=message,
+            code="STORAGE_ERROR",
+            details={"storage_path": storage_path, **(details or {})},
+        )
+        self.storage_path = storage_path

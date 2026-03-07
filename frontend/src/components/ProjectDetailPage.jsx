@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { apiFetch, apiGet, apiPut, apiDelete, apiUploadFile } from '../utils/api';
+import { apiFetch, apiGet, apiPut, apiDelete, apiUploadFile, apiPatch } from '../utils/api';
 import LotDetailModal from './LotDetailModal';
 import Dashboard from './Dashboard';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +12,13 @@ const STATUS_COLORS = {
   reserved: '#f59e0b',
   sold: '#ef4444',
   blocked: '#6b7280',
+};
+
+const SELECTION_STYLE = {
+  color: '#3b82f6',
+  weight: 3,
+  fillColor: '#3b82f6',
+  fillOpacity: 0.7,
 };
 
 // Fonction pour générer les onglets dynamiquement selon le rôle
@@ -54,6 +61,14 @@ export default function ProjectDetailPage() {
   const [selectedLot, setSelectedLot] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
+  // Selection mode for bulk metadata edit (manager only)
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedLotIds, setSelectedLotIds] = useState(new Set());
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const selectionModeRef = useRef(false);
+  const selectedLotIdsRef = useRef(new Set());
+  const selectedLotLayersRef = useRef(new Map()); // db_id -> { lyr, normalStyle }
+
   // Load project data
   useEffect(() => {
     loadProject();
@@ -93,6 +108,10 @@ export default function ProjectDetailPage() {
     setTimeout(initializeMap, 0);
   }, [activeTab, project]);
 
+  // Sync selection refs (so Leaflet click closures always see current state)
+  useEffect(() => { selectionModeRef.current = selectionMode; }, [selectionMode]);
+  useEffect(() => { selectedLotIdsRef.current = selectedLotIds; }, [selectedLotIds]);
+
   // Reload when filters change
   useEffect(() => {
     if (activeTab === 'carte' && mapRef.current) {
@@ -110,8 +129,8 @@ export default function ProjectDetailPage() {
     };
   }, []);
 
-  const loadProject = async () => {
-    setLoading(true);
+  const loadProject = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       const data = await apiGet(`/api/projects/${projectId}`);
@@ -120,7 +139,7 @@ export default function ProjectDetailPage() {
       setError('Erreur lors du chargement du projet');
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -158,53 +177,66 @@ export default function ProjectDetailPage() {
       // Update map
       if (geoRef.current) geoRef.current.remove();
 
+      // Clear layer refs; will be repopulated below
+      selectedLotLayersRef.current.clear();
+      const styleMap = new Map(); // db_id -> computed normal style (for deselection restore)
+
       const layer = L.geoJSON(geojson, {
         style: (feature) => {
-          const status = feature.properties?.status ?? 'available';
-          const area = feature.properties?.Shape_Area;
           const props = feature.properties || {};
-
-          // Apply filters
-          if (filterStatus && status !== filterStatus) {
-            return { opacity: 0, fillOpacity: 0 };
-          }
-          if (surfaceMin && area && area < parseFloat(surfaceMin)) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          if (surfaceMax && area && area > parseFloat(surfaceMax)) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          // Price filters
+          const dbId = props.db_id;
+          const status = props.status ?? 'available';
+          const area = props.Shape_Area;
           const lotPrice = props.price;
-          if (priceMin && lotPrice && lotPrice < parseFloat(priceMin)) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          if (priceMax && lotPrice && lotPrice > parseFloat(priceMax)) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          // Metadata filters
-          if (filterTypeLot && props.type_lot !== filterTypeLot) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          if (filterEmplacement && props.emplacement !== filterEmplacement) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          if (filterTypeMaison && props.type_maison !== filterTypeMaison) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
+
+          // Compute normal style (based on filters)
+          let normalStyle;
+          if (filterStatus && status !== filterStatus) {
+            normalStyle = { opacity: 0, fillOpacity: 0 };
+          } else if (surfaceMin && area && area < parseFloat(surfaceMin)) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (surfaceMax && area && area > parseFloat(surfaceMax)) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (priceMin && lotPrice && lotPrice < parseFloat(priceMin)) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (priceMax && lotPrice && lotPrice > parseFloat(priceMax)) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (filterTypeLot && props.type_lot !== filterTypeLot) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (filterEmplacement && props.emplacement !== filterEmplacement) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (filterTypeMaison && props.type_maison !== filterTypeMaison) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else {
+            normalStyle = {
+              color: STATUS_COLORS[status] || '#999',
+              weight: 2,
+              fillColor: STATUS_COLORS[status] || '#999',
+              fillOpacity: 0.5,
+            };
           }
 
-          return {
-            color: STATUS_COLORS[status] || '#999',
-            weight: 2,
-            fillColor: STATUS_COLORS[status] || '#999',
-            fillOpacity: 0.5,
-          };
+          // Store normal style for restore on deselect
+          if (dbId != null) styleMap.set(dbId, normalStyle);
+
+          // If lot is already selected, show selection highlight
+          if (selectedLotIdsRef.current.has(dbId)) {
+            return SELECTION_STYLE;
+          }
+
+          return normalStyle;
         },
         onEachFeature: (feature, lyr) => {
           const props = feature.properties || {};
           const lotId = props.lot_id ?? props.parcelid ?? 'N/A';
           const area = props.Shape_Area ? props.Shape_Area.toFixed(2) : null;
           const status = props.status ?? 'available';
+          const dbId = props.db_id;
+
+          // Store layer + normal style ref for selection mode interactions
+          if (dbId != null) {
+            selectedLotLayersRef.current.set(dbId, { lyr, normalStyle: styleMap.get(dbId) });
+          }
 
           // Créer le contenu du tooltip
           const formatPrice = (price) => {
@@ -313,33 +345,49 @@ export default function ProjectDetailPage() {
 
           // Gestionnaire de clic
           lyr.on('click', () => {
-            setSelectedLot({
-              id: props.db_id || null,
-              lot_id: String(lotId),
-              numero: String(lotId),
-              status: status,
-              reserved_by: props.reserved_by ?? null,
-              reserved_by_user_id: props.reserved_by_user_id ?? null,
-              reserved_until: props.reserved_until ?? null,
-              surface: area ? parseFloat(area) : null,
-              price: props.price || null,
-              zone: props.zone || null,
-              client_id: props.client_id || null,
-              client_name: props.client_name || null,
-              client_phone: props.client_phone || null,
-              reservation_id: props.reservation_id || null,
-              reservation_date: props.reservation_date || null,
-              expiration_date: props.expiration_date || null,
-              deposit: props.deposit || 0,
-              days_in_status: props.days_in_status || 0,
-              sold_by_name: props.sold_by_name || null,
-              sale_date: props.sale_date || null,
-              // Metadata fields
-              type_lot: props.type_lot || null,
-              emplacement: props.emplacement || null,
-              type_maison: props.type_maison || null,
-            });
-            setShowModal(true);
+            if (selectionModeRef.current) {
+              // Selection mode: toggle lot selection
+              if (dbId == null) return;
+              const newSelected = new Set(selectedLotIdsRef.current);
+              const entry = selectedLotLayersRef.current.get(dbId);
+              if (newSelected.has(dbId)) {
+                newSelected.delete(dbId);
+                lyr.setStyle(entry?.normalStyle || { color: STATUS_COLORS[status] || '#999', weight: 2, fillColor: STATUS_COLORS[status] || '#999', fillOpacity: 0.5 });
+              } else {
+                newSelected.add(dbId);
+                lyr.setStyle(SELECTION_STYLE);
+              }
+              selectedLotIdsRef.current = newSelected;
+              setSelectedLotIds(new Set(newSelected));
+            } else {
+              // Normal mode: open detail modal
+              setSelectedLot({
+                id: props.db_id || null,
+                lot_id: String(lotId),
+                numero: String(lotId),
+                status: status,
+                reserved_by: props.reserved_by ?? null,
+                reserved_by_user_id: props.reserved_by_user_id ?? null,
+                reserved_until: props.reserved_until ?? null,
+                surface: area ? parseFloat(area) : null,
+                price: props.price || null,
+                zone: props.zone || null,
+                client_id: props.client_id || null,
+                client_name: props.client_name || null,
+                client_phone: props.client_phone || null,
+                reservation_id: props.reservation_id || null,
+                reservation_date: props.reservation_date || null,
+                expiration_date: props.expiration_date || null,
+                deposit: props.deposit || 0,
+                days_in_status: props.days_in_status || 0,
+                sold_by_name: props.sold_by_name || null,
+                sale_date: props.sale_date || null,
+                type_lot: props.type_lot || null,
+                emplacement: props.emplacement || null,
+                type_maison: props.type_maison || null,
+              });
+              setShowModal(true);
+            }
           });
         },
       }).addTo(mapRef.current);
@@ -359,19 +407,43 @@ export default function ProjectDetailPage() {
   const handleRefresh = async () => {
     if (activeTab === 'carte') {
       await loadLots();
-      // Force le recalcul des dimensions de la carte après le rechargement
       setTimeout(() => {
         if (mapRef.current) {
           mapRef.current.invalidateSize();
         }
       }, 150);
     }
-    loadProject();
+    loadProject(true); // silent: pas de spinner, la carte reste affichée
   };
 
   const closeModal = () => {
     setShowModal(false);
     setSelectedLot(null);
+  };
+
+  const toggleSelectionMode = () => {
+    if (selectionMode) {
+      // Exit: clear selections and reload to restore styles
+      setSelectionMode(false);
+      setSelectedLotIds(new Set());
+      selectedLotIdsRef.current = new Set();
+      loadLots();
+    } else {
+      // Enter: close any open modal
+      setShowModal(false);
+      setSelectedLot(null);
+      setSelectionMode(true);
+    }
+  };
+
+  const clearSelection = () => {
+    for (const [dbId, { lyr, normalStyle }] of selectedLotLayersRef.current) {
+      if (selectedLotIdsRef.current.has(dbId)) {
+        lyr.setStyle(normalStyle || { color: '#999', weight: 2, fillColor: '#999', fillOpacity: 0.5 });
+      }
+    }
+    setSelectedLotIds(new Set());
+    selectedLotIdsRef.current = new Set();
   };
 
   if (loading) {
@@ -447,7 +519,7 @@ export default function ProjectDetailPage() {
           />
         )}
 
-        {activeTab === 'carte' && (
+        <div style={{ display: activeTab === 'carte' ? 'block' : 'none' }}>
           <CarteTab
             mapContainerRef={mapContainerRef}
             mapRef={mapRef}
@@ -473,8 +545,14 @@ export default function ProjectDetailPage() {
             selectedLot={selectedLot}
             onCloseModal={closeModal}
             onRefresh={handleRefresh}
+            isManager={isManager()}
+            selectionMode={selectionMode}
+            selectedCount={selectedLotIds.size}
+            onToggleSelectionMode={toggleSelectionMode}
+            onClearSelection={clearSelection}
+            onOpenBulkModal={() => setShowBulkModal(true)}
           />
-        )}
+        </div>
 
         {activeTab === 'kpis' && <KPIsTab project={project} />}
 
@@ -493,6 +571,23 @@ export default function ProjectDetailPage() {
           lot={selectedLot}
           onClose={closeModal}
           onRefresh={handleRefresh}
+        />
+      )}
+
+      {/* Bulk Metadata Modal */}
+      {showBulkModal && (
+        <BulkMetadataModal
+          projectId={projectId}
+          selectedCount={selectedLotIds.size}
+          selectedLotIds={Array.from(selectedLotIds)}
+          onClose={() => setShowBulkModal(false)}
+          onSuccess={() => {
+            setShowBulkModal(false);
+            setSelectionMode(false);
+            setSelectedLotIds(new Set());
+            selectedLotIdsRef.current = new Set();
+            loadLots();
+          }}
         />
       )}
     </div>
@@ -525,6 +620,12 @@ function CarteTab({
   selectedLot,
   onCloseModal,
   onRefresh,
+  isManager,
+  selectionMode,
+  selectedCount,
+  onToggleSelectionMode,
+  onClearSelection,
+  onOpenBulkModal,
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
@@ -660,6 +761,21 @@ function CarteTab({
             )}
           </div>
           <div className="filters-actions">
+            {isManager && (
+              <button
+                className={`btn-selection-mode ${selectionMode ? 'active' : ''}`}
+                onClick={onToggleSelectionMode}
+                title={selectionMode ? 'Quitter la sélection multiple' : 'Activer la sélection multiple (manager)'}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/>
+                  <rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/>
+                  <path d="M17 17l2 2 4-4" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {selectionMode ? `Sélection (${selectedCount})` : 'Sélection'}
+              </button>
+            )}
             {hasActiveFilters && (
               <button className="btn-clear-filters" onClick={clearAllFilters}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -818,6 +934,37 @@ function CarteTab({
         )}
       </div>
 
+      {/* Selection Mode Action Bar */}
+      {selectionMode && (
+        <div className="selection-action-bar">
+          <div className="selection-info">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            {selectedCount === 0
+              ? 'Cliquez sur des lots pour les sélectionner'
+              : `${selectedCount} lot${selectedCount > 1 ? 's' : ''} sélectionné${selectedCount > 1 ? 's' : ''}`}
+          </div>
+          <div className="selection-actions">
+            {selectedCount > 0 && (
+              <>
+                <button className="btn-selection-clear" onClick={onClearSelection}>
+                  Désélectionner tout
+                </button>
+                <button className="btn-selection-edit" onClick={onOpenBulkModal}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  Modifier les métadonnées
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Map Container */}
       <div
         className="section-card carte-map-container"
@@ -945,7 +1092,7 @@ function KPIsTab({ project }) {
             <div className="kpis-hero-content">
               <div className="kpis-hero-value">{formatMoney(kpis?.ca_potentiel)}</div>
               <div className="kpis-hero-label">CA Potentiel</div>
-              <div className="kpis-hero-subtitle">Lots disponibles</div>
+              <div className="kpis-hero-subtitle">Lots réservés</div>
             </div>
           </div>
 
@@ -2189,6 +2336,164 @@ function ParametresTab({ project, onUpdate }) {
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Bulk Metadata Modal ────────────────────────────────────────────────────
+function BulkMetadataModal({ projectId, selectedCount, selectedLotIds, onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    type_lot: '',
+    emplacement: '',
+    type_maison: '',
+    price: '',
+    surface: '',
+    zone: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleChange = (field) => (e) => {
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    // Build payload with only non-empty fields
+    const payload = { lot_ids: selectedLotIds };
+    if (form.type_lot.trim()) payload.type_lot = form.type_lot.trim();
+    if (form.emplacement.trim()) payload.emplacement = form.emplacement.trim();
+    if (form.type_maison.trim()) payload.type_maison = form.type_maison.trim();
+    if (form.price !== '') payload.price = parseFloat(form.price);
+    if (form.surface !== '') payload.surface = parseFloat(form.surface);
+    if (form.zone.trim()) payload.zone = form.zone.trim();
+
+    if (Object.keys(payload).length === 1) {
+      setError('Veuillez renseigner au moins un champ à modifier.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await apiPatch(`/api/projects/${projectId}/lots/bulk-metadata`, payload);
+      onSuccess(result);
+    } catch (err) {
+      setError(err.message || 'Erreur lors de la mise à jour');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">
+            Modifier les métadonnées
+            <span style={{ fontSize: '0.75rem', fontWeight: 500, background: '#3b82f6', color: '#fff', borderRadius: '999px', padding: '2px 10px', marginLeft: 8 }}>
+              {selectedCount} lot{selectedCount > 1 ? 's' : ''}
+            </span>
+          </h2>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: 16, background: 'var(--color-bg-secondary)', padding: '8px 12px', borderRadius: 8 }}>
+              Seuls les champs renseignés seront modifiés. Les champs vides seront ignorés.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Type de lot</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="ex: Résidentiel, Commercial…"
+                  value={form.type_lot}
+                  onChange={handleChange('type_lot')}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Emplacement</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="ex: 2 façade, 3 façade…"
+                  value={form.emplacement}
+                  onChange={handleChange('emplacement')}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Type de maison</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="ex: Villa, Appartement…"
+                  value={form.type_maison}
+                  onChange={handleChange('type_maison')}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Zone</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="ex: A, B, Zone Nord…"
+                  value={form.zone}
+                  onChange={handleChange('zone')}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Prix (MAD)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="ex: 450000"
+                  min="0"
+                  step="1"
+                  value={form.price}
+                  onChange={handleChange('price')}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Surface (m²)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="ex: 120"
+                  min="0"
+                  step="0.01"
+                  value={form.surface}
+                  onChange={handleChange('surface')}
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>
+            )}
+          </div>
+
+          <div className="modal-footer">
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
+              Annuler
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving
+                ? 'Mise à jour…'
+                : `Appliquer aux ${selectedCount} lot${selectedCount > 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

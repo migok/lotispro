@@ -13,6 +13,7 @@ logger = get_logger(__name__)
 ModelType = TypeVar("ModelType", bound=Base)
 
 
+
 class BaseRepository(Generic[ModelType]):
     """Base repository providing common CRUD operations.
 

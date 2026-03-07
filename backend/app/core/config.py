@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ]
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: list[str] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
@@ -69,6 +71,13 @@ class Settings(BaseSettings):
     # File Storage
     DATA_DIR: Path = Path(__file__).resolve().parent.parent.parent / "data"
     MAX_UPLOAD_SIZE_MB: int = 10
+
+    # Supabase Configuration
+    SUPABASE_URL: str | None = None
+    SUPABASE_PUBLISHABLE_KEY: str | None = None
+    SUPABASE_SECRET_KEY: str | None = None
+    SUPABASE_STORAGE_URL: str | None = None
+    SUPABASE_STORAGE_BUCKET: str = "geojson-files"
 
     # Logging
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

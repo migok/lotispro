@@ -103,3 +103,16 @@ class LotFilter(BaseSchema):
     type_lot: str | None = None
     emplacement: str | None = None
     type_maison: str | None = None
+
+
+class LotBulkMetadataUpdate(BaseSchema):
+    """Schema for bulk metadata update on multiple lots (manager only)."""
+
+    lot_ids: list[int] = Field(min_length=1, description="List of lot IDs to update")
+    # Optional metadata fields — only non-None values will be applied
+    type_lot: str | None = Field(default=None, max_length=50, description="Type de lot")
+    emplacement: str | None = Field(default=None, max_length=50, description="Emplacement")
+    type_maison: str | None = Field(default=None, max_length=50, description="Type de maison")
+    price: float | None = Field(default=None, ge=0, description="Prix du lot")
+    surface: float | None = Field(default=None, ge=0, description="Surface en m²")
+    zone: str | None = Field(default=None, max_length=50, description="Zone")

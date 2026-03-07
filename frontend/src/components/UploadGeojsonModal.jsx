@@ -46,7 +46,7 @@ export default function UploadGeojsonModal({ project, onClose, onUploaded }) {
 
       const token = localStorage.getItem('auth_token');
       const response = await fetch(
-        `${API_BASE_URL}/api/projects/${project.id}/upload-geojson`,
+        `${API_BASE_URL}/api/projects/${project.id}/upload-geojson-file`,
         {
           method: 'POST',
           headers: {

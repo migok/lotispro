@@ -233,12 +233,8 @@ class ReservationService:
             status="released",
         )
 
-        # Update lot status
-        await self.lot_repo.update(
-            reservation.lot_id,
-            status="available",
-            current_reservation_id=None,
-        )
+        # Update lot status and clear current_reservation_id
+        await self.lot_repo.release_lot(reservation.lot_id, status="available")
 
         logger.info(
             "Reservation released",
@@ -380,12 +376,8 @@ class ReservationService:
             status="converted",
         )
 
-        # Update lot status
-        await self.lot_repo.update(
-            reservation.lot_id,
-            status="sold",
-            current_reservation_id=None,
-        )
+        # Update lot status and clear current_reservation_id
+        await self.lot_repo.release_lot(reservation.lot_id, status="sold")
 
         # Update project sold count
         project = await self.project_repo.get_by_id(reservation.project_id)
@@ -431,11 +423,7 @@ class ReservationService:
                 status="expired",
             )
 
-            await self.lot_repo.update(
-                reservation.lot_id,
-                status="available",
-                current_reservation_id=None,
-            )
+            await self.lot_repo.release_lot(reservation.lot_id, status="available")
 
             count += 1
 

@@ -48,6 +48,9 @@ dependencies = [
     # Utils
     "python-multipart>=0.0.9",
     "httpx>=0.27.0",
+
+    # Supabase
+    "supabase>=2.10.0",
 ]
 
 [project.optional-dependencies]
@@ -163,6 +166,7 @@ module = [
     "passlib.*",
     "bcrypt.*",
     "structlog.*",
+    "supabase.*",
 ]
 ignore_missing_imports = true
 

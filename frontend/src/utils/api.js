@@ -103,6 +103,23 @@ export const apiPut = async (endpoint, data) => {
 };
 
 /**
+ * PATCH request avec authentification
+ */
+export const apiPatch = async (endpoint, data) => {
+  const response = await apiFetch(endpoint, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+  const responseData = await response.json();
+
+  if (!response.ok) {
+    throw new Error(responseData.detail || responseData.message || `Erreur ${response.status}`);
+  }
+
+  return responseData;
+};
+
+/**
  * DELETE request avec authentification
  */
 export const apiDelete = async (endpoint) => {
@@ -155,6 +172,7 @@ export default {
   get: apiGet,
   post: apiPost,
   put: apiPut,
+  patch: apiPatch,
   delete: apiDelete,
   uploadFile: apiUploadFile,
 };

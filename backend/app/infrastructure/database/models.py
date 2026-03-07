@@ -92,6 +92,7 @@ class ProjectModel(Base):
     total_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     sold_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ca_objectif: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geojson_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id"),
