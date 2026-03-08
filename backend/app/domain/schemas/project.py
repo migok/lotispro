@@ -52,6 +52,7 @@ class ProjectResponse(BaseSchema):
     visibility: str
     total_lots: int
     sold_lots: int
+    reserved_lots: int = Field(default=0, description="Number of reserved lots")
     ca_objectif: float | None
     geojson_file_url: str | None = Field(
         default=None,

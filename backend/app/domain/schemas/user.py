@@ -18,6 +18,10 @@ class UserCreate(BaseSchema):
         description="User password (min 6 characters)",
     )
     name: str = Field(min_length=1, max_length=100, description="User display name")
+    first_name: str | None = Field(default=None, max_length=100, description="First name")
+    last_name: str | None = Field(default=None, max_length=100, description="Last name")
+    address: str | None = Field(default=None, max_length=255, description="Address")
+    company: str | None = Field(default=None, max_length=150, description="Company")
     role: Literal["manager", "commercial", "client"] = Field(
         default="client",
         description="User role in the system",
@@ -37,6 +41,10 @@ class UserResponse(BaseSchema):
     id: int
     email: str
     name: str
+    first_name: str | None = None
+    last_name: str | None = None
+    address: str | None = None
+    company: str | None = None
     role: str
     created_at: datetime
     updated_at: datetime

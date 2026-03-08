@@ -191,8 +191,12 @@ class LotRepository(BaseRepository[LotModel]):
 
         result = await self.session.execute(query)
         lots_data = []
+        seen_lot_ids: set[int] = set()
 
         for lot, reservation, client, reserved_by_user in result.all():
+            if lot.id in seen_lot_ids:
+                continue
+            seen_lot_ids.add(lot.id)
             # Calculate days_in_status based on the lot's updated_at timestamp
             if lot.updated_at:
                 lot_updated = lot.updated_at

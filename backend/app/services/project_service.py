@@ -83,6 +83,20 @@ class ProjectService:
             )
             ca_objectifs = {row[0]: float(row[1]) for row in result.all()}
 
+            # Get reserved lots count grouped by project
+            reserved_result = await self.session.execute(
+                select(
+                    LotModel.project_id,
+                    func.count(LotModel.id).label("reserved_count")
+                ).where(
+                    LotModel.project_id.in_(project_ids),
+                    LotModel.status == "reserved",
+                ).group_by(LotModel.project_id)
+            )
+            reserved_lots_map = {row[0]: row[1] for row in reserved_result.all()}
+        else:
+            reserved_lots_map = {}
+
         return [
             ProjectResponse(
                 id=p.id,
@@ -91,6 +105,7 @@ class ProjectService:
                 visibility=p.visibility,
                 total_lots=p.total_lots,
                 sold_lots=p.sold_lots,
+                reserved_lots=reserved_lots_map.get(p.id, 0),
                 ca_objectif=ca_objectifs.get(p.id, 0.0),
                 created_by=p.created_by,
                 created_at=p.created_at,
@@ -141,6 +156,15 @@ class ProjectService:
         )
         ca_objectif = float(ca_objectif_result.scalar() or 0)
 
+        # Count reserved lots
+        reserved_result = await self.session.execute(
+            select(func.count(LotModel.id)).where(
+                LotModel.project_id == project_id,
+                LotModel.status == "reserved",
+            )
+        )
+        reserved_lots = reserved_result.scalar() or 0
+
         return ProjectResponse(
             id=project.id,
             name=project.name,
@@ -148,6 +172,7 @@ class ProjectService:
             visibility=project.visibility,
             total_lots=project.total_lots,
             sold_lots=project.sold_lots,
+            reserved_lots=reserved_lots,
             ca_objectif=ca_objectif,
             created_by=project.created_by,
             created_at=project.created_at,

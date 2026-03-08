@@ -48,10 +48,6 @@ class Settings(BaseSettings):
     DATABASE_MAX_OVERFLOW: int = 10
     DATABASE_POOL_TIMEOUT: int = 30
 
-    # SQLite fallback for development/testing
-    SQLITE_URL: str | None = None
-    USE_SQLITE: bool = False
-
     # CORS
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
@@ -101,13 +97,6 @@ class Settings(BaseSettings):
         path = Path(v)
         path.mkdir(parents=True, exist_ok=True)
         return path
-
-    @property
-    def database_url_sync(self) -> str:
-        """Return synchronous database URL for Alembic migrations."""
-        if self.USE_SQLITE and self.SQLITE_URL:
-            return self.SQLITE_URL.replace("+aiosqlite", "")
-        return str(self.DATABASE_URL).replace("+asyncpg", "+psycopg2")
 
     @property
     def is_production(self) -> bool:

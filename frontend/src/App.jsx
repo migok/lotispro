@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import "./styles.css";
+import { useTheme } from "./hooks/useTheme";
 
 // Import contexts
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -10,10 +11,55 @@ import { ToastProvider } from "./contexts/ToastContext";
 import ClientsPage from "./components/ClientsPage";
 import ClientDetailPage from "./components/ClientDetailPage";
 import CommercialsPage from "./components/CommercialsPage";
+import ManagersPage from "./components/ManagersPage";
 import Login from "./components/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProjectsPage from "./components/ProjectsPage";
 import ProjectDetailPage from "./components/ProjectDetailPage";
+
+// SVG Icons
+const IconProjects = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="7" height="6" rx="1"/>
+    <rect x="11" y="4" width="7" height="6" rx="1"/>
+    <rect x="2" y="12" width="7" height="4" rx="1"/>
+    <rect x="11" y="12" width="7" height="4" rx="1"/>
+  </svg>
+);
+
+const IconClients = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="7.5" cy="6" r="3"/>
+    <path d="M1 17c0-3.3 2.9-6 6.5-6"/>
+    <circle cx="14" cy="7" r="2.5"/>
+    <path d="M19 17c0-2.8-2.2-5-5-5s-5 2.2-5 5"/>
+  </svg>
+);
+
+const IconCommerciaux = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="7" width="14" height="10" rx="1"/>
+    <path d="M7 7V5a3 3 0 016 0v2"/>
+    <path d="M10 12v2"/>
+    <circle cx="10" cy="11" r="1" fill="currentColor" stroke="none"/>
+  </svg>
+);
+
+const IconManagers = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="10" cy="6" r="3.5"/>
+    <path d="M3 18c0-3.9 3.1-7 7-7s7 3.1 7 7"/>
+    <path d="M14 3l1.5 1.5L18 2"/>
+  </svg>
+);
+
+const IconLogout = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M13 3h4a1 1 0 011 1v12a1 1 0 01-1 1h-4"/>
+    <path d="M8 14l4-4-4-4"/>
+    <path d="M12 10H3"/>
+  </svg>
+);
 
 // Navigation items with role-based access
 const NAV_ITEMS = [
@@ -21,21 +67,28 @@ const NAV_ITEMS = [
     id: "projects",
     path: "/projects",
     label: "Projets",
-    icon: "📁",
+    Icon: IconProjects,
     allowedRoles: ["manager", "commercial"]
   },
   {
     id: "clients",
     path: "/clients",
     label: "Clients",
-    icon: "👥",
+    Icon: IconClients,
     allowedRoles: ["manager", "commercial"]
   },
   {
     id: "commerciaux",
     path: "/commerciaux",
     label: "Commerciaux",
-    icon: "👔",
+    Icon: IconCommerciaux,
+    allowedRoles: ["manager"]
+  },
+  {
+    id: "managers",
+    path: "/managers",
+    label: "Managers",
+    Icon: IconManagers,
     allowedRoles: ["manager"]
   },
 ];
@@ -44,6 +97,7 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Déterminer la page actuelle depuis l'URL
@@ -74,7 +128,12 @@ function AppContent() {
       <aside className={`sidebar ${mobileMenuOpen ? 'sidebar-mobile-open' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <span>🏗️</span>
+            <div className="sidebar-logo-mark" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M2 14L8 2L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--color-primary)'}}/>
+                <path d="M4.5 10H11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={{color: 'var(--color-primary)'}}/>
+              </svg>
+            </div>
             <span>LotisPro</span>
           </div>
         </div>
@@ -89,38 +148,48 @@ function AppContent() {
               className={`nav-item ${currentPage === item.id ? "active" : ""}`}
               onClick={closeMobileMenu}
             >
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
+              <item.Icon />
+              <span className="nav-label">{item.label}</span>
             </Link>
           ))}
         </nav>
 
-        <div className="p-md border-top">
+        <div style={{ padding: 'var(--spacing-md)', borderTop: '1px solid var(--border-subtle)' }}>
           {/* User Info */}
           {user && (
-            <div className="mb-md">
-              <div className="text-sm text-secondary font-semibold">
+            <div style={{ marginBottom: 'var(--spacing-md)' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '2px' }}>
                 {user.name}
               </div>
-              <div className="text-xs text-muted">
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '2px' }}>
                 {user.email}
               </div>
-              <div className="text-xs text-muted mt-xs uppercase">
+              <div style={{ fontSize: '0.68rem', color: 'var(--color-primary)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 500 }}>
                 {user.role}
               </div>
             </div>
           )}
 
+          {/* Theme Toggle */}
+          <button onClick={toggleTheme} className="theme-toggle" title={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}>
+            <span>{theme === 'dark' ? 'Mode clair' : 'Mode sombre'}</span>
+            <div className={`theme-toggle-track ${theme === 'light' ? 'on' : ''}`}>
+              <div className="theme-toggle-thumb" />
+            </div>
+          </button>
+
           {/* Logout Button */}
           <button
             onClick={handleLogout}
-            className="btn btn-ghost w-full text-sm p-sm mb-md"
+            className="nav-item"
+            style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 'var(--spacing-sm)' }}
           >
-            🚪 Déconnexion
+            <IconLogout />
+            <span className="nav-label">Déconnexion</span>
           </button>
 
-          <div className="text-xs text-muted">
-            LotisPro v2.0
+          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            v2.0
           </div>
         </div>
       </aside>
@@ -167,6 +236,14 @@ function AppContent() {
             element={
               <ProtectedRoute allowedRoles={["manager"]}>
                 <CommercialsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/managers"
+            element={
+              <ProtectedRoute allowedRoles={["manager"]}>
+                <ManagersPage />
               </ProtectedRoute>
             }
           />

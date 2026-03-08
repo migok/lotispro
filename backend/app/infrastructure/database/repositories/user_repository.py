@@ -68,6 +68,10 @@ class UserRepository(BaseRepository[UserModel]):
         password_hash: str,
         name: str,
         role: str,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        address: str | None = None,
+        company: str | None = None,
     ) -> UserModel:
         """Create a new user.
 
@@ -76,6 +80,10 @@ class UserRepository(BaseRepository[UserModel]):
             password_hash: Hashed password
             name: User display name
             role: User role
+            first_name: Optional first name
+            last_name: Optional last name
+            address: Optional address
+            company: Optional company
 
         Returns:
             Created user model
@@ -85,4 +93,8 @@ class UserRepository(BaseRepository[UserModel]):
             password_hash=password_hash,
             name=name,
             role=role,
+            first_name=first_name,
+            last_name=last_name,
+            address=address,
+            company=company,
         )

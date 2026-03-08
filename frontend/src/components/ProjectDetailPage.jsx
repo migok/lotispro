@@ -44,6 +44,7 @@ export default function ProjectDetailPage() {
   // Map state
   const mapRef = useRef(null);
   const geoRef = useRef(null);
+  const labelsLayerRef = useRef(null);
   const mapContainerRef = useRef(null);
   const [stats, setStats] = useState({ available: 0, reserved: 0, sold: 0, blocked: 0 });
   const [filterStatus, setFilterStatus] = useState(null);
@@ -94,6 +95,17 @@ export default function ProjectDetailPage() {
           maxZoom: 22,
           attribution: '&copy; OpenStreetMap contributors',
         }).addTo(map);
+
+        // Pane dédié aux labels de numéros de lots
+        map.createPane('labelsPane');
+        map.getPane('labelsPane').style.zIndex = 450;
+        map.getPane('labelsPane').style.pointerEvents = 'none';
+        map.getPane('labelsPane').style.display = 'none'; // caché par défaut
+
+        map.on('zoomend', () => {
+          const pane = map.getPane('labelsPane');
+          if (pane) pane.style.display = map.getZoom() >= 19 ? '' : 'none';
+        });
 
         loadLots();
       } else {
@@ -393,6 +405,29 @@ export default function ProjectDetailPage() {
       }).addTo(mapRef.current);
 
       geoRef.current = layer;
+
+      // Labels numéros de lots — dans le pane dédié (visibilité gérée par zoomend)
+      if (labelsLayerRef.current) labelsLayerRef.current.remove();
+      const labelsLayer = L.layerGroup();
+      labelsLayerRef.current = labelsLayer;
+      layer.eachLayer((lyr) => {
+        const props = lyr.feature?.properties || {};
+        const lotId = props.lot_id ?? props.parcelid ?? null;
+        if (lotId == null) return;
+        const center = lyr.getBounds().getCenter();
+        const marker = L.marker(center, {
+          pane: 'labelsPane',
+          icon: L.divIcon({
+            className: 'lot-label-icon',
+            html: `<span class="lot-label-text">${lotId}</span>`,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          }),
+          interactive: false,
+        });
+        labelsLayer.addLayer(marker);
+      });
+      labelsLayer.addTo(mapRef.current); // toujours sur la carte, visibilité via le pane
 
       try {
         mapRef.current.fitBounds(layer.getBounds());
