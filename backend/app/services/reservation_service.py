@@ -15,6 +15,7 @@ from app.domain.schemas.sale import SaleFromReservation, SaleResponse
 from app.infrastructure.database.repositories import (
     ClientRepository,
     LotRepository,
+    PaymentRepository,
     ProjectRepository,
     ReservationRepository,
     SaleRepository,
@@ -34,6 +35,7 @@ class ReservationService:
         self.client_repo = ClientRepository(session)
         self.project_repo = ProjectRepository(session)
         self.sale_repo = SaleRepository(session)
+        self.payment_repo = PaymentRepository(session)
 
     async def get_reservations(
         self,
@@ -236,6 +238,9 @@ class ReservationService:
         # Update lot status and clear current_reservation_id
         await self.lot_repo.release_lot(reservation.lot_id, status="available")
 
+        # Delete associated payment schedule if any
+        await self.payment_repo.delete_by_reservation(reservation_id)
+
         logger.info(
             "Reservation released",
             reservation_id=reservation_id,
@@ -424,6 +429,7 @@ class ReservationService:
             )
 
             await self.lot_repo.release_lot(reservation.lot_id, status="available")
+            await self.payment_repo.delete_by_reservation(reservation.id)
 
             count += 1
 

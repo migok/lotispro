@@ -61,6 +61,8 @@ export default function ProjectDetailPage() {
   // Modal state
   const [selectedLot, setSelectedLot] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
+  const [modalInitialMode, setModalInitialMode] = useState(null);
 
   // Selection mode for bulk metadata edit (manager only)
   const [selectionMode, setSelectionMode] = useState(false);
@@ -398,7 +400,7 @@ export default function ProjectDetailPage() {
                 emplacement: props.emplacement || null,
                 type_maison: props.type_maison || null,
               });
-              setShowModal(true);
+              setShowPopup(true);
             }
           });
         },
@@ -454,6 +456,18 @@ export default function ProjectDetailPage() {
   const closeModal = () => {
     setShowModal(false);
     setSelectedLot(null);
+    setModalInitialMode(null);
+  };
+
+  const closePopup = () => {
+    setShowPopup(false);
+    setSelectedLot(null);
+  };
+
+  const openFullModal = (mode = null) => {
+    setModalInitialMode(mode);
+    setShowPopup(false);
+    setShowModal(true);
   };
 
   const toggleSelectionMode = () => {
@@ -466,6 +480,7 @@ export default function ProjectDetailPage() {
     } else {
       // Enter: close any open modal
       setShowModal(false);
+      setShowPopup(false);
       setSelectedLot(null);
       setSelectionMode(true);
     }
@@ -577,8 +592,12 @@ export default function ProjectDetailPage() {
             setFilterTypeMaison={setFilterTypeMaison}
             metadataOptions={metadataOptions}
             showModal={showModal}
+            showPopup={showPopup}
             selectedLot={selectedLot}
+            modalInitialMode={modalInitialMode}
             onCloseModal={closeModal}
+            onClosePopup={closePopup}
+            onOpenFullModal={openFullModal}
             onRefresh={handleRefresh}
             isManager={isManager()}
             selectionMode={selectionMode}
@@ -606,6 +625,7 @@ export default function ProjectDetailPage() {
           lot={selectedLot}
           onClose={closeModal}
           onRefresh={handleRefresh}
+          initialMode={modalInitialMode}
         />
       )}
 
@@ -652,8 +672,12 @@ function CarteTab({
   setFilterTypeMaison,
   metadataOptions,
   showModal,
+  showPopup,
   selectedLot,
+  modalInitialMode,
   onCloseModal,
+  onClosePopup,
+  onOpenFullModal,
   onRefresh,
   isManager,
   selectionMode,
@@ -719,22 +743,28 @@ function CarteTab({
     }
 
     // Redimensionner la carte après le changement
-    setTimeout(() => {
-      if (mapRef?.current) {
-        mapRef.current.invalidateSize();
-      }
-    }, 100);
+    [150, 400, 700].forEach((delay) => {
+      setTimeout(() => {
+        if (mapRef?.current) {
+          mapRef.current.invalidateSize();
+        }
+      }, delay);
+    });
   };
 
   // Écouter les changements de fullscreen (ex: touche Échap)
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
-      setTimeout(() => {
-        if (mapRef?.current) {
-          mapRef.current.invalidateSize();
-        }
-      }, 100);
+      // Call invalidateSize at multiple intervals to ensure the map renders
+      // after the fullscreen transition (which can take 200-400ms)
+      [150, 350, 600].forEach((delay) => {
+        setTimeout(() => {
+          if (mapRef?.current) {
+            mapRef.current.invalidateSize();
+          }
+        }, delay);
+      });
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -1001,16 +1031,28 @@ function CarteTab({
       )}
 
       {/* Map Container */}
-      <div
-        className="section-card carte-map-container"
-        style={{
-          padding: 0,
-          overflow: 'hidden',
-          height: isFullscreen ? 'calc(100vh - 120px)' : 'calc(100vh - 300px)',
-          minHeight: 500
-        }}
-      >
-        <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+      <div style={{ position: 'relative' }}>
+        <div
+          className="section-card carte-map-container"
+          style={{
+            padding: 0,
+            overflow: 'hidden',
+            height: isFullscreen ? 'calc(100vh - 120px)' : 'calc(100vh - 300px)',
+            minHeight: 500
+          }}
+        >
+          <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+        </div>
+
+        {/* Compact popup card on lot click */}
+        {showPopup && selectedLot && (
+          <LotMapPopup
+            lot={selectedLot}
+            onClose={onClosePopup}
+            onViewDetails={onOpenFullModal}
+            isManager={isManager}
+          />
+        )}
       </div>
 
       {/* Modal inside CarteTab for fullscreen support */}
@@ -1019,8 +1061,147 @@ function CarteTab({
           lot={selectedLot}
           onClose={onCloseModal}
           onRefresh={onRefresh}
+          initialMode={modalInitialMode}
         />
       )}
+
+    </div>
+  );
+}
+
+// ============================================================
+// Lot Map Popup — compact card overlay on map click
+// ============================================================
+function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
+  const STATUS_CONFIG = {
+    available: { label: 'Disponible', color: '#2ecc71', bg: 'rgba(46,204,113,0.12)' },
+    reserved:  { label: 'Réservé',    color: '#e8a93a', bg: 'rgba(232,169,58,0.12)' },
+    sold:      { label: 'Vendu',      color: '#8896ae', bg: 'rgba(136,150,174,0.12)' },
+    blocked:   { label: 'Bloqué',     color: '#e05555', bg: 'rgba(224,85,85,0.12)'  },
+  };
+  const conf = STATUS_CONFIG[lot.status] || STATUS_CONFIG.available;
+  const priceM2 = lot.price && lot.surface && lot.surface > 0
+    ? Math.round(lot.price / lot.surface)
+    : null;
+
+  return (
+    <div className="lot-map-popup">
+      {/* Header */}
+      <div className="lot-map-popup-header">
+        <div className="lot-map-popup-id">
+          <span className="lot-map-popup-eyebrow">Lot</span>
+          <span className="lot-map-popup-number">{lot.numero}</span>
+        </div>
+        <button className="lot-map-popup-close" onClick={onClose} aria-label="Fermer">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Status pill */}
+      <div className="lot-map-popup-status-wrap">
+        <span className="lot-map-popup-status" style={{ color: conf.color, background: conf.bg }}>
+          <span className="lot-map-popup-status-dot" style={{ background: conf.color }} />
+          {conf.label}
+        </span>
+      </div>
+
+      {/* Stats row */}
+      <div className="lot-map-popup-stats">
+        {lot.surface && (
+          <div className="lot-map-popup-stat">
+            <span className="lot-map-popup-stat-value">{lot.surface}</span>
+            <span className="lot-map-popup-stat-unit">m²</span>
+            <span className="lot-map-popup-stat-label">Surface</span>
+          </div>
+        )}
+        {lot.price && (
+          <div className="lot-map-popup-stat lot-map-popup-stat--accent">
+            <span className="lot-map-popup-stat-value">{lot.price.toLocaleString('fr-FR')}</span>
+            <span className="lot-map-popup-stat-unit">MAD</span>
+            <span className="lot-map-popup-stat-label">Prix</span>
+          </div>
+        )}
+        {priceM2 && (
+          <div className="lot-map-popup-stat">
+            <span className="lot-map-popup-stat-value">{priceM2.toLocaleString('fr-FR')}</span>
+            <span className="lot-map-popup-stat-unit">MAD/m²</span>
+            <span className="lot-map-popup-stat-label">Prix/m²</span>
+          </div>
+        )}
+      </div>
+
+      {/* Meta info */}
+      {lot.zone && (
+        <div className="lot-map-popup-meta">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+          </svg>
+          Zone {lot.zone}
+        </div>
+      )}
+
+      {lot.status === 'reserved' && lot.client_name && (
+        <div className="lot-map-popup-meta">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          {lot.client_name}
+          {lot.expiration_date && (
+            <span className="lot-map-popup-expire">
+              exp. {new Date(lot.expiration_date).toLocaleDateString('fr-FR')}
+            </span>
+          )}
+        </div>
+      )}
+
+      {lot.status === 'sold' && lot.sold_by_name && (
+        <div className="lot-map-popup-meta">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Vendu par {lot.sold_by_name}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="lot-map-popup-actions">
+        {lot.status === 'available' && (
+          <button className="lot-map-popup-btn lot-map-popup-btn--primary" onClick={() => onViewDetails('reserve')}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+            </svg>
+            Réserver
+          </button>
+        )}
+        {lot.status === 'reserved' && (
+          <button className="lot-map-popup-btn lot-map-popup-btn--primary" onClick={() => onViewDetails('sell')}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Finaliser
+          </button>
+        )}
+        <button className="lot-map-popup-btn lot-map-popup-btn--outline" onClick={() => onViewDetails(null)}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+          Voir détails
+        </button>
+        {isManager && (
+          <button
+            className="lot-map-popup-btn lot-map-popup-btn--icon"
+            onClick={() => onViewDetails(null)}
+            title="Modifier"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -2422,111 +2603,209 @@ function BulkMetadataModal({ projectId, selectedCount, selectedLotIds, onClose, 
     }
   };
 
+  const filledCount = Object.values(form).filter(v => v !== '').length;
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">
-            Modifier les métadonnées
-            <span style={{ fontSize: '0.75rem', fontWeight: 500, background: '#3b82f6', color: '#fff', borderRadius: '999px', padding: '2px 10px', marginLeft: 8 }}>
+    <div className="bm-overlay" onClick={onClose}>
+      <div className="bm-panel" onClick={(e) => e.stopPropagation()}>
+
+        {/* ── Header ── */}
+        <div className="bm-header">
+          <div className="bm-header-left">
+            <div className="bm-header-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </div>
+            <div>
+              <div className="bm-title">Modifier les métadonnées</div>
+              <div className="bm-subtitle">Modification en lot · champs vides ignorés</div>
+            </div>
+          </div>
+          <div className="bm-header-right">
+            <span className="bm-count-badge">
               {selectedCount} lot{selectedCount > 1 ? 's' : ''}
             </span>
-          </h2>
-          <button className="modal-close" onClick={onClose}>✕</button>
+            <button className="bm-close" onClick={onClose} aria-label="Fermer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: 16, background: 'var(--color-bg-secondary)', padding: '8px 12px', borderRadius: 8 }}>
-              Seuls les champs renseignés seront modifiés. Les champs vides seront ignorés.
-            </p>
+          <div className="bm-body">
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group">
-                <label className="form-label">Type de lot</label>
+            {/* ── Section: Descriptif ── */}
+            <div className="bm-section-label">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              Descriptif
+            </div>
+            <div className="bm-grid">
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                  </svg>
+                  Type de lot
+                </label>
                 <input
                   type="text"
-                  className="form-input"
-                  placeholder="ex: Résidentiel, Commercial…"
+                  className={`bm-input${form.type_lot ? ' bm-input--filled' : ''}`}
+                  placeholder="Résidentiel, Commercial…"
                   value={form.type_lot}
                   onChange={handleChange('type_lot')}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Emplacement</label>
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  Emplacement
+                </label>
                 <input
                   type="text"
-                  className="form-input"
-                  placeholder="ex: 2 façade, 3 façade…"
+                  className={`bm-input${form.emplacement ? ' bm-input--filled' : ''}`}
+                  placeholder="2 façade, 3 façade…"
                   value={form.emplacement}
                   onChange={handleChange('emplacement')}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Type de maison</label>
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                    <polyline points="9 22 9 12 15 12 15 22"/>
+                  </svg>
+                  Type de maison
+                </label>
                 <input
                   type="text"
-                  className="form-input"
-                  placeholder="ex: Villa, Appartement…"
+                  className={`bm-input${form.type_maison ? ' bm-input--filled' : ''}`}
+                  placeholder="Villa, Appartement…"
                   value={form.type_maison}
                   onChange={handleChange('type_maison')}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Zone</label>
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                    <polyline points="2 17 12 22 22 17"/>
+                    <polyline points="2 12 12 17 22 12"/>
+                  </svg>
+                  Zone
+                </label>
                 <input
                   type="text"
-                  className="form-input"
-                  placeholder="ex: A, B, Zone Nord…"
+                  className={`bm-input${form.zone ? ' bm-input--filled' : ''}`}
+                  placeholder="A, B, Zone Nord…"
                   value={form.zone}
                   onChange={handleChange('zone')}
                 />
               </div>
+            </div>
 
-              <div className="form-group">
-                <label className="form-label">Prix (MAD)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  placeholder="ex: 450000"
-                  min="0"
-                  step="1"
-                  value={form.price}
-                  onChange={handleChange('price')}
-                />
+            {/* ── Section: Valeurs ── */}
+            <div className="bm-section-label" style={{ marginTop: 20 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+              Valeurs numériques
+            </div>
+            <div className="bm-grid">
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                  </svg>
+                  Prix (MAD)
+                </label>
+                <div className="bm-input-wrap">
+                  <input
+                    type="number"
+                    className={`bm-input bm-input--num${form.price ? ' bm-input--filled' : ''}`}
+                    placeholder="450 000"
+                    min="0"
+                    step="1"
+                    value={form.price}
+                    onChange={handleChange('price')}
+                  />
+                  <span className="bm-input-unit">MAD</span>
+                </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Surface (m²)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  placeholder="ex: 120"
-                  min="0"
-                  step="0.01"
-                  value={form.surface}
-                  onChange={handleChange('surface')}
-                />
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                  </svg>
+                  Surface (m²)
+                </label>
+                <div className="bm-input-wrap">
+                  <input
+                    type="number"
+                    className={`bm-input bm-input--num${form.surface ? ' bm-input--filled' : ''}`}
+                    placeholder="120"
+                    min="0"
+                    step="0.01"
+                    value={form.surface}
+                    onChange={handleChange('surface')}
+                  />
+                  <span className="bm-input-unit">m²</span>
+                </div>
               </div>
             </div>
 
             {error && (
-              <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>
+              <div className="bm-error">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                {error}
+              </div>
             )}
           </div>
 
-          <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
-              Annuler
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving
-                ? 'Mise à jour…'
-                : `Appliquer aux ${selectedCount} lot${selectedCount > 1 ? 's' : ''}`}
-            </button>
+          {/* ── Footer ── */}
+          <div className="bm-footer">
+            {filledCount > 0 && (
+              <span className="bm-filled-hint">
+                {filledCount} champ{filledCount > 1 ? 's' : ''} renseigné{filledCount > 1 ? 's' : ''}
+              </span>
+            )}
+            <div className="bm-footer-actions">
+              <button type="button" className="bm-btn-cancel" onClick={onClose} disabled={saving}>
+                Annuler
+              </button>
+              <button type="submit" className="bm-btn-submit" disabled={saving}>
+                {saving ? (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="bm-spin">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                    </svg>
+                    Mise à jour…
+                  </>
+                ) : (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Appliquer aux {selectedCount} lot{selectedCount > 1 ? 's' : ''}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>

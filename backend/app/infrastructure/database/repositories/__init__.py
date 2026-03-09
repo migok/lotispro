@@ -4,6 +4,7 @@ from app.infrastructure.database.repositories.audit_repository import AuditLogRe
 from app.infrastructure.database.repositories.base import BaseRepository
 from app.infrastructure.database.repositories.client_repository import ClientRepository
 from app.infrastructure.database.repositories.lot_repository import LotRepository
+from app.infrastructure.database.repositories.payment_repository import PaymentRepository
 from app.infrastructure.database.repositories.project_repository import ProjectRepository
 from app.infrastructure.database.repositories.reservation_repository import (
     ReservationRepository,
@@ -20,4 +21,5 @@ __all__ = [
     "ClientRepository",
     "ReservationRepository",
     "SaleRepository",
+    "PaymentRepository",
 ]

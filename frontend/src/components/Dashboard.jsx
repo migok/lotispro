@@ -19,7 +19,8 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const { user, isManager, isCommercial, isClient } = useAuth();
   const toast = useToast();
   const [stats, setStats] = useState(null);
-  const [lots, setLots] = useState([]);
+  const [lots, setLots] = useState([]);        // lots filtrés par user (pour la table)
+  const [allLots, setAllLots] = useState([]);  // tous les lots du projet (pour le graphe catégorie)
   const [alerts, setAlerts] = useState({ reservations: [], summary: {} });
   const [performance, setPerformance] = useState(null);
   const [clientsPipeline, setClientsPipeline] = useState([]);
@@ -35,6 +36,14 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [selectedStatuses, setSelectedStatuses] = useState(['sold', 'reserved', 'blocked']); // Filtre par statut (pas de disponible)
+
+  // Répartition par catégorie
+  const [catRepTab, setCatRepTab] = useState('type_lot'); // 'type_lot' | 'emplacement' | 'type_maison' | 'zone'
+
+  // Graphe mensuel
+  const [monthlyBreakdown, setMonthlyBreakdown] = useState([]);
+  const [hoveredMonth, setHoveredMonth] = useState(null);
+  const [chartMode, setChartMode] = useState('nombre'); // 'nombre' | 'montant'
 
   // Modal de vente
   const [showSaleModal, setShowSaleModal] = useState(false);
@@ -126,21 +135,35 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       const perfParams = new URLSearchParams(params);
       perfParams.set('period', 'month');
 
+      // Tous les lots du projet sans filtre user (pour le graphe de répartition par catégorie)
+      const allLotsParams = new URLSearchParams();
+      if (effectiveProjectId) allLotsParams.append('project_id', effectiveProjectId);
+      const allLotsQueryString = allLotsParams.toString() ? `?${allLotsParams.toString()}` : '';
+
       const baseRequests = [
         apiGet(`/api/dashboard/stats${queryString}`),
         apiGet(`/api/dashboard/lots${queryString}`),
         apiGet(`/api/dashboard/alerts?${alertsParams.toString()}`),
         apiGet(`/api/dashboard/performance?${perfParams.toString()}`),
         apiGet(`/api/dashboard/clients-pipeline${queryString}`),
+        apiGet(`/api/dashboard/lots${allLotsQueryString}`),
       ];
 
-      const [statsData, lotsData, alertsData, perfData, clientsData] = await Promise.all(baseRequests);
+      const monthlyParams = new URLSearchParams(params);
+      monthlyParams.set('months_back', '6');
+
+      const [statsData, lotsData, alertsData, perfData, clientsData, allLotsData, monthlyData] = await Promise.all([
+        ...baseRequests,
+        apiGet(`/api/dashboard/monthly-breakdown?${monthlyParams.toString()}`),
+      ]);
 
       setStats(statsData);
       setLots(lotsData);
+      setAllLots(allLotsData);
       setAlerts(alertsData);
       setPerformance(perfData);
       setClientsPipeline(clientsData);
+      setMonthlyBreakdown(monthlyData || []);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -482,7 +505,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
             <span className="kpis-section-icon">💰</span>
             {isCommercial() ? 'Ma Performance' : 'Performance Financière'}
           </h3>
-          <span className="kpis-section-badge">{formatNumber(stats?.ca_total, 'MAD')} total</span>
+          <span className="kpis-section-badge">
+            {formatNumber(stats?.ca_total, 'MAD')} total
+            <span className="kpis-info-icon" title="Valeur totale du portefeuille — somme des prix de tous les lots (vendus, réservés, disponibles, bloqués)">ⓘ</span>
+          </span>
         </div>
 
         <div className="kpis-stock-grid">
@@ -661,95 +687,432 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         </div>
       </div>
 
-      {/* Répartition par Catégorie */}
-      <div className="kpis-categories-section" style={{ marginBottom: 'var(--spacing-lg)' }}>
-        <div className="kpis-section-header" style={{ marginBottom: 'var(--spacing-md)' }}>
-          <h3>
-            <span className="kpis-section-icon">📊</span>
-            Répartition par Catégorie
-          </h3>
-        </div>
+      {/* ── BRIQUE 1 : Répartition par catégorie ─────────────────────── */}
+      {(() => {
+        const CAT_TABS = [
+          {
+            key: 'type_lot', label: 'Type de Lot', ex: 'Résidentiel, Commercial…',
+            icon: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>,
+          },
+          {
+            key: 'emplacement', label: 'Emplacement', ex: '2 façades, 3 façades…',
+            icon: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2C5.8 2 4 3.8 4 6c0 3.3 4 8 4 8s4-4.7 4-8c0-2.2-1.8-4-4-4z"/><circle cx="8" cy="6" r="1.5"/></svg>,
+          },
+          {
+            key: 'type_maison', label: 'Type de Maison', ex: 'Villa, Appartement…',
+            icon: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7L8 2l6 5"/><path d="M3 7v6h4v-3h2v3h4V7"/></svg>,
+          },
+          {
+            key: 'zone', label: 'Zone', ex: 'A, B, C…',
+            icon: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 2h7l3 3v9H3V2z"/><path d="M10 2v3h3"/></svg>,
+          },
+        ];
 
-        <div className="kpis-categories-grid">
-          {/* Par Type de Lot */}
-          <div className="kpis-section-v2">
+        // Mode : vue commerciale (filtre user actif) ou vue globale
+        const hasUserFilter = isCommercial() || !!selectedUserId;
+        // IDs des lots appartenant au commercial/user filtré
+        const myLotIds = hasUserFilter ? new Set(lots.map(l => l.id)) : null;
+        // Base = TOUS les lots du projet (pas filtrés par user)
+        const chartLots = allLots.length > 0 ? allLots : lots;
+
+        // Agrégation sur tous les lots du projet
+        const groups = {};
+        chartLots.forEach(lot => {
+          const key = lot[catRepTab] || 'Non défini';
+          if (!groups[key]) {
+            groups[key] = {
+              name: key,
+              // Compteurs globaux (toujours présents)
+              sold: 0, reserved: 0, available: 0, blocked: 0,
+              amount_sold: 0, amount_reserved: 0, amount_available: 0, amount_blocked: 0,
+              // Compteurs "mon portefeuille" (vue commerciale)
+              mine_sold: 0, mine_reserved: 0,
+              amount_mine_sold: 0, amount_mine_reserved: 0,
+              // Lots des autres commerciaux
+              others: 0, amount_others: 0,
+              amount_total: 0,
+            };
+          }
+          const price = parseFloat(lot.price) || 0;
+          groups[key].amount_total += price;
+
+          if (hasUserFilter) {
+            const isMine = myLotIds.has(lot.id);
+            if (isMine && lot.status === 'sold') {
+              groups[key].mine_sold++;
+              groups[key].amount_mine_sold += price;
+              groups[key].sold++;
+              groups[key].amount_sold += price;
+            } else if (isMine && lot.status === 'reserved') {
+              groups[key].mine_reserved++;
+              groups[key].amount_mine_reserved += price;
+              groups[key].reserved++;
+              groups[key].amount_reserved += price;
+            } else if (lot.status === 'available') {
+              groups[key].available++;
+              groups[key].amount_available += price;
+            } else {
+              // Vendu/réservé par un autre commercial
+              groups[key].others++;
+              groups[key].amount_others += price;
+            }
+          } else {
+            // Vue manager : tous les statuts normalement
+            groups[key][lot.status] = (groups[key][lot.status] || 0) + 1;
+            groups[key][`amount_${lot.status}`] = (groups[key][`amount_${lot.status}`] || 0) + price;
+          }
+        });
+
+        const catStats = Object.values(groups).sort((a, b) => b.amount_total - a.amount_total);
+        const grandTotal = catStats.reduce((s, g) => s + g.amount_total, 0) || 1;
+        const grandSold = catStats.reduce((s, g) => s + g.sold, 0);
+        const grandReserved = catStats.reduce((s, g) => s + g.reserved, 0);
+        const grandAvailable = catStats.reduce((s, g) => s + g.available, 0);
+        const grandBlocked = catStats.reduce((s, g) => s + g.blocked, 0);
+        const amountSold = catStats.reduce((s, g) => s + g.amount_sold, 0);
+        const amountReserved = catStats.reduce((s, g) => s + g.amount_reserved, 0);
+        const amountAvailable = catStats.reduce((s, g) => s + g.amount_available, 0);
+        const amountBlocked = catStats.reduce((s, g) => s + g.amount_blocked, 0);
+        const grandOthers = catStats.reduce((s, g) => s + g.others, 0);
+        const amountOthers = catStats.reduce((s, g) => s + g.amount_others, 0);
+
+        return (
+          <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
+            {/* En-tête */}
             <div className="kpis-section-header">
               <h3>
-                <span className="kpis-section-icon">🏷️</span>
-                Par Type de Lot
+                <span className="kpis-section-icon">◈</span>
+                Répartition par catégorie
               </h3>
+              <span className="kpis-section-badge num" title="Valeur catalogue de tous les lots (vendus + réservés + disponibles + bloqués)">
+                Portefeuille {formatPrice(grandTotal)}
+              </span>
             </div>
-            <div className="kpis-category-list">
-              {stats?.by_type_lot && Object.entries(stats.by_type_lot).length > 0 ? (
-                Object.entries(stats.by_type_lot).map(([typeLot, data]) => (
-                  <div key={typeLot} className="kpis-category-item">
-                    <div className="kpis-category-name">{typeLot || 'Non défini'}</div>
-                    <div className="kpis-category-stats">
-                      <span className="stat-sold" title="Vendus">{data.sold || 0} vendus</span>
-                      <span className="stat-reserved" title="Réservés">{data.reserved || 0} réservés</span>
-                      <span className="stat-available" title="Disponibles">{data.available || 0} dispo</span>
+
+            {/* Onglets catégorie — pills avec icônes */}
+            <div className="rep-pills">
+              {CAT_TABS.map(tab => (
+                <button
+                  key={tab.key}
+                  className={`rep-pill${catRepTab === tab.key ? ' active' : ''}`}
+                  onClick={() => setCatRepTab(tab.key)}
+                  title={tab.ex}
+                >
+                  {tab.icon}
+                  {tab.label}
+                  {catRepTab === tab.key && <span className="rep-pill-dot"/>}
+                </button>
+              ))}
+            </div>
+
+            {/* Résumé rapide */}
+            <div className="rep-summary-row">
+              {grandSold > 0 && (
+                <span className="rep-summary-pill sold" title={hasUserFilter ? 'Mes ventes' : `${grandSold} lot${grandSold > 1 ? 's' : ''} vendus`}>
+                  <span className="rep-dot sold"/>
+                  {hasUserFilter ? 'Mes ventes' : `${grandSold} vendu${grandSold > 1 ? 's' : ''}`}
+                  <span className="rep-summary-amount">{formatPrice(amountSold)}</span>
+                </span>
+              )}
+              {grandReserved > 0 && (
+                <span className="rep-summary-pill reserved" title={hasUserFilter ? 'Mes réservations actives' : `${grandReserved} lot${grandReserved > 1 ? 's' : ''} réservés`}>
+                  <span className="rep-dot reserved"/>
+                  {hasUserFilter ? 'Mes réservations' : `${grandReserved} réservé${grandReserved > 1 ? 's' : ''}`}
+                  <span className="rep-summary-amount">{formatPrice(amountReserved)}</span>
+                </span>
+              )}
+              {grandAvailable > 0 && (
+                <span className="rep-summary-pill available" title={`${grandAvailable} lot${grandAvailable > 1 ? 's' : ''} disponibles`}>
+                  <span className="rep-dot available"/>
+                  {grandAvailable} disponible{grandAvailable > 1 ? 's' : ''}
+                  {amountAvailable > 0 && <span className="rep-summary-amount">{formatPrice(amountAvailable)}</span>}
+                </span>
+              )}
+              {grandBlocked > 0 && !hasUserFilter && (
+                <span className="rep-summary-pill blocked">
+                  <span className="rep-dot blocked"/>
+                  {grandBlocked} bloqué{grandBlocked > 1 ? 's' : ''}
+                  {amountBlocked > 0 && <span className="rep-summary-amount">{formatPrice(amountBlocked)}</span>}
+                </span>
+              )}
+              {hasUserFilter && grandOthers > 0 && (
+                <span className="rep-summary-pill others" title="Lots vendus ou réservés par d'autres commerciaux">
+                  <span className="rep-dot others"/>
+                  {grandOthers} autre{grandOthers > 1 ? 's' : ''}
+                  {amountOthers > 0 && <span className="rep-summary-amount">{formatPrice(amountOthers)}</span>}
+                </span>
+              )}
+            </div>
+
+            {/* Corps : liste des catégories */}
+            <div className="rep-body">
+              {catStats.length > 0 ? catStats.map(group => {
+                const totalCount = group.sold + group.reserved + group.available + group.blocked + group.others;
+                // % du groupe dans le portefeuille total (en valeur)
+                const displayPct = Math.round((group.amount_total / grandTotal) * 100);
+                // Barre toujours 100% — segments montrent la composition interne
+                // Pour la vue commerciale : part du commercial dans CE groupe
+                const mineCount = group.mine_sold + group.mine_reserved;
+                const minePct = totalCount > 0 ? Math.round((mineCount / totalCount) * 100) : 0;
+
+                return (
+                  <div key={group.name} className="rep-row">
+                    {/* Nom + méta alignés */}
+                    <div className="rep-row-header">
+                      <span className="rep-row-name">{group.name}</span>
+                      <div className="rep-row-meta">
+                        <span className="rep-row-count num">{totalCount} lot{totalCount > 1 ? 's' : ''}</span>
+                        {hasUserFilter ? (
+                          <span className="rep-row-pct num" title={`${mineCount} lot${mineCount > 1 ? 's' : ''} vendus ou réservés par moi sur ${totalCount} dans cette catégorie`}>
+                            {minePct}% capturé{minePct > 0 && mineCount > 1 ? 's' : ''}
+                          </span>
+                        ) : (
+                          <span className="rep-row-pct num">{displayPct}%</span>
+                        )}
+                        <span className="rep-row-amount num">{formatPrice(group.amount_total)}</span>
+                      </div>
+                    </div>
+                    {/* Barre segmentée 100% — segments proportionnels aux montants */}
+                    <div className="rep-row-bar-wrap">
+                      <div className="rep-row-bar-inner" style={{ width: '100%' }}>
+                        {hasUserFilter ? (
+                          <>
+                            {group.amount_mine_sold > 0 && <div className="rep-row-seg sold" style={{ flex: group.amount_mine_sold }} title={`Mes ventes: ${formatPrice(group.amount_mine_sold)}`}/>}
+                            {group.amount_mine_reserved > 0 && <div className="rep-row-seg reserved" style={{ flex: group.amount_mine_reserved }} title={`Mes réservations: ${formatPrice(group.amount_mine_reserved)}`}/>}
+                            {group.amount_available > 0 && <div className="rep-row-seg available" style={{ flex: group.amount_available }} title={`Disponibles: ${formatPrice(group.amount_available)}`}/>}
+                            {group.amount_others > 0 && <div className="rep-row-seg others" style={{ flex: group.amount_others }} title={`Autres commerciaux: ${formatPrice(group.amount_others)}`}/>}
+                          </>
+                        ) : (
+                          <>
+                            {group.amount_sold > 0 && <div className="rep-row-seg sold" style={{ flex: group.amount_sold }}/>}
+                            {group.amount_reserved > 0 && <div className="rep-row-seg reserved" style={{ flex: group.amount_reserved }}/>}
+                            {group.amount_available > 0 && <div className="rep-row-seg available" style={{ flex: group.amount_available }}/>}
+                            {group.amount_blocked > 0 && <div className="rep-row-seg blocked" style={{ flex: group.amount_blocked }}/>}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {/* Badges de détail par statut */}
+                    <div className="rep-row-badges">
+                      {hasUserFilter ? (
+                        <>
+                          {group.mine_sold > 0 && (
+                            <span className="rep-badge sold">
+                              <span className="rep-dot sold"/>
+                              {group.mine_sold} vendu{group.mine_sold > 1 ? 's' : ''} (moi)
+                              <span className="rep-badge-amount">{formatPrice(group.amount_mine_sold)}</span>
+                            </span>
+                          )}
+                          {group.mine_reserved > 0 && (
+                            <span className="rep-badge reserved">
+                              <span className="rep-dot reserved"/>
+                              {group.mine_reserved} réservé{group.mine_reserved > 1 ? 's' : ''} (moi)
+                              <span className="rep-badge-amount">{formatPrice(group.amount_mine_reserved)}</span>
+                            </span>
+                          )}
+                          {group.available > 0 && (
+                            <span className="rep-badge available">
+                              <span className="rep-dot available"/>
+                              {group.available} disponible{group.available > 1 ? 's' : ''}
+                            </span>
+                          )}
+                          {group.others > 0 && (
+                            <span className="rep-badge others">
+                              <span className="rep-dot others"/>
+                              {group.others} autre{group.others > 1 ? 's' : ''} commerc.
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {group.sold > 0 && (
+                            <span className="rep-badge sold">
+                              <span className="rep-dot sold"/>
+                              {group.sold} vendu{group.sold > 1 ? 's' : ''}
+                              <span className="rep-badge-amount">{formatPrice(group.amount_sold)}</span>
+                            </span>
+                          )}
+                          {group.reserved > 0 && (
+                            <span className="rep-badge reserved">
+                              <span className="rep-dot reserved"/>
+                              {group.reserved} réservé{group.reserved > 1 ? 's' : ''}
+                              <span className="rep-badge-amount">{formatPrice(group.amount_reserved)}</span>
+                            </span>
+                          )}
+                          {group.available > 0 && (
+                            <span className="rep-badge available">
+                              <span className="rep-dot available"/>
+                              {group.available} disponible{group.available > 1 ? 's' : ''}
+                              {group.amount_available > 0 && <span className="rep-badge-amount">{formatPrice(group.amount_available)}</span>}
+                            </span>
+                          )}
+                          {group.blocked > 0 && (
+                            <span className="rep-badge blocked">
+                              <span className="rep-dot blocked"/>
+                              {group.blocked} bloqué{group.blocked > 1 ? 's' : ''}
+                              {group.amount_blocked > 0 && <span className="rep-badge-amount">{formatPrice(group.amount_blocked)}</span>}
+                            </span>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="kpis-category-empty">Aucune donnée</div>
+                );
+              }) : (
+                <div className="empty-state" style={{ padding: 'var(--spacing-lg)' }}>
+                  <div className="empty-state-title">Aucune donnée</div>
+                  <div className="empty-state-description">
+                    Les lots n&apos;ont pas encore de {CAT_TABS.find(t => t.key === catRepTab)?.label.toLowerCase()} renseigné.
+                  </div>
+                </div>
               )}
             </div>
           </div>
+        );
 
-          {/* Par Emplacement */}
-          <div className="kpis-section-v2">
+      })()}
+
+      {/* ── BRIQUE 2 : Évolution mensuelle ────────────────────────────── */}
+      {monthlyBreakdown.length > 0 && (() => {
+        const MONTH_NAMES = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+        const getMonthLabel = (period) => {
+          const parts = period.split('-');
+          return parts.length >= 2 ? (MONTH_NAMES[parseInt(parts[1], 10) - 1] || period) : period;
+        };
+        const maxVal = chartMode === 'nombre'
+          ? Math.max(1, ...monthlyBreakdown.flatMap(d => [d.sold, d.reserved]))
+          : Math.max(1, ...monthlyBreakdown.map(d => d.total_amount));
+        const totalSold = monthlyBreakdown.reduce((s, d) => s + d.sold, 0);
+        const totalReserved = monthlyBreakdown.reduce((s, d) => s + d.reserved, 0);
+        const totalCA = monthlyBreakdown.reduce((s, d) => s + d.total_amount, 0);
+        const fmtGridVal = (val) => {
+          if (chartMode === 'nombre') return Math.round(val);
+          if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+          if (val >= 1000) return `${Math.round(val / 1000)}k`;
+          return Math.round(val).toString();
+        };
+
+        return (
+          <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
+            {/* En-tête */}
             <div className="kpis-section-header">
               <h3>
-                <span className="kpis-section-icon">📍</span>
-                Par Emplacement
+                <span className="kpis-section-icon">📈</span>
+                Évolution mensuelle
               </h3>
-            </div>
-            <div className="kpis-category-list">
-              {stats?.by_emplacement && Object.entries(stats.by_emplacement).length > 0 ? (
-                Object.entries(stats.by_emplacement).map(([emplacement, data]) => (
-                  <div key={emplacement} className="kpis-category-item">
-                    <div className="kpis-category-name">{emplacement || 'Non défini'}</div>
-                    <div className="kpis-category-stats">
-                      <span className="stat-sold" title="Vendus">{data.sold || 0} vendus</span>
-                      <span className="stat-reserved" title="Réservés">{data.reserved || 0} réservés</span>
-                      <span className="stat-available" title="Disponibles">{data.available || 0} dispo</span>
-                    </div>
+              <div className="chart-header-right">
+                <div className="chart-mode-toggle">
+                  <button
+                    className={`chart-mode-btn${chartMode === 'nombre' ? ' active' : ''}`}
+                    onClick={() => setChartMode('nombre')}
+                  >
+                    # Nombre
+                  </button>
+                  <button
+                    className={`chart-mode-btn${chartMode === 'montant' ? ' active' : ''}`}
+                    onClick={() => setChartMode('montant')}
+                  >
+                    ₊ Montant
+                  </button>
+                </div>
+                <div className="monthly-kpi-row">
+                  <div className="monthly-kpi">
+                    <span className="monthly-kpi-num num">{totalSold}</span>
+                    <span className="monthly-kpi-label">Vendus</span>
                   </div>
-                ))
-              ) : (
-                <div className="kpis-category-empty">Aucune donnée</div>
-              )}
+                  <div className="monthly-kpi-sep"/>
+                  <div className="monthly-kpi">
+                    <span className="monthly-kpi-num num">{totalReserved}</span>
+                    <span className="monthly-kpi-label">Réservés</span>
+                  </div>
+                  <div className="monthly-kpi-sep"/>
+                  <div className="monthly-kpi accent">
+                    <span className="monthly-kpi-num num">{formatPrice(totalCA)}</span>
+                    <span className="monthly-kpi-label">CA total</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Par Type de Maison */}
-          <div className="kpis-section-v2">
-            <div className="kpis-section-header">
-              <h3>
-                <span className="kpis-section-icon">🏠</span>
-                Par Type de Maison
-              </h3>
-            </div>
-            <div className="kpis-category-list">
-              {stats?.by_type_maison && Object.entries(stats.by_type_maison).length > 0 ? (
-                Object.entries(stats.by_type_maison).map(([typeMaison, data]) => (
-                  <div key={typeMaison} className="kpis-category-item">
-                    <div className="kpis-category-name">{typeMaison || 'Non défini'}</div>
-                    <div className="kpis-category-stats">
-                      <span className="stat-sold" title="Vendus">{data.sold || 0} vendus</span>
-                      <span className="stat-reserved" title="Réservés">{data.reserved || 0} réservés</span>
-                      <span className="stat-available" title="Disponibles">{data.available || 0} dispo</span>
+            {/* Graphe barres */}
+            <div className="monthly-chart-body" style={{ padding: '0 var(--spacing-lg) var(--spacing-sm)' }}>
+              <div className="monthly-chart-bars">
+                {monthlyBreakdown.map((month, idx) => {
+                  const barH = chartMode === 'nombre'
+                    ? (month.sold / maxVal) * 100
+                    : (month.total_amount / maxVal) * 100;
+                  const resH = chartMode === 'nombre' ? (month.reserved / maxVal) * 100 : 0;
+                  const isHovered = hoveredMonth === idx;
+                  return (
+                    <div
+                      key={month.period}
+                      className={`chart-month-group${isHovered ? ' hovered' : ''}`}
+                      onMouseEnter={() => setHoveredMonth(idx)}
+                      onMouseLeave={() => setHoveredMonth(null)}
+                    >
+                      <div className="chart-bars-group">
+                        {chartMode === 'nombre' ? (
+                          <>
+                            <div className="chart-bar sold"     style={{ height: `${barH}%` }}/>
+                            <div className="chart-bar reserved" style={{ height: `${resH}%` }}/>
+                          </>
+                        ) : (
+                          <div className="chart-bar amount" style={{ height: `${barH}%` }}/>
+                        )}
+                      </div>
+                      <div className="chart-month-label">{getMonthLabel(month.period)}</div>
+                      {chartMode === 'nombre' && month.total_amount > 0 && (
+                        <div className="chart-month-amount num">{formatPrice(month.total_amount)}</div>
+                      )}
+                      {isHovered && (
+                        <div className="chart-tooltip">
+                          <div className="chart-tooltip-period">{getMonthLabel(month.period)}</div>
+                          {chartMode === 'nombre' ? (
+                            <>
+                              <div className="chart-tooltip-row">
+                                <span className="chart-tooltip-dot sold"/>
+                                <span>{month.sold} vendu{month.sold > 1 ? 's' : ''}</span>
+                              </div>
+                              <div className="chart-tooltip-row">
+                                <span className="chart-tooltip-dot reserved"/>
+                                <span>{month.reserved} réservé{month.reserved > 1 ? 's' : ''}</span>
+                              </div>
+                              {month.total_amount > 0 && (
+                                <div className="chart-tooltip-ca">{formatPrice(month.total_amount)}</div>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <div className="chart-tooltip-row">
+                                <span className="chart-tooltip-dot" style={{ background: 'var(--color-primary)' }}/>
+                                <span>CA mensuel</span>
+                              </div>
+                              <div className="chart-tooltip-ca">{formatPrice(month.total_amount)}</div>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
+                  );
+                })}
+              </div>
+              <div className="chart-grid-lines">
+                {[100, 75, 50, 25].map(p => (
+                  <div key={p} className="chart-grid-line" style={{ bottom: `${p}%` }}>
+                    <span className="chart-grid-label">{fmtGridVal(maxVal * p / 100)}</span>
                   </div>
-                ))
-              ) : (
-                <div className="kpis-category-empty">Aucune donnée</div>
-              )}
+                ))}
+              </div>
+            </div>
+
+            {/* Légende */}
+            <div className="chart-legend" style={{ padding: '0 var(--spacing-lg) var(--spacing-md)' }}>
+              <span className="legend-item"><span className="legend-dot sold"/>Vendus</span>
+              <span className="legend-item"><span className="legend-dot reserved"/>Réservés</span>
             </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
       <div className="dashboard-grid">
         {/* Main Column */}

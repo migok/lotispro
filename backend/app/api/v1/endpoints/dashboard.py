@@ -106,6 +106,24 @@ async def get_commercial_stats(
 
 
 @router.get(
+    "/commercial-monthly",
+    summary="Commercial monthly performance",
+    description="Per-commercial monthly sales data for the last N months (manager only)",
+)
+async def get_commercial_monthly(
+    current_user: ManagerUser,
+    dashboard_service: DashboardServiceDep,
+    months_back: int = Query(default=6, ge=1, le=24),
+    project_id: int | None = Query(default=None),
+) -> list[dict]:
+    """Get per-commercial monthly performance. Manager only."""
+    return await dashboard_service.get_commercial_monthly(
+        months_back=months_back,
+        project_id=project_id,
+    )
+
+
+@router.get(
     "/clients-pipeline",
     summary="Clients pipeline",
     description="Get clients pipeline with purchase status and activity",
@@ -127,6 +145,28 @@ async def get_clients_pipeline(
     # Managers can see all clients (user_id remains None or as specified)
 
     return await dashboard_service.get_clients_pipeline(
+        project_id=project_id,
+        user_id=user_id,
+    )
+
+
+@router.get(
+    "/monthly-breakdown",
+    summary="Monthly lots breakdown",
+    description="Get monthly breakdown of sold and reserved lots",
+)
+async def get_monthly_breakdown(
+    current_user: CurrentUser,
+    dashboard_service: DashboardServiceDep,
+    months_back: int = Query(default=6, ge=1, le=24),
+    project_id: int | None = Query(default=None),
+    user_id: int | None = Query(default=None),
+) -> list[dict]:
+    """Get monthly breakdown of sold and reserved lots."""
+    if current_user.role == "commercial":
+        user_id = current_user.id
+    return await dashboard_service.get_monthly_breakdown(
+        months_back=months_back,
         project_id=project_id,
         user_id=user_id,
     )

@@ -16,6 +16,7 @@ from app.services import (
     ClientService,
     DashboardService,
     LotService,
+    PaymentService,
     ProjectService,
     ReservationService,
     SaleService,
@@ -163,6 +164,11 @@ def get_audit_service(session: DBSession) -> AuditService:
     return AuditService(session)
 
 
+def get_payment_service(session: DBSession) -> PaymentService:
+    """Get payment service instance."""
+    return PaymentService(session)
+
+
 # Typed service dependencies
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
@@ -173,3 +179,4 @@ ReservationServiceDep = Annotated[ReservationService, Depends(get_reservation_se
 SaleServiceDep = Annotated[SaleService, Depends(get_sale_service)]
 DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
+PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]

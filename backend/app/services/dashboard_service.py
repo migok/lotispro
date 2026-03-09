@@ -806,6 +806,48 @@ class DashboardService:
 
         return pipeline_data
 
+    async def get_commercial_monthly(
+        self,
+        months_back: int = 6,
+        project_id: int | None = None,
+    ) -> list[dict]:
+        """Get per-commercial monthly sales data for the last N months."""
+        from datetime import timedelta
+
+        from app.infrastructure.database.models import UserModel
+
+        start_date = datetime.now(timezone.utc) - timedelta(days=months_back * 30)
+
+        users_query = select(UserModel).where(UserModel.role == "commercial")
+        users_result = await self.session.execute(users_query)
+        commercials = users_result.scalars().all()
+
+        sales_query = select(SaleModel).where(SaleModel.sale_date >= start_date)
+        if project_id:
+            sales_query = sales_query.where(SaleModel.project_id == project_id)
+        sales_result = await self.session.execute(sales_query)
+        sales = sales_result.scalars().all()
+
+        result_data = []
+        for user in commercials:
+            user_sales = [s for s in sales if s.sold_by_user_id == user.id]
+            monthly: dict[str, dict] = {}
+            for sale in user_sales:
+                key = sale.sale_date.strftime("%Y-%m")
+                if key not in monthly:
+                    monthly[key] = {"period": key, "count": 0, "total_amount": 0.0}
+                monthly[key]["count"] += 1
+                monthly[key]["total_amount"] += float(sale.price)
+
+            result_data.append({
+                "commercial_id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "monthly": sorted(monthly.values(), key=lambda x: x["period"]),
+            })
+
+        return result_data
+
     async def get_lots_dashboard(
         self,
         project_id: int | None = None,
@@ -852,11 +894,14 @@ class DashboardService:
         if project_id:
             query = query.where(LotModel.project_id == project_id)
 
-        # Filter by user - show lots with reservations/sales by this user
+        # Filter by user - show lots with ACTIVE reservations or sales by this user
+        # Deliberately exclude released reservations: a lot released by a commercial
+        # reverts to "available" and should not appear in their personal dashboard.
         if user_id:
-            # Get lot IDs associated with this user
+            # Only active reservations (not released/expired)
             user_lot_ids_query = select(ReservationModel.lot_id).where(
-                ReservationModel.reserved_by_user_id == user_id
+                ReservationModel.reserved_by_user_id == user_id,
+                ReservationModel.status == "active",
             )
             user_lot_ids_result = await self.session.execute(user_lot_ids_query)
             user_lot_ids = {row[0] for row in user_lot_ids_result.all()}
@@ -899,6 +944,9 @@ class DashboardService:
                 "surface": lot.surface,
                 "price": lot.price,
                 "status": lot.status,
+                "type_lot": lot.type_lot,
+                "emplacement": lot.emplacement,
+                "type_maison": lot.type_maison,
                 "current_reservation_id": lot.current_reservation_id,
                 "created_at": lot.created_at,
                 "updated_at": lot.updated_at,
@@ -917,6 +965,14 @@ class DashboardService:
                     }
                 )
 
+            if sale:
+                lot_dict.update(
+                    {
+                        "sold_by_user_id": sale.sold_by_user_id,
+                        "sale_price": float(sale.price),
+                    }
+                )
+
             # Determine client: use reservation client if available, otherwise sale client
             client = reservation_client if reservation_client else sale_client
             if client:
@@ -931,3 +987,62 @@ class DashboardService:
             lots_data.append(lot_dict)
 
         return lots_data
+
+    async def get_monthly_breakdown(
+        self,
+        months_back: int = 6,
+        project_id: int | None = None,
+        user_id: int | None = None,
+    ) -> list[dict]:
+        """Get monthly breakdown of sold and reserved lots.
+
+        Args:
+            months_back: Number of months to look back
+            project_id: Optional project filter
+            user_id: Optional user filter
+
+        Returns:
+            List of monthly breakdown dicts with sold, reserved counts and amounts
+        """
+        from datetime import timedelta
+
+        start_date = datetime.now(timezone.utc) - timedelta(days=months_back * 30)
+
+        # Sales by month
+        sales_query = select(SaleModel).where(SaleModel.sale_date >= start_date)
+        if project_id:
+            sales_query = sales_query.where(SaleModel.project_id == project_id)
+        if user_id:
+            sales_query = sales_query.where(SaleModel.sold_by_user_id == user_id)
+        sales_result = await self.session.execute(sales_query)
+        sales = sales_result.scalars().all()
+
+        # Reservations by month
+        res_query = select(ReservationModel).where(
+            ReservationModel.reservation_date >= start_date,
+        )
+        if project_id:
+            res_query = res_query.where(ReservationModel.project_id == project_id)
+        if user_id:
+            res_query = res_query.where(ReservationModel.reserved_by_user_id == user_id)
+        res_result = await self.session.execute(res_query)
+        reservations = res_result.scalars().all()
+
+        # Build monthly aggregation
+        monthly: dict[str, dict] = {}
+
+        for sale in sales:
+            key = sale.sale_date.strftime("%Y-%m")
+            if key not in monthly:
+                monthly[key] = {"period": key, "sold": 0, "reserved": 0, "total_amount": 0.0}
+            monthly[key]["sold"] += 1
+            monthly[key]["total_amount"] += float(sale.price)
+
+        for res in reservations:
+            key = res.reservation_date.strftime("%Y-%m")
+            if key not in monthly:
+                monthly[key] = {"period": key, "sold": 0, "reserved": 0, "total_amount": 0.0}
+            if res.status == "active":
+                monthly[key]["reserved"] += 1
+
+        return sorted(monthly.values(), key=lambda x: x["period"])

@@ -99,6 +99,7 @@ function AppContent() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Déterminer la page actuelle depuis l'URL
   const currentPage = location.pathname.split('/')[1] || 'dashboard';
@@ -124,8 +125,22 @@ function AppContent() {
         {mobileMenuOpen ? '✕' : '☰'}
       </button>
 
+      {/* Sidebar re-open tab (visible when collapsed) */}
+      {sidebarCollapsed && (
+        <button
+          className="sidebar-reopen-tab"
+          onClick={() => setSidebarCollapsed(false)}
+          aria-label="Afficher la sidebar"
+          title="Afficher la sidebar"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </button>
+      )}
+
       {/* Sidebar */}
-      <aside className={`sidebar ${mobileMenuOpen ? 'sidebar-mobile-open' : ''}`}>
+      <aside className={`sidebar ${mobileMenuOpen ? 'sidebar-mobile-open' : ''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo">
             <div className="sidebar-logo-mark" aria-hidden="true">
@@ -134,8 +149,20 @@ function AppContent() {
                 <path d="M4.5 10H11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={{color: 'var(--color-primary)'}}/>
               </svg>
             </div>
-            <span>LotisPro</span>
+            <span className="sidebar-logo-text">LotisPro</span>
           </div>
+          <button
+            className="sidebar-collapse-btn"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            aria-label={sidebarCollapsed ? 'Afficher la sidebar' : 'Masquer la sidebar'}
+            title={sidebarCollapsed ? 'Afficher la sidebar' : 'Masquer la sidebar'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {sidebarCollapsed
+                ? <path d="M9 18l6-6-6-6"/>
+                : <path d="M15 18l-6-6 6-6"/>}
+            </svg>
+          </button>
         </div>
 
         <nav className="sidebar-nav">
@@ -195,7 +222,7 @@ function AppContent() {
       </aside>
 
       {/* Main Content */}
-      <main className="main-content">
+      <main className={`main-content ${sidebarCollapsed ? 'main-content-expanded' : ''}`}>
         <Routes>
           <Route path="/" element={<Navigate to="/projects" replace />} />
           <Route path="/dashboard" element={<Navigate to="/projects" replace />} />

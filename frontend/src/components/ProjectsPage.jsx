@@ -9,9 +9,18 @@ import UploadGeojsonModal from './UploadGeojsonModal';
 import AssignCommercialsModal from './AssignCommercialsModal';
 
 const IconSearch = () => (
-  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <circle cx="9" cy="9" r="7"/>
-    <path d="M15 15l3 3"/>
+  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10L13 13"/>
+  </svg>
+);
+const IconPlus = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/>
+  </svg>
+);
+const IconX = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+    <line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/>
   </svg>
 );
 
@@ -125,64 +134,60 @@ export default function ProjectsPage() {
     (p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (loading) {
-    return (
-      <div className="loading-container">
-        <div className="loading-spinner"></div>
-      </div>
-    );
-  }
-
   return (
-    <div className="projects-page">
-      {/* Page Header */}
-      <div className="page-header">
+    <div className="cp-page page-container">
+
+      {/* ── Header ── */}
+      <div className="cp-header">
         <div>
-          <h1 className="page-title">Projets</h1>
-          <p className="page-subtitle page-count">
-            {projects.length} projet{projects.length > 1 ? 's' : ''} en cours
+          <p className="page-eyebrow">Immobilier</p>
+          <h1 className="cp-title">Projets</h1>
+          <p className="cp-subtitle">
+            {projects.length} projet{projects.length !== 1 ? 's' : ''} en cours
           </p>
         </div>
-        <div className="page-header-actions">
-          <div className="search-input-wrapper">
-            <span className="search-icon"><IconSearch /></span>
-            <input
-              type="text"
-              placeholder="Rechercher..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="search-input"
-            />
-          </div>
-          {isManager() && (
-            <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-              + Nouveau projet
+        {isManager() && (
+          <div className="cp-header-actions">
+            <button className="cp-btn-primary" onClick={() => setShowCreateModal(true)}>
+              <IconPlus /> Nouveau projet
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Projects Grid */}
-      {filteredProjects.length === 0 ? (
-        <div className="section-card">
-          <div className="empty-state">
-            <div className="empty-state-icon" style={{ opacity: 0.4 }}>
-              <IconBuilding />
-            </div>
-            <div className="empty-state-title">
-              {searchQuery ? 'Aucun résultat' : 'Aucun projet'}
-            </div>
-            <div className="empty-state-description">
-              {searchQuery
-                ? `Aucun projet ne correspond à "${searchQuery}"`
-                : 'Créez votre premier projet pour commencer à gérer vos lots.'}
-            </div>
-            {!searchQuery && isManager() && (
-              <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-                + Créer un projet
-              </button>
-            )}
-          </div>
+      {/* ── Search ── */}
+      <div className="search-bar" style={{ marginBottom: 'var(--spacing-md)' }}>
+        <IconSearch />
+        <input
+          placeholder="Rechercher un projet (nom, description)…"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 2 }}
+          >
+            <IconX />
+          </button>
+        )}
+      </div>
+
+      {/* ── Projects Grid ── */}
+      {loading ? (
+        <div className="loading-state">Chargement…</div>
+      ) : filteredProjects.length === 0 ? (
+        <div className="empty-state">
+          <p>
+            {searchQuery
+              ? `Aucun projet ne correspond à "${searchQuery}"`
+              : 'Aucun projet enregistré.'}
+          </p>
+          {!searchQuery && isManager() && (
+            <button className="cp-btn-primary" onClick={() => setShowCreateModal(true)}>
+              <IconPlus /> Créer le premier projet
+            </button>
+          )}
         </div>
       ) : (
         <div className="projects-grid">
