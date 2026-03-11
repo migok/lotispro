@@ -9,6 +9,7 @@ from app.core.logging import get_logger
 from app.domain.schemas.reservation import (
     ReservationCreate,
     ReservationFilter,
+    ReservationRelease,
     ReservationResponse,
 )
 from app.domain.schemas.sale import SaleFromReservation, SaleResponse
@@ -65,6 +66,10 @@ class ReservationService:
                 reservation_date=r.reservation_date,
                 expiration_date=r.expiration_date,
                 deposit=r.deposit,
+                deposit_date=r.deposit_date,
+                deposit_refund_amount=r.deposit_refund_amount,
+                deposit_refund_date=r.deposit_refund_date,
+                release_reason=r.release_reason,
                 notes=r.notes,
                 status=r.status,
                 created_at=r.created_at,
@@ -99,6 +104,10 @@ class ReservationService:
             reservation_date=reservation.reservation_date,
             expiration_date=reservation.expiration_date,
             deposit=reservation.deposit,
+            deposit_date=reservation.deposit_date,
+            deposit_refund_amount=reservation.deposit_refund_amount,
+            deposit_refund_date=reservation.deposit_refund_date,
+            release_reason=reservation.release_reason,
             notes=reservation.notes,
             status=reservation.status,
             created_at=reservation.created_at,
@@ -159,6 +168,7 @@ class ReservationService:
             reserved_by_user_id=user_id,
             expiration_date=expiration_date,
             deposit=data.deposit,
+            deposit_date=data.deposit_date,
             notes=data.notes,
         )
 
@@ -186,6 +196,10 @@ class ReservationService:
             reservation_date=reservation.reservation_date,
             expiration_date=reservation.expiration_date,
             deposit=reservation.deposit,
+            deposit_date=reservation.deposit_date,
+            deposit_refund_amount=reservation.deposit_refund_amount,
+            deposit_refund_date=reservation.deposit_refund_date,
+            release_reason=reservation.release_reason,
             notes=reservation.notes,
             status=reservation.status,
             created_at=reservation.created_at,
@@ -197,6 +211,7 @@ class ReservationService:
         reservation_id: int,
         user_id: int,
         user_role: str,
+        data: ReservationRelease | None = None,
     ) -> ReservationResponse:
         """Release (cancel) an active reservation.
 
@@ -204,6 +219,7 @@ class ReservationService:
             reservation_id: Reservation ID
             user_id: User requesting the release
             user_role: Role of the user (manager or commercial)
+            data: Optional refund information
 
         Returns:
             Updated reservation response
@@ -216,7 +232,7 @@ class ReservationService:
         if not reservation:
             raise NotFoundError("Reservation", reservation_id)
 
-        if reservation.status != "active":
+        if reservation.status not in ("active", "validated"):
             raise BusinessRuleError(
                 message=f"Cannot release reservation with status '{reservation.status}'",
                 rule="reservation_not_active",
@@ -229,11 +245,17 @@ class ReservationService:
                 rule="insufficient_permissions",
             )
 
-        # Update reservation status
-        updated = await self.reservation_repo.update(
-            reservation_id,
-            status="released",
-        )
+        # Update reservation status with optional refund info
+        update_kwargs: dict = {"status": "released"}
+        if data:
+            if data.deposit_refund_amount is not None:
+                update_kwargs["deposit_refund_amount"] = data.deposit_refund_amount
+            if data.deposit_refund_date is not None:
+                update_kwargs["deposit_refund_date"] = data.deposit_refund_date
+            if data.release_reason is not None:
+                update_kwargs["release_reason"] = data.release_reason
+
+        updated = await self.reservation_repo.update(reservation_id, **update_kwargs)
 
         # Update lot status and clear current_reservation_id
         await self.lot_repo.release_lot(reservation.lot_id, status="available")
@@ -256,6 +278,10 @@ class ReservationService:
             reservation_date=updated.reservation_date,
             expiration_date=updated.expiration_date,
             deposit=updated.deposit,
+            deposit_date=updated.deposit_date,
+            deposit_refund_amount=updated.deposit_refund_amount,
+            deposit_refund_date=updated.deposit_refund_date,
+            release_reason=updated.release_reason,
             notes=updated.notes,
             status=updated.status,
             created_at=updated.created_at,
@@ -284,7 +310,7 @@ class ReservationService:
         if not reservation:
             raise NotFoundError("Reservation", reservation_id)
 
-        if reservation.status != "active":
+        if reservation.status not in ("active", "validated"):
             raise BusinessRuleError(
                 message=f"Cannot extend reservation with status '{reservation.status}'",
                 rule="reservation_not_active",
@@ -319,6 +345,10 @@ class ReservationService:
             reservation_date=updated.reservation_date,
             expiration_date=updated.expiration_date,
             deposit=updated.deposit,
+            deposit_date=updated.deposit_date,
+            deposit_refund_amount=updated.deposit_refund_amount,
+            deposit_refund_date=updated.deposit_refund_date,
+            release_reason=updated.release_reason,
             notes=updated.notes,
             status=updated.status,
             created_at=updated.created_at,
@@ -351,7 +381,7 @@ class ReservationService:
         if not reservation:
             raise NotFoundError("Reservation", reservation_id)
 
-        if reservation.status != "active":
+        if reservation.status not in ("active", "validated"):
             raise BusinessRuleError(
                 message=f"Cannot convert reservation with status '{reservation.status}'",
                 rule="reservation_not_active",
@@ -412,6 +442,17 @@ class ReservationService:
             notes=sale.notes,
             created_at=sale.created_at,
         )
+
+    async def get_reservation_details(self, reservation_id: int) -> dict | None:
+        """Get reservation with all details needed for certificate generation.
+
+        Args:
+            reservation_id: Reservation ID
+
+        Returns:
+            Reservation details dict or None
+        """
+        return await self.reservation_repo.get_with_details(reservation_id)
 
     async def check_expirations(self) -> int:
         """Process expired reservations.

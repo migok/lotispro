@@ -111,8 +111,8 @@ function MonthlyBarChart({ data, metric }) {
   }
 
   const n = shown.length;
-  const VW = 300, VH = 148;
-  const LP = 36, RP = 4, TP = 6, BP = 22;
+  const VW = 400, VH = 160;
+  const LP = 38, RP = 6, TP = 6, BP = 24;
   const cW = VW - LP - RP;
   const cH = VH - TP - BP;
   const slotW = cW / months.length;
@@ -379,15 +379,17 @@ export default function CommercialsPage() {
     return list;
   }, [commercials, commercialStats, filteredIds, searchQuery, sortBy]);
 
-  /* ── Global KPIs ── */
-  const totalSales = Object.values(commercialStats).reduce((s, x) => s + (x.total_sales || 0), 0);
-  const totalRevenue = Object.values(commercialStats).reduce((s, x) => s + (x.total_revenue || 0), 0);
-  const totalDeposits = Object.values(commercialStats).reduce((s, x) => s + (x.total_deposits || 0), 0);
-  const activeReservations = Object.values(commercialStats).reduce((s, x) => s + (x.active_reservations || 0), 0);
-  const maxRevenue = Math.max(...Object.values(commercialStats).map(s => s.total_revenue || 0), 1);
+  /* ── Global KPIs (scoped to project filter if active) ── */
+  const scopedCommercials = filteredIds ? commercials.filter(c => filteredIds.includes(c.id)) : commercials;
+  const scopedStats = scopedCommercials.map(c => commercialStats[c.id] || {});
+  const totalSales = scopedStats.reduce((s, x) => s + (x.total_sales || 0), 0);
+  const totalRevenue = scopedStats.reduce((s, x) => s + (x.total_revenue || 0), 0);
+  const totalDeposits = scopedStats.reduce((s, x) => s + (x.total_deposits || 0), 0);
+  const activeReservations = scopedStats.reduce((s, x) => s + (x.active_reservations || 0), 0);
+  const maxRevenue = Math.max(...scopedStats.map(s => s.total_revenue || 0), 1);
 
-  /* ── Leaderboard (top 5 by CA) ── */
-  const leaderboard = [...commercials]
+  /* ── Leaderboard (top 5 by CA, scoped) ── */
+  const leaderboard = [...scopedCommercials]
     .sort((a, b) => (commercialStats[b.id]?.total_revenue || 0) - (commercialStats[a.id]?.total_revenue || 0))
     .slice(0, 5);
 
@@ -621,7 +623,10 @@ export default function CommercialsPage() {
 
           {/* Chart */}
           <div className="cp-chart-area">
-            <MonthlyBarChart data={monthlyData} metric={chartMetric} />
+            <MonthlyBarChart
+              data={filteredIds ? monthlyData.filter(d => filteredIds.includes(d.commercial_id)) : monthlyData}
+              metric={chartMetric}
+            />
           </div>
 
           {/* Leaderboard */}

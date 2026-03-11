@@ -20,7 +20,11 @@ from app.domain.schemas.dashboard import (
     SalesByPeriod,
 )
 from app.infrastructure.database.models import (
+    ClientModel,
     LotModel,
+    PaymentInstallmentModel,
+    PaymentScheduleModel,
+    ProjectModel,
     ReservationModel,
     SaleModel,
 )
@@ -31,6 +35,9 @@ from app.infrastructure.database.repositories import (
 )
 
 logger = get_logger(__name__)
+
+# Reservation statuses that mean the lot is actively reserved
+_ACTIVE_STATUSES = ("active", "validated")
 
 
 class DashboardService:
@@ -104,7 +111,7 @@ class DashboardService:
             # Count their active reservations
             user_reserved_query = select(func.count()).where(
                 ReservationModel.reserved_by_user_id == user_id,
-                ReservationModel.status == "active",
+                ReservationModel.status.in_(_ACTIVE_STATUSES),
             )
             if project_id:
                 user_reserved_query = user_reserved_query.where(
@@ -131,7 +138,7 @@ class DashboardService:
                 LotModel.id.in_(
                     select(ReservationModel.lot_id).where(
                         ReservationModel.reserved_by_user_id == user_id,
-                        ReservationModel.status == "active",
+                        ReservationModel.status.in_(_ACTIVE_STATUSES),
                     )
                 )
             )
@@ -233,7 +240,7 @@ class DashboardService:
                 LotModel.id.in_(
                     select(ReservationModel.lot_id).where(
                         ReservationModel.reserved_by_user_id == user_id,
-                        ReservationModel.status == "active",
+                        ReservationModel.status.in_(_ACTIVE_STATUSES),
                     )
                 ),
             )
@@ -242,7 +249,7 @@ class DashboardService:
             potential_query = select(func.coalesce(func.sum(LotModel.price), 0)).where(
                 LotModel.id.in_(
                     select(ReservationModel.lot_id).where(
-                        ReservationModel.status == "active",
+                        ReservationModel.status.in_(_ACTIVE_STATUSES),
                     )
                 )
             )
@@ -631,7 +638,7 @@ class DashboardService:
             # Get active reservations count
             active_res_query = select(func.count(ReservationModel.id)).where(
                 ReservationModel.reserved_by_user_id == user.id,
-                ReservationModel.status == "active",
+                ReservationModel.status.in_(_ACTIVE_STATUSES),
             )
             if project_id:
                 active_res_query = active_res_query.where(
@@ -646,7 +653,7 @@ class DashboardService:
                 func.coalesce(func.sum(ReservationModel.deposit), 0)
             ).where(
                 ReservationModel.reserved_by_user_id == user.id,
-                ReservationModel.status == "active",
+                ReservationModel.status.in_(_ACTIVE_STATUSES),
             )
             if project_id:
                 deposits_query = deposits_query.where(
@@ -728,7 +735,7 @@ class DashboardService:
             # Count active reservations
             res_query = select(func.count()).where(
                 ReservationModel.client_id == client.id,
-                ReservationModel.status == "active",
+                ReservationModel.status.in_(_ACTIVE_STATUSES),
             )
             if project_id:
                 res_query = res_query.where(ReservationModel.project_id == project_id)
@@ -755,7 +762,7 @@ class DashboardService:
             # Calculate total deposit
             deposit_query = select(func.sum(ReservationModel.deposit)).where(
                 ReservationModel.client_id == client.id,
-                ReservationModel.status == "active",
+                ReservationModel.status.in_(_ACTIVE_STATUSES),
             )
             if project_id:
                 deposit_query = deposit_query.where(
@@ -884,7 +891,7 @@ class DashboardService:
             .outerjoin(
                 ReservationModel,
                 (ReservationModel.lot_id == LotModel.id)
-                & (ReservationModel.status == "active"),
+                & (ReservationModel.status.in_(_ACTIVE_STATUSES)),
             )
             .outerjoin(ReservationClient, ReservationClient.id == ReservationModel.client_id)
             .outerjoin(SaleModel, SaleModel.lot_id == LotModel.id)
@@ -901,7 +908,7 @@ class DashboardService:
             # Only active reservations (not released/expired)
             user_lot_ids_query = select(ReservationModel.lot_id).where(
                 ReservationModel.reserved_by_user_id == user_id,
-                ReservationModel.status == "active",
+                ReservationModel.status.in_(_ACTIVE_STATUSES),
             )
             user_lot_ids_result = await self.session.execute(user_lot_ids_query)
             user_lot_ids = {row[0] for row in user_lot_ids_result.all()}
@@ -986,6 +993,79 @@ class DashboardService:
 
             lots_data.append(lot_dict)
 
+        # Enrich reserved lots with payment schedule data
+        reservation_ids = [
+            lot["reservation_id"]
+            for lot in lots_data
+            if "reservation_id" in lot
+        ]
+        if reservation_ids:
+            from sqlalchemy.orm import selectinload
+
+            sched_query = (
+                select(PaymentScheduleModel)
+                .where(PaymentScheduleModel.reservation_id.in_(reservation_ids))
+                .options(selectinload(PaymentScheduleModel.installments))
+            )
+            sched_result = await self.session.execute(sched_query)
+            schedules = sched_result.scalars().all()
+
+            payment_info: dict[int, dict] = {}
+            for sched in schedules:
+                deposit_paid = sum(
+                    i.amount
+                    for i in sched.installments
+                    if i.payment_type == "deposit" and i.status == "paid"
+                )
+                balance_paid = sum(
+                    i.amount
+                    for i in sched.installments
+                    if i.payment_type == "balance" and i.status == "paid"
+                )
+                deposit_paid_pct = (
+                    round(deposit_paid / sched.deposit_total * 100)
+                    if sched.deposit_total > 0
+                    else 0
+                )
+                balance_paid_pct = (
+                    round(balance_paid / sched.balance_total * 100)
+                    if sched.balance_total > 0
+                    else 0
+                )
+                # First pending deposit installment
+                pending_deposits = sorted(
+                    [
+                        i
+                        for i in sched.installments
+                        if i.payment_type == "deposit" and i.status == "pending"
+                    ],
+                    key=lambda i: i.due_date,
+                )
+                first_deposit_due = (
+                    pending_deposits[0].due_date if pending_deposits else None
+                )
+                first_deposit_days = None
+                if first_deposit_due is not None:
+                    due = first_deposit_due
+                    if due.tzinfo is None:
+                        due = due.replace(tzinfo=timezone.utc)
+                    first_deposit_days = (due - now).days
+
+                payment_info[sched.reservation_id] = {
+                    "deposit_paid_pct": deposit_paid_pct,
+                    "balance_paid_pct": balance_paid_pct,
+                    "first_deposit_days": first_deposit_days,
+                }
+
+            for lot in lots_data:
+                rid = lot.get("reservation_id")
+                if rid and rid in payment_info:
+                    lot.update(payment_info[rid])
+                else:
+                    lot.setdefault("deposit_paid_pct", None)
+                    lot.setdefault("balance_paid_pct", None)
+                    lot.setdefault("first_deposit_days", None)
+
         return lots_data
 
     async def get_monthly_breakdown(
@@ -1042,7 +1122,92 @@ class DashboardService:
             key = res.reservation_date.strftime("%Y-%m")
             if key not in monthly:
                 monthly[key] = {"period": key, "sold": 0, "reserved": 0, "total_amount": 0.0}
-            if res.status == "active":
+            if res.status in _ACTIVE_STATUSES:
                 monthly[key]["reserved"] += 1
 
         return sorted(monthly.values(), key=lambda x: x["period"])
+
+    async def get_late_payments(
+        self,
+        project_id: int | None = None,
+        user_id: int | None = None,
+    ) -> list[dict]:
+        """Get pending installments whose due date has passed.
+
+        Args:
+            project_id: Optional project filter
+            user_id: Optional user filter (commercial view)
+
+        Returns:
+            List of overdue installment entries with client/lot/project details
+        """
+        from sqlalchemy.orm import selectinload
+
+        now = datetime.now(timezone.utc)
+
+        query = (
+            select(PaymentInstallmentModel)
+            .join(PaymentScheduleModel, PaymentInstallmentModel.schedule_id == PaymentScheduleModel.id)
+            .join(ReservationModel, PaymentScheduleModel.reservation_id == ReservationModel.id)
+            .where(
+                PaymentInstallmentModel.status == "pending",
+                PaymentInstallmentModel.due_date < now,
+                ReservationModel.status.in_(_ACTIVE_STATUSES),
+            )
+            .options(
+                selectinload(PaymentInstallmentModel.schedule).selectinload(
+                    PaymentScheduleModel.reservation
+                ).selectinload(ReservationModel.client),
+                selectinload(PaymentInstallmentModel.schedule).selectinload(
+                    PaymentScheduleModel.reservation
+                ).selectinload(ReservationModel.lot),
+                selectinload(PaymentInstallmentModel.schedule).selectinload(
+                    PaymentScheduleModel.reservation
+                ).selectinload(ReservationModel.project),
+            )
+            .order_by(PaymentInstallmentModel.due_date)
+        )
+
+        result = await self.session.execute(query)
+        installments = result.scalars().all()
+
+        late_payments = []
+        for inst in installments:
+            schedule = inst.schedule
+            reservation = schedule.reservation
+            client = reservation.client
+            lot = reservation.lot
+            project = reservation.project
+
+            # Optional project filter
+            if project_id and reservation.project_id != project_id:
+                continue
+
+            # Optional user filter (by the commercial who made the reservation)
+            if user_id and reservation.reserved_by_user_id != user_id:
+                continue
+
+            due = inst.due_date
+            if due.tzinfo is None:
+                due = due.replace(tzinfo=timezone.utc)
+            days_late = (now - due).days
+
+            late_payments.append({
+                "installment_id": inst.id,
+                "reservation_id": reservation.id,
+                "client_id": client.id,
+                "client_name": client.name,
+                "client_phone": client.phone,
+                "lot_id": lot.id,
+                "lot_numero": lot.numero,
+                "project_id": project.id,
+                "project_name": project.name,
+                "payment_type": inst.payment_type,
+                "installment_number": inst.installment_number,
+                "amount": inst.amount,
+                "due_date": inst.due_date,
+                "days_late": days_late,
+                "reserved_by_user_id": reservation.reserved_by_user_id,
+            })
+
+        return late_payments

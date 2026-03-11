@@ -173,6 +173,26 @@ async def get_monthly_breakdown(
 
 
 @router.get(
+    "/late-payments",
+    summary="Late payments",
+    description="Get pending installments whose due date has passed (overdue)",
+)
+async def get_late_payments(
+    current_user: CurrentUser,
+    dashboard_service: DashboardServiceDep,
+    project_id: int | None = Query(default=None, description="Filter by project"),
+    user_id: int | None = Query(default=None, description="Filter by user"),
+) -> list[dict]:
+    """Get overdue installments. Commercials see only their own clients."""
+    if current_user.role == "commercial":
+        user_id = current_user.id
+    return await dashboard_service.get_late_payments(
+        project_id=project_id,
+        user_id=user_id,
+    )
+
+
+@router.get(
     "/lots",
     summary="Lots with details",
     description="Get all lots with reservation and client details",

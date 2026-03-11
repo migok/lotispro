@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir build && \
     pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels \
     fastapi uvicorn gunicorn pydantic pydantic-settings \
     sqlalchemy asyncpg alembic pyjwt passlib bcrypt \
-    structlog python-multipart httpx email-validator supabase
+    structlog python-multipart httpx email-validator supabase fpdf2 resend
 
 # Stage 2: Production
 FROM python:3.13-slim as production

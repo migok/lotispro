@@ -13,6 +13,7 @@ from app.infrastructure.database import get_session
 from app.services import (
     AuditService,
     AuthService,
+    CertificateService,
     ClientService,
     DashboardService,
     LotService,
@@ -169,6 +170,11 @@ def get_payment_service(session: DBSession) -> PaymentService:
     return PaymentService(session)
 
 
+def get_certificate_service() -> CertificateService:
+    """Get certificate service instance (no DB session needed)."""
+    return CertificateService()
+
+
 # Typed service dependencies
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
@@ -180,3 +186,4 @@ SaleServiceDep = Annotated[SaleService, Depends(get_sale_service)]
 DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
 PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
+CertificateServiceDep = Annotated[CertificateService, Depends(get_certificate_service)]

@@ -58,6 +58,10 @@ class ProjectResponse(BaseSchema):
         default=None,
         description="URL of the uploaded GeoJSON file in Supabase Storage",
     )
+    image_url: str | None = Field(
+        default=None,
+        description="URL of the project cover image",
+    )
     created_by: int
     created_at: datetime
     updated_at: datetime

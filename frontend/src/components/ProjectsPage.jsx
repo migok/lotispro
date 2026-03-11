@@ -7,6 +7,7 @@ import { formatDate, formatCompactPrice } from '../utils/formatters';
 import CreateProjectModal from './CreateProjectModal';
 import UploadGeojsonModal from './UploadGeojsonModal';
 import AssignCommercialsModal from './AssignCommercialsModal';
+import UploadProjectImageModal from './UploadProjectImageModal';
 
 const IconSearch = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -62,6 +63,14 @@ const IconUsers = () => (
   </svg>
 );
 
+const IconImage = () => (
+  <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="16" height="16" rx="2"/>
+    <circle cx="7" cy="7" r="1.5"/>
+    <path d="M18 13l-4-4L6 18"/>
+  </svg>
+);
+
 const IconTrash = () => (
   <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 5h14M7 5V3h6v2M6 5v11a1 1 0 001 1h6a1 1 0 001-1V5"/>
@@ -78,6 +87,7 @@ export default function ProjectsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [projectToDelete, setProjectToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -127,6 +137,13 @@ export default function ProjectsPage() {
   const handleCommercialsAssigned = () => {
     setShowAssignModal(false);
     setSelectedProject(null);
+  };
+
+  const handleImageUploaded = (updatedProject) => {
+    setProjects((prev) => prev.map((p) => p.id === updatedProject.id ? updatedProject : p));
+    setShowImageModal(false);
+    setSelectedProject(null);
+    toast.success('Image mise à jour');
   };
 
   const filteredProjects = projects.filter(p =>
@@ -200,11 +217,27 @@ export default function ProjectsPage() {
                 className="project-card"
                 onClick={() => navigate(`/projects/${project.id}`)}
               >
-                {/* Cover placeholder */}
+                {/* Cover */}
                 <div className="project-card-cover">
-                  <div className="project-card-cover-bg" aria-hidden="true" />
-                  <div className="project-card-cover-icon">
-                    <IconBuilding />
+                  {project.image_url ? (
+                    <img
+                      src={project.image_url}
+                      alt={project.name}
+                      className="project-card-cover-img"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextSibling.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className="project-card-cover-fallback"
+                    style={{ display: project.image_url ? 'none' : 'flex' }}
+                  >
+                    <div className="project-card-cover-bg" aria-hidden="true" />
+                    <div className="project-card-cover-icon">
+                      <IconBuilding />
+                    </div>
                   </div>
                   <span className={`visibility-badge ${project.visibility}`}>
                     {project.visibility === 'public' ? 'Public' : 'Privé'}
@@ -255,6 +288,13 @@ export default function ProjectsPage() {
                       <div className="project-card-actions" onClick={(e) => e.stopPropagation()}>
                         <button
                           className="card-action-btn"
+                          onClick={(e) => { e.stopPropagation(); setSelectedProject(project); setShowImageModal(true); }}
+                          title="Image du projet"
+                        >
+                          <IconImage />
+                        </button>
+                        <button
+                          className="card-action-btn"
                           onClick={(e) => { e.stopPropagation(); setSelectedProject(project); setShowUploadModal(true); }}
                           title="Upload GeoJSON"
                         >
@@ -296,6 +336,14 @@ export default function ProjectsPage() {
         <CreateProjectModal
           onClose={() => setShowCreateModal(false)}
           onCreated={handleProjectCreated}
+        />
+      )}
+
+      {showImageModal && selectedProject && (
+        <UploadProjectImageModal
+          project={selectedProject}
+          onClose={() => { setShowImageModal(false); setSelectedProject(null); }}
+          onUploaded={handleImageUploaded}
         />
       )}
 

@@ -161,6 +161,74 @@ class SupabaseStorageClient:
             logger.error(f"Failed to delete file {file_path}: {e}")
             raise StorageError(f"Failed to delete file: {e}")
 
+    def upload_image(
+        self,
+        file_path: str,
+        file_content: bytes,
+        content_type: str = "image/jpeg",
+    ) -> str:
+        """Upload an image to the public images bucket.
+
+        Uses a separate public bucket so images get stable public URLs
+        (no expiry, unlike signed URLs used for GeoJSON).
+
+        Args:
+            file_path: Path within the bucket (e.g., "projects/3/cover.jpg")
+            file_content: Raw image bytes
+            content_type: MIME type of the image
+
+        Returns:
+            Permanent public URL of the uploaded image
+
+        Raises:
+            StorageError: If upload fails
+        """
+        images_bucket = settings.SUPABASE_IMAGES_BUCKET
+        try:
+            # Ensure the images bucket exists and is public
+            buckets = self.client.storage.list_buckets()
+            bucket_names = [b.name for b in buckets]
+            if images_bucket not in bucket_names:
+                self.client.storage.create_bucket(
+                    images_bucket,
+                    options={"public": True},
+                )
+                logger.info(f"Created public images bucket: {images_bucket}")
+
+            self.client.storage.from_(images_bucket).upload(
+                path=file_path,
+                file=file_content,
+                file_options={"content-type": content_type, "upsert": "true"},
+            )
+
+            # Use SUPABASE_PUBLIC_URL (or SUPABASE_URL as fallback) so the
+            # generated link is accessible from the browser even when the
+            # backend runs inside Docker with an internal hostname.
+            base = settings.supabase_public_base_url
+            public_url = f"{base}/storage/v1/object/public/{images_bucket}/{file_path}"
+            logger.info(f"Uploaded image to {file_path}: {public_url}")
+            return public_url
+
+        except Exception as e:
+            logger.error(f"Failed to upload image {file_path}: {e}")
+            raise StorageError(f"Failed to upload image: {e}")
+
+    def delete_image(self, file_path: str) -> None:
+        """Delete an image from the public images bucket.
+
+        Args:
+            file_path: Path within the images bucket
+
+        Raises:
+            StorageError: If deletion fails
+        """
+        try:
+            self.client.storage.from_(settings.SUPABASE_IMAGES_BUCKET).remove([file_path])
+            logger.info(f"Deleted image {file_path}")
+        except Exception as e:
+            logger.error(f"Failed to delete image {file_path}: {e}")
+            raise StorageError(f"Failed to delete image: {e}")
+
     def list_files(self, folder_path: str = "") -> list[dict]:
         """List files in a folder.
 

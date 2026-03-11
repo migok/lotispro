@@ -17,6 +17,26 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import ProjectsPage from "./components/ProjectsPage";
 import ProjectDetailPage from "./components/ProjectDetailPage";
 
+// Logo — location pin with lot grid (real estate concept)
+const LogoIcon = ({ size = 28 }) => (
+  <svg width={size} height={Math.round(size * 1.14)} viewBox="0 0 28 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* Pin body */}
+    <path
+      d="M14 1C7.925 1 3 5.925 3 12c0 8.25 11 19 11 19S25 20.25 25 12C25 5.925 20.075 1 14 1z"
+      fill="var(--color-primary)"
+      fillOpacity="0.12"
+      stroke="var(--color-primary)"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+    {/* 2×2 lot grid — bird's-eye view of parcels */}
+    <rect x="8.5" y="7" width="5" height="3.5" rx="0.75" fill="var(--color-primary)" fillOpacity="0.9"/>
+    <rect x="15" y="7" width="5" height="3.5" rx="0.75" fill="var(--color-primary)" fillOpacity="0.9"/>
+    <rect x="8.5" y="11.5" width="5" height="3.5" rx="0.75" fill="var(--color-primary)" fillOpacity="0.55"/>
+    <rect x="15" y="11.5" width="5" height="3.5" rx="0.75" fill="var(--color-primary)" fillOpacity="0.55"/>
+  </svg>
+);
+
 // SVG Icons
 const IconProjects = () => (
   <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -143,12 +163,7 @@ function AppContent() {
       <aside className={`sidebar ${mobileMenuOpen ? 'sidebar-mobile-open' : ''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <div className="sidebar-logo-mark" aria-hidden="true">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M2 14L8 2L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--color-primary)'}}/>
-                <path d="M4.5 10H11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={{color: 'var(--color-primary)'}}/>
-              </svg>
-            </div>
+            <LogoIcon size={28} />
             <span className="sidebar-logo-text">LotisPro</span>
           </div>
           <button

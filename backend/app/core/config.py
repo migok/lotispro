@@ -70,10 +70,26 @@ class Settings(BaseSettings):
 
     # Supabase Configuration
     SUPABASE_URL: str | None = None
+    SUPABASE_PUBLIC_URL: str | None = None  # External URL for public file links (browser-accessible)
     SUPABASE_PUBLISHABLE_KEY: str | None = None
     SUPABASE_SECRET_KEY: str | None = None
     SUPABASE_STORAGE_URL: str | None = None
     SUPABASE_STORAGE_BUCKET: str = "geojson-files"
+    SUPABASE_IMAGES_BUCKET: str = "project-images"
+
+    @property
+    def supabase_public_base_url(self) -> str | None:
+        """URL accessible by the browser for public storage links.
+
+        Defaults to SUPABASE_URL. Override with SUPABASE_PUBLIC_URL when
+        the backend connects via an internal Docker hostname but the browser
+        needs to access files via the host-mapped port (e.g. 127.0.0.1:54321).
+        """
+        return (self.SUPABASE_PUBLIC_URL or self.SUPABASE_URL or "").rstrip("/")
+
+    # Email (Resend)
+    RESEND_API_KEY: str | None = None
+    EMAIL_FROM: str = "LotisPro <noreply@resend.dev>"
 
     # Logging
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

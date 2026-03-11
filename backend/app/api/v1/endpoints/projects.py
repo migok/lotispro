@@ -3,7 +3,7 @@
 import csv
 import io
 
-from fastapi import APIRouter, File, Query, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 
 from app.api.dependencies import CurrentUser, LotServiceDep, ManagerUser, ProjectServiceDep
 from app.domain.schemas.common import MessageResponse
@@ -225,6 +225,60 @@ async def get_project_history(
         date_from=date_from,
         date_to=date_to,
     )
+
+
+# Image upload endpoint
+_ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+_MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post(
+    "/{project_id}/upload-image",
+    response_model=ProjectResponse,
+    summary="Upload project image",
+    description="Upload a cover image for the project to Supabase Storage (manager only)",
+)
+async def upload_project_image(
+    project_id: int,
+    current_user: ManagerUser,
+    project_service: ProjectServiceDep,
+    file: UploadFile = File(..., description="Image file (jpg, png, webp, gif)"),
+) -> ProjectResponse:
+    """Upload a cover image for a project to Supabase Storage."""
+    if file.content_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Format non supporté '{file.content_type}'. Acceptés : jpg, png, webp, gif",
+        )
+
+    content = await file.read()
+    if len(content) > _MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Fichier trop grand. Maximum 5 Mo.",
+        )
+
+    return await project_service.upload_project_image(
+        project_id=project_id,
+        file_content=content,
+        filename=file.filename or f"cover.{file.content_type.split('/')[-1]}",
+        content_type=file.content_type,
+    )
+
+
+@router.delete(
+    "/{project_id}/image",
+    response_model=ProjectResponse,
+    summary="Delete project image",
+    description="Remove the cover image of a project from Supabase Storage (manager only)",
+)
+async def delete_project_image(
+    project_id: int,
+    current_user: ManagerUser,
+    project_service: ProjectServiceDep,
+) -> ProjectResponse:
+    """Remove a project's cover image from Supabase Storage."""
+    return await project_service.remove_project_image(project_id)
 
 
 # GeoJSON endpoints

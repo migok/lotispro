@@ -180,7 +180,7 @@ class LotRepository(BaseRepository[LotModel]):
                 ReservationModel,
                 and_(
                     ReservationModel.lot_id == LotModel.id,
-                    ReservationModel.status == "active",
+                    ReservationModel.status.in_(["active", "validated"]),
                 ),
             )
             .outerjoin(ClientModel, ClientModel.id == ReservationModel.client_id)

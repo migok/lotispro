@@ -2,7 +2,6 @@
 name = "lots-api"
 version = "2.0.0"
 description = "Real Estate Lots Management API"
-readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Your Name", email = "your.email@example.com" }]
@@ -51,6 +50,12 @@ dependencies = [
 
     # Supabase
     "supabase>=2.10.0",
+
+    # PDF generation
+    "fpdf2>=2.7.0",
+
+    # Email
+    "resend>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -167,6 +172,7 @@ module = [
     "bcrypt.*",
     "structlog.*",
     "supabase.*",
+    "resend.*",
 ]
 ignore_missing_imports = true
 

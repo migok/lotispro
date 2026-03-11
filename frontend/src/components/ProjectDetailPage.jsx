@@ -10,8 +10,15 @@ import { useAuth } from '../contexts/AuthContext';
 const STATUS_COLORS = {
   available: '#10b981',
   reserved: '#f59e0b',
+  validated: '#8b5cf6',
   sold: '#ef4444',
   blocked: '#6b7280',
+};
+
+// Détermine la couleur effective selon statut + reservation_status
+const getLotColor = (status, reservationStatus) => {
+  if (status === 'reserved' && reservationStatus === 'validated') return STATUS_COLORS.validated;
+  return STATUS_COLORS[status] || '#999';
 };
 
 const SELECTION_STYLE = {
@@ -46,7 +53,7 @@ export default function ProjectDetailPage() {
   const geoRef = useRef(null);
   const labelsLayerRef = useRef(null);
   const mapContainerRef = useRef(null);
-  const [stats, setStats] = useState({ available: 0, reserved: 0, sold: 0, blocked: 0 });
+  const [stats, setStats] = useState({ available: 0, reserved: 0, validated: 0, sold: 0, blocked: 0 });
   const [filterStatus, setFilterStatus] = useState(null);
   const [surfaceMin, setSurfaceMin] = useState('');
   const [surfaceMax, setSurfaceMax] = useState('');
@@ -166,14 +173,17 @@ export default function ProjectDetailPage() {
 
       // Calculate stats and extract metadata options
       const features = geojson.features || [];
-      const newStats = { available: 0, reserved: 0, sold: 0, blocked: 0 };
+      const newStats = { available: 0, reserved: 0, validated: 0, sold: 0, blocked: 0 };
       const typeLotSet = new Set();
       const emplacementSet = new Set();
       const typeMaisonSet = new Set();
 
       features.forEach((f) => {
         const status = f.properties?.status || 'available';
-        if (newStats.hasOwnProperty(status)) {
+        const resStatus = f.properties?.reservation_status;
+        if (status === 'reserved' && resStatus === 'validated') {
+          newStats.validated++;
+        } else if (newStats.hasOwnProperty(status)) {
           newStats[status]++;
         }
         // Collect unique metadata values
@@ -200,12 +210,16 @@ export default function ProjectDetailPage() {
           const props = feature.properties || {};
           const dbId = props.db_id;
           const status = props.status ?? 'available';
+          const reservationStatus = props.reservation_status ?? null;
           const area = props.Shape_Area;
           const lotPrice = props.price;
+          const lotColor = getLotColor(status, reservationStatus);
 
           // Compute normal style (based on filters)
+          // For "validated" filter: show lots where status=reserved AND reservation_status=validated
+          const effectiveStatus = (status === 'reserved' && reservationStatus === 'validated') ? 'validated' : status;
           let normalStyle;
-          if (filterStatus && status !== filterStatus) {
+          if (filterStatus && effectiveStatus !== filterStatus) {
             normalStyle = { opacity: 0, fillOpacity: 0 };
           } else if (surfaceMin && area && area < parseFloat(surfaceMin)) {
             normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
@@ -223,9 +237,9 @@ export default function ProjectDetailPage() {
             normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
           } else {
             normalStyle = {
-              color: STATUS_COLORS[status] || '#999',
+              color: lotColor,
               weight: 2,
-              fillColor: STATUS_COLORS[status] || '#999',
+              fillColor: lotColor,
               fillOpacity: 0.5,
             };
           }
@@ -262,17 +276,20 @@ export default function ProjectDetailPage() {
             const labels = {
               available: 'Disponible',
               reserved: 'Réservé',
+              validated: 'Validé',
               sold: 'Vendu',
               blocked: 'Bloqué'
             };
             return labels[s] || s;
           };
 
+          const tooltipStatus = (status === 'reserved' && props.reservation_status === 'validated') ? 'validated' : status;
+
           let tooltipContent = `
             <div class="lot-tooltip">
               <div class="lot-tooltip-header">
                 <strong>Lot ${lotId}</strong>
-                <span class="lot-tooltip-status ${status}">${getStatusLabel(status)}</span>
+                <span class="lot-tooltip-status ${tooltipStatus}">${getStatusLabel(tooltipStatus)}</span>
               </div>
               <div class="lot-tooltip-row">
                 <span class="lot-tooltip-label">Prix:</span>
@@ -366,7 +383,7 @@ export default function ProjectDetailPage() {
               const entry = selectedLotLayersRef.current.get(dbId);
               if (newSelected.has(dbId)) {
                 newSelected.delete(dbId);
-                lyr.setStyle(entry?.normalStyle || { color: STATUS_COLORS[status] || '#999', weight: 2, fillColor: STATUS_COLORS[status] || '#999', fillOpacity: 0.5 });
+                lyr.setStyle(entry?.normalStyle || { color: getLotColor(status, props.reservation_status), weight: 2, fillColor: getLotColor(status, props.reservation_status), fillOpacity: 0.5 });
               } else {
                 newSelected.add(dbId);
                 lyr.setStyle(SELECTION_STYLE);
@@ -380,6 +397,7 @@ export default function ProjectDetailPage() {
                 lot_id: String(lotId),
                 numero: String(lotId),
                 status: status,
+                reservation_status: props.reservation_status ?? null,
                 reserved_by: props.reserved_by ?? null,
                 reserved_by_user_id: props.reserved_by_user_id ?? null,
                 reserved_until: props.reserved_until ?? null,
@@ -399,6 +417,9 @@ export default function ProjectDetailPage() {
                 type_lot: props.type_lot || null,
                 emplacement: props.emplacement || null,
                 type_maison: props.type_maison || null,
+                deposit_paid_pct: props.deposit_paid_pct ?? null,
+                balance_paid_pct: props.balance_paid_pct ?? null,
+                first_deposit_days: props.first_deposit_days ?? null,
               });
               setShowPopup(true);
             }
@@ -887,16 +908,24 @@ function CarteTab({
         {showFilters && (
           <>
             <div className="filters-status-row">
-              {['available', 'reserved', 'sold', 'blocked'].map(status => (
+              {[
+                { key: 'available', label: 'Disponible' },
+                { key: 'reserved',  label: 'Réservé' },
+                { key: 'validated', label: 'Validé' },
+                { key: 'sold',      label: 'Vendu' },
+                { key: 'blocked',   label: 'Bloqué' },
+              ].map(({ key, label }) => (
                 <button
-                  key={status}
-                  className={`btn-status-filter ${filterStatus === status ? 'active' : ''} ${status}`}
-                  onClick={() => setFilterStatus(filterStatus === status ? null : status)}
+                  key={key}
+                  className={`btn-status-filter ${filterStatus === key ? 'active' : ''} ${key}`}
+                  onClick={() => setFilterStatus(filterStatus === key ? null : key)}
+                  style={key === 'validated' ? { '--status-filter-color': '#8b5cf6' } : undefined}
                 >
-                  <span className="status-dot"></span>
-                  {status === 'available' ? 'Disponible' :
-                   status === 'reserved' ? 'Réservé' :
-                   status === 'sold' ? 'Vendu' : 'Bloqué'}
+                  <span className="status-dot" style={{ background: STATUS_COLORS[key] || '#8b5cf6' }}></span>
+                  {label}
+                  {stats[key] > 0 && (
+                    <span className="status-filter-count">{stats[key]}</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -1076,13 +1105,22 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
   const STATUS_CONFIG = {
     available: { label: 'Disponible', color: '#2ecc71', bg: 'rgba(46,204,113,0.12)' },
     reserved:  { label: 'Réservé',    color: '#e8a93a', bg: 'rgba(232,169,58,0.12)' },
+    validated: { label: 'Validé',     color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)' },
     sold:      { label: 'Vendu',      color: '#8896ae', bg: 'rgba(136,150,174,0.12)' },
     blocked:   { label: 'Bloqué',     color: '#e05555', bg: 'rgba(224,85,85,0.12)'  },
   };
-  const conf = STATUS_CONFIG[lot.status] || STATUS_CONFIG.available;
+  // Determine display status: validated reservation → show as validated
+  const displayStatus = (lot.status === 'reserved' && lot.reservation_status === 'validated')
+    ? 'validated' : lot.status;
+  const conf = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.available;
   const priceM2 = lot.price && lot.surface && lot.surface > 0
     ? Math.round(lot.price / lot.surface)
     : null;
+  // Payment data
+  const depositPct = lot.deposit_paid_pct ?? null;
+  const balancePct = lot.balance_paid_pct ?? null;
+  const firstDepositDays = lot.first_deposit_days ?? null;
+  const hasPaymentData = depositPct !== null || balancePct !== null;
 
   return (
     <div className="lot-map-popup">
@@ -1105,6 +1143,11 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
           <span className="lot-map-popup-status-dot" style={{ background: conf.color }} />
           {conf.label}
         </span>
+        {lot.days_in_status > 0 && (
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted, #6e7e9e)', marginLeft: '0.4rem' }}>
+            {Math.round(lot.days_in_status)}j
+          </span>
+        )}
       </div>
 
       {/* Stats row */}
@@ -1131,6 +1174,61 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
           </div>
         )}
       </div>
+
+      {/* Payment progress — shown for reserved/validated lots with schedule */}
+      {hasPaymentData && (
+        <div className="lot-map-popup-payment">
+          <div className="lot-map-popup-payment-title">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+            </svg>
+            Avancement paiements
+          </div>
+          {depositPct !== null && (
+            <div className="lot-map-popup-pay-row">
+              <span className="lot-map-popup-pay-label">Acompte</span>
+              <div className="lot-map-popup-pay-bar">
+                <div
+                  className="lot-map-popup-pay-fill"
+                  style={{
+                    width: `${Math.min(depositPct, 100)}%`,
+                    background: depositPct >= 100 ? '#2ecc71' : depositPct > 0 ? '#d4973a' : '#3e4e68',
+                  }}
+                />
+              </div>
+              <span className="lot-map-popup-pay-pct">{depositPct}%</span>
+            </div>
+          )}
+          {balancePct !== null && (
+            <div className="lot-map-popup-pay-row">
+              <span className="lot-map-popup-pay-label">Solde</span>
+              <div className="lot-map-popup-pay-bar">
+                <div
+                  className="lot-map-popup-pay-fill"
+                  style={{
+                    width: `${Math.min(balancePct, 100)}%`,
+                    background: balancePct >= 100 ? '#2ecc71' : balancePct > 0 ? '#8b5cf6' : '#3e4e68',
+                  }}
+                />
+              </div>
+              <span className="lot-map-popup-pay-pct">{balancePct}%</span>
+            </div>
+          )}
+          {firstDepositDays !== null && (
+            <div className="lot-map-popup-pay-next">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              {firstDepositDays < 0
+                ? <span style={{ color: '#e05555' }}>1er versement : en retard de {Math.abs(firstDepositDays)}j</span>
+                : firstDepositDays === 0
+                  ? <span style={{ color: '#e8a93a' }}>1er versement : aujourd&apos;hui</span>
+                  : <span style={{ color: firstDepositDays <= 7 ? '#e8a93a' : 'inherit' }}>1er versement dans {firstDepositDays}j</span>
+              }
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Meta info */}
       {lot.zone && (

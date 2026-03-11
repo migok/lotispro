@@ -5,6 +5,7 @@
 export const STATUS_LABELS = {
   available: 'Disponible',
   reserved: 'Réservé',
+  validated: 'Validé',
   sold: 'Vendu',
   blocked: 'Bloqué',
 };

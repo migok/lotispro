@@ -19,8 +19,11 @@ from app.infrastructure.database.models import (
     PaymentScheduleModel,
 )
 from app.infrastructure.database.repositories import PaymentRepository, ReservationRepository
+from app.services.email_service import EmailService
 
 logger = get_logger(__name__)
+
+_email_service = EmailService()
 
 
 def _add_months(dt: datetime, months: int) -> datetime:
@@ -242,4 +245,63 @@ class PaymentService:
             status=data.status,
         )
 
+        # When first deposit installment is confirmed → validate the reservation
+        if (
+            data.status == "paid"
+            and inst.payment_type == "deposit"
+            and inst.installment_number == 1
+        ):
+            await self._validate_reservation_for_installment(inst.id)
+            await self._send_deposit_confirmation(inst.id, inst.amount, inst.paid_date)
+
         return self._installment_to_response(inst)
+
+    async def _validate_reservation_for_installment(self, installment_id: int) -> None:
+        """Set the reservation status to 'validated' after first deposit is confirmed."""
+        ctx = await self.payment_repo.get_installment_with_context(installment_id)
+        if not ctx:
+            return
+        reservation = ctx.schedule.reservation
+        if reservation.status in ("active", "validated"):
+            await self.reservation_repo.update(reservation.id, status="validated")
+            logger.info(
+                "Reservation validated after first deposit",
+                reservation_id=reservation.id,
+            )
+
+    async def _send_deposit_confirmation(
+        self,
+        installment_id: int,
+        amount: float,
+        paid_date: object,
+    ) -> None:
+        """Load full context and send deposit confirmation email."""
+        from datetime import datetime
+
+        ctx = await self.payment_repo.get_installment_with_context(installment_id)
+        if not ctx:
+            return
+
+        reservation = ctx.schedule.reservation
+        client = reservation.client
+        lot = reservation.lot
+        project = reservation.project
+
+        if not client.email:
+            logger.info(
+                "Deposit confirmation skipped — client has no email",
+                client_id=client.id,
+                lot_numero=lot.numero,
+            )
+            return
+
+        await _email_service.send_deposit_payment_confirmation(
+            client_name=client.name,
+            client_email=client.email,
+            amount=amount,
+            paid_date=paid_date if isinstance(paid_date, datetime) else None,
+            lot_numero=lot.numero,
+            project_name=project.name,
+            installment_number=1,
+            total_deposit=ctx.schedule.deposit_total,
+        )

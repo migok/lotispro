@@ -40,13 +40,22 @@ export default function Login() {
 
         <div className="login-left-content">
           <div className="login-brand-mark">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <rect x="1" y="1" width="46" height="46" rx="6" stroke="var(--border-gold)" strokeWidth="1"/>
-              <path d="M10 38L24 10L38 38" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M15.5 30H32.5" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round"/>
+            {/* Location pin + lot grid logo */}
+            <svg width="72" height="82" viewBox="0 0 28 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M14 1C7.925 1 3 5.925 3 12c0 8.25 11 19 11 19S25 20.25 25 12C25 5.925 20.075 1 14 1z"
+                fill="var(--color-primary)"
+                fillOpacity="0.15"
+                stroke="var(--color-primary)"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <rect x="8.5" y="7" width="5" height="3.5" rx="0.75" fill="var(--color-primary)" fillOpacity="0.9"/>
+              <rect x="15" y="7" width="5" height="3.5" rx="0.75" fill="var(--color-primary)" fillOpacity="0.9"/>
+              <rect x="8.5" y="11.5" width="5" height="3.5" rx="0.75" fill="var(--color-primary)" fillOpacity="0.55"/>
+              <rect x="15" y="11.5" width="5" height="3.5" rx="0.75" fill="var(--color-primary)" fillOpacity="0.55"/>
             </svg>
           </div>
-
           <div className="login-brand-title">LotisPro</div>
           <div className="login-brand-tagline">
             Gestion de projets<br />immobiliers

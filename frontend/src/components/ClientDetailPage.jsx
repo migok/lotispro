@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/ToastContext';
-import { apiGet, apiPost, apiPut, apiPatch } from '../utils/api';
+import { apiGet, apiPost, apiPut, apiPatch, apiFetch } from '../utils/api';
 import { formatPrice, formatDate } from '../utils/formatters';
 import { CLIENT_TYPES } from '../utils/constants';
 
@@ -35,7 +35,7 @@ const IconMail = () => (
 );
 
 const IconCalendar = () => (
-  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="13" height="13" style={{ flexShrink: 0 }}>
     <rect x="3" y="4" width="14" height="13" rx="1.5" />
     <path d="M3 8h14M7 3v2M13 3v2" />
   </svg>
@@ -83,6 +83,14 @@ const IconNote = () => (
 const IconCheck = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
     <path d="M2.5 8l4 4 7-7" />
+  </svg>
+);
+
+const IconCertificate = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+    <rect x="3" y="2" width="14" height="16" rx="1.5" />
+    <path d="M7 6h6M7 9h6M7 12h4" />
+    <path d="M13 14l1.5 1.5L17 13" />
   </svg>
 );
 
@@ -160,131 +168,161 @@ function DonutChart({ paidPct, color, size = 80 }) {
   );
 }
 
+/* ── Installment table brick (with donut) ───────────────────── */
+function InstallmentBrick({ type, label, items, onInstallmentUpdate }) {
+  const total = items.reduce((s, i) => s + i.amount, 0);
+  const paid  = items.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0);
+  const paidPct = total > 0 ? (paid / total) * 100 : 0;
+  const allPaid = items.length > 0 && items.every(i => i.status === 'paid');
+  const color = type === 'deposit' ? 'var(--color-primary)' : 'var(--color-success, #2ecc71)';
+
+  return (
+    <div className={`pay-brick pay-brick--${type}`}>
+      {/* Summary row with donut */}
+      <div className="pay-brick-summary">
+        <DonutChart paidPct={paidPct} color={color} size={64} />
+        <div className="pay-brick-meta">
+          <div className="pay-brick-label">{label}</div>
+          <div className="pay-brick-amounts">
+            <span className="pay-brick-paid">{formatPrice(paid)}</span>
+            <span className="pay-brick-sep"> / </span>
+            <span className="pay-brick-total">{formatPrice(total)}</span>
+          </div>
+          <div className="pay-brick-remaining">Restant : {formatPrice(total - paid)}</div>
+        </div>
+        {allPaid
+          ? <span className="badge badge-green pay-brick-status"><IconCheck /> Soldé</span>
+          : <span className="badge badge-gray pay-brick-status">{items.filter(i => i.status === 'paid').length}/{items.length} versements</span>
+        }
+      </div>
+      {/* Table */}
+      {items.length > 0 && (
+        <table className="pay-table">
+          <thead>
+            <tr><th>#</th><th>Échéance</th><th>Montant</th><th>Statut</th><th></th></tr>
+          </thead>
+          <tbody>
+            {items.map(inst => {
+              const isOverdue = inst.status === 'pending' && new Date(inst.due_date) < new Date();
+              return (
+                <tr key={inst.id} className={[
+                  inst.status === 'paid' ? 'pay-row--paid' : '',
+                  isOverdue ? 'pay-row--overdue' : '',
+                ].filter(Boolean).join(' ')}>
+                  <td className="pay-cell-num">{inst.installment_number}</td>
+                  <td className="pay-cell-date">{formatDate(inst.due_date)}</td>
+                  <td className="pay-cell-amount">{formatPrice(inst.amount)}</td>
+                  <td>
+                    <span className={`badge ${inst.status === 'paid' ? 'badge-green' : isOverdue ? 'badge-red' : 'badge-gray'}`}>
+                      {inst.status === 'paid' ? <><IconCheck /> Payé</> : <><IconClock /> En attente</>}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      className={`pay-toggle-btn ${inst.status === 'paid' ? 'pay-toggle-btn--undo' : 'pay-toggle-btn--mark'}`}
+                      onClick={() => onInstallmentUpdate(inst.id, inst.status === 'paid' ? 'pending' : 'paid')}
+                      title={inst.status === 'paid' ? 'Marquer non payé' : 'Marquer payé'}
+                    >
+                      {inst.status === 'paid' ? '↩' : '✓'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 /* ── Payment overview card ──────────────────────────────────── */
 function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate }) {
-  // Find matching reservation for label
   const res = reservations.find(r => r.id === schedule.reservation_id);
   const label = res
     ? `Lot ${res.lot_numero} — ${res.project_name}`
     : `Réservation #${schedule.reservation_id}`;
+  const isValidated = res?.status === 'validated';
 
-  const depositInstallments = schedule.installments.filter(i => i.payment_type === 'deposit');
-  const balanceInstallments = schedule.installments.filter(i => i.payment_type === 'balance');
+  const firstPaymentAmount = res?.deposit ?? 0;
+  const firstPaymentDate = res?.deposit_date || res?.reservation_date;
 
-  const paidDeposit = depositInstallments
-    .filter(i => i.status === 'paid')
-    .reduce((s, i) => s + i.amount, 0);
-  const paidBalance = balanceInstallments
-    .filter(i => i.status === 'paid')
-    .reduce((s, i) => s + i.amount, 0);
+  const depositInstallments = schedule.installments
+    .filter(i => i.payment_type === 'deposit')
+    .sort((a, b) => a.installment_number - b.installment_number);
+  const balanceInstallments = schedule.installments
+    .filter(i => i.payment_type === 'balance')
+    .sort((a, b) => a.installment_number - b.installment_number);
 
-  const depositPaidPct = schedule.deposit_total > 0
-    ? (paidDeposit / schedule.deposit_total) * 100
-    : 0;
-  const balancePaidPct = schedule.balance_total > 0
-    ? (paidBalance / schedule.balance_total) * 100
-    : 0;
-
-  const [expanded, setExpanded] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div className="pay-overview-card">
       {/* Header */}
-      <div className="pay-overview-header" onClick={() => setExpanded(v => !v)}>
-        <div className="pay-overview-label">{label}</div>
+      <div className="pay-overview-header" onClick={() => setCollapsed(v => !v)}>
+        <div className="pay-overview-label">
+          {label}
+          {isValidated && (
+            <span className="badge badge-green pay-validated-badge">
+              <IconCheck /> Réservation validée
+            </span>
+          )}
+        </div>
         <div className="pay-overview-price">{formatPrice(schedule.lot_price)}</div>
-        <button className={`pay-overview-toggle ${expanded ? 'open' : ''}`}>
+        <button className={`pay-overview-toggle ${collapsed ? '' : 'open'}`}>
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
             <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
       </div>
 
-      {/* Donut charts summary */}
-      <div className="pay-overview-charts">
-        <div className="pay-donut-block">
-          <DonutChart paidPct={depositPaidPct} color="var(--color-primary)" size={80} />
-          <div className="pay-donut-meta">
-            <div className="pay-donut-title">Acompte</div>
-            <div className="pay-donut-sub">
-              <span className="pay-donut-paid">{formatPrice(paidDeposit)}</span>
-              <span className="pay-donut-sep"> / </span>
-              <span className="pay-donut-total">{formatPrice(schedule.deposit_total)}</span>
+      {!collapsed && (
+        <div className="pay-bricks">
+          {/* ── Brique 1 : 1er versement ── */}
+          <div className={`pay-brick pay-brick--first ${isValidated ? 'pay-brick--first-paid' : ''}`}>
+            <div className="pay-brick-head">
+              <span className="pay-brick-label">1er versement</span>
+              <span className="pay-brick-progress">
+                <span className="pay-brick-paid">{formatPrice(firstPaymentAmount)}</span>
+              </span>
+              {isValidated
+                ? <span className="badge badge-green pay-brick-status"><IconCheck /> Payé</span>
+                : <span className="badge badge-gray pay-brick-status"><IconClock /> En attente</span>
+              }
             </div>
-            <div className="pay-donut-remaining">
-              Restant : {formatPrice(schedule.deposit_total - paidDeposit)}
-            </div>
-          </div>
-        </div>
-
-        <div className="pay-donut-divider" />
-
-        <div className="pay-donut-block">
-          <DonutChart paidPct={balancePaidPct} color="var(--color-success)" size={80} />
-          <div className="pay-donut-meta">
-            <div className="pay-donut-title">Solde</div>
-            <div className="pay-donut-sub">
-              <span className="pay-donut-paid">{formatPrice(paidBalance)}</span>
-              <span className="pay-donut-sep"> / </span>
-              <span className="pay-donut-total">{formatPrice(schedule.balance_total)}</span>
-            </div>
-            <div className="pay-donut-remaining">
-              Restant : {formatPrice(schedule.balance_total - paidBalance)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Installment tables (expanded) */}
-      {expanded && (
-        <div className="pay-installments">
-          {[
-            { type: 'deposit', label: 'Échéancier acompte', items: depositInstallments, color: 'deposit' },
-            { type: 'balance', label: 'Échéancier solde', items: balanceInstallments, color: 'balance' },
-          ].map(section => (
-            <div key={section.type} className="pay-installment-section">
-              <div className={`pay-installment-section-title pay-installment-section-title--${section.color}`}>
-                {section.label}
+            {firstPaymentDate && (
+              <div className="pay-first-payment-date">
+                <IconCalendar /> {formatDate(firstPaymentDate)}
               </div>
-              <table className="pay-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Échéance</th>
-                    <th>Montant</th>
-                    <th>Statut</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {section.items.map(inst => (
-                    <tr key={inst.id} className={inst.status === 'paid' ? 'pay-row--paid' : ''}>
-                      <td className="pay-cell-num">{inst.installment_number}</td>
-                      <td className="pay-cell-date">{formatDate(inst.due_date)}</td>
-                      <td className="pay-cell-amount">{formatPrice(inst.amount)}</td>
-                      <td>
-                        <span className={`badge ${inst.status === 'paid' ? 'badge-green' : 'badge-gray'}`}>
-                          {inst.status === 'paid' ? <><IconCheck /> Payé</> : <><IconClock /> En attente</>}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          className={`pay-toggle-btn ${inst.status === 'paid' ? 'pay-toggle-btn--undo' : 'pay-toggle-btn--mark'}`}
-                          onClick={() => onInstallmentUpdate(
-                            inst.id,
-                            inst.status === 'paid' ? 'pending' : 'paid',
-                          )}
-                          title={inst.status === 'paid' ? 'Marquer non payé' : 'Marquer payé'}
-                        >
-                          {inst.status === 'paid' ? '↩' : '✓'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
+            )}
+            {!isValidated && (
+              <button
+                className="pay-first-payment-confirm"
+                onClick={() => {
+                  const firstInst = depositInstallments[0];
+                  if (firstInst) onInstallmentUpdate(firstInst.id, 'paid');
+                }}
+              >
+                <IconCheck /> Confirmer la réception
+              </button>
+            )}
+          </div>
+
+          {/* ── Brique 2 : Échéancier acompte ── */}
+          <InstallmentBrick
+            type="deposit"
+            label="Échéancier acompte"
+            items={depositInstallments}
+            onInstallmentUpdate={onInstallmentUpdate}
+          />
+
+          {/* ── Brique 3 : Échéancier solde ── */}
+          <InstallmentBrick
+            type="balance"
+            label="Échéancier solde"
+            items={balanceInstallments}
+            onInstallmentUpdate={onInstallmentUpdate}
+          />
         </div>
       )}
     </div>
@@ -330,6 +368,7 @@ export default function ClientDetailPage() {
         phone:       data.phone       || '',
         email:       data.email       || '',
         cin:         data.cin         || '',
+        address:     data.address     || '',
         client_type: data.client_type || 'autre',
         notes:       data.notes       || '',
       });
@@ -376,11 +415,30 @@ export default function ClientDetailPage() {
         status: newStatus,
         paid_date: newStatus === 'paid' ? new Date().toISOString() : null,
       });
-      // Reload payment data
-      await loadPaymentSchedules();
+      // Reload both payment data and client (reservation status may have changed)
+      await Promise.all([loadPaymentSchedules(), loadClient()]);
       toast.success(newStatus === 'paid' ? 'Versement marqué payé' : 'Versement remis en attente');
     } catch (err) {
       toast.error(err.message || 'Erreur lors de la mise à jour');
+    }
+  };
+
+  const handleDownloadCertificate = async (reservationId, lotNumero) => {
+    try {
+      const response = await apiFetch(`/api/reservations/${reservationId}/certificate`);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `Erreur ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `acte_reservation_${reservationId}_lot${lotNumero}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de la génération du certificat');
     }
   };
 
@@ -435,7 +493,8 @@ export default function ClientDetailPage() {
     total_purchases: sales.reduce((sum, s) => sum + (s.price || 0), 0),
     total_lots: sales.length,
     total_deposit: reservations.reduce((sum, r) => sum + (r.deposit || 0), 0),
-    active_reservations: reservations.filter(r => r.status === 'active').length,
+    total_refund: reservations.filter(r => r.status === 'released').reduce((sum, r) => sum + (r.deposit_refund_amount || 0), 0),
+    active_reservations: reservations.filter(r => r.status === 'active' || r.status === 'validated').length,
   };
 
   const remaining = stats.total_purchases - stats.total_deposit;
@@ -549,6 +608,14 @@ export default function ClientDetailPage() {
           </div>
           <div className="stat-tile-label">Acomptes versés</div>
         </div>
+        {stats.total_refund > 0 && (
+          <div className="stat-tile cd-stat-grow">
+            <div className="stat-tile-value" style={{ color: 'var(--color-success)' }}>
+              {formatPrice(stats.total_refund)}
+            </div>
+            <div className="stat-tile-label">Acomptes récupérés</div>
+          </div>
+        )}
         <div className="stat-tile">
           <div className="stat-tile-value num">{stats.active_reservations || 0}</div>
           <div className="stat-tile-label">Réservations actives</div>
@@ -660,6 +727,12 @@ export default function ClientDetailPage() {
                   <input className="field-input" type="text" value={editForm.cin}
                     onChange={e => setEditForm({ ...editForm, cin: e.target.value })} />
                 </div>
+                <div className="field-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="field-label">Adresse</label>
+                  <input className="field-input" type="text" placeholder="Rue, ville, pays"
+                    value={editForm.address || ''}
+                    onChange={e => setEditForm({ ...editForm, address: e.target.value })} />
+                </div>
                 <div className="field-group">
                   <label className="field-label">Type de client</label>
                   <select className="field-input" value={editForm.client_type}
@@ -700,6 +773,12 @@ export default function ClientDetailPage() {
                     <span className="cd-info-icon"><IconCard /></span>
                     <span className="cd-info-val">{client.cin || '—'}</span>
                   </div>
+                  {client.address && (
+                    <div className="cd-info-row">
+                      <span className="cd-info-icon"><IconNote /></span>
+                      <span className="cd-info-val">{client.address}</span>
+                    </div>
+                  )}
                   <div className="cd-info-row">
                     <span className="cd-info-icon"><IconCalendar /></span>
                     <span className="cd-info-val">{formatDate(client.created_at)}</span>
@@ -789,10 +868,29 @@ export default function ClientDetailPage() {
                             {formatPrice(res.deposit)}
                           </div>
                         )}
+                        {res.status === 'released' && res.deposit_refund_amount > 0 && (
+                          <div className="cd-refund-row" title={res.deposit_refund_date ? `Récupéré le ${formatDate(res.deposit_refund_date)}` : undefined}>
+                            <span className="cd-refund-label">Récupéré</span>
+                            <span className="cd-refund-amount">{formatPrice(res.deposit_refund_amount)}</span>
+                          </div>
+                        )}
+                        {res.status === 'released' && res.deposit > 0 && !res.deposit_refund_amount && (
+                          <div className="cd-refund-row cd-refund-row--none">
+                            <span className="cd-refund-label">Non remboursé</span>
+                          </div>
+                        )}
                         <div className="cd-list-date">{formatDate(res.reservation_date)}</div>
                         {res.status === 'active' && res.expiration_date && (
                           <div className="cd-list-expire">Expire {formatDate(res.expiration_date)}</div>
                         )}
+                        <button
+                          className="btn btn-ghost btn-sm cd-cert-btn"
+                          onClick={() => handleDownloadCertificate(res.id, res.lot_numero)}
+                          title="Télécharger l'acte de réservation PDF"
+                        >
+                          <IconCertificate />
+                          Certificat
+                        </button>
                       </div>
                     </div>
                   );

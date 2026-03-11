@@ -1,6 +1,6 @@
 """Reservation-related schemas for API requests and responses."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import Field
 
@@ -23,6 +23,7 @@ class ReservationCreate(BaseSchema):
         description="Reservation expiration date (overrides reservation_days if provided)",
     )
     deposit: float = Field(default=0, ge=0, description="Deposit amount")
+    deposit_date: date | None = Field(default=None, description="Date the deposit was received")
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
 
 
@@ -33,6 +34,25 @@ class ReservationExtend(BaseSchema):
         ge=1,
         le=365,
         description="Number of days to add to the reservation",
+    )
+
+
+class ReservationRelease(BaseSchema):
+    """Schema for releasing (cancelling) a reservation with optional refund info."""
+
+    deposit_refund_amount: float | None = Field(
+        default=None,
+        ge=0,
+        description="Amount of deposit refunded to the client (None = no refund recorded)",
+    )
+    deposit_refund_date: date | None = Field(
+        default=None,
+        description="Date the deposit was refunded",
+    )
+    release_reason: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="Reason for releasing the reservation",
     )
 
 
@@ -47,6 +67,10 @@ class ReservationResponse(BaseSchema):
     reservation_date: datetime
     expiration_date: datetime
     deposit: float
+    deposit_date: date | None = None
+    deposit_refund_amount: float | None = None
+    deposit_refund_date: date | None = None
+    release_reason: str | None = None
     notes: str | None
     status: str
     created_at: datetime

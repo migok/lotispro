@@ -24,6 +24,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [alerts, setAlerts] = useState({ reservations: [], summary: {} });
   const [performance, setPerformance] = useState(null);
   const [clientsPipeline, setClientsPipeline] = useState([]);
+  const [latePayments, setLatePayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [clientSearchQuery, setClientSearchQuery] = useState('');
 
@@ -35,7 +36,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [users, setUsers] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(null);
-  const [selectedStatuses, setSelectedStatuses] = useState(['sold', 'reserved', 'blocked']); // Filtre par statut (pas de disponible)
+  const [selectedStatuses, setSelectedStatuses] = useState(['sold', 'reserved', 'validated', 'blocked']); // Filtre par statut (pas de disponible)
 
   // Répartition par catégorie
   const [catRepTab, setCatRepTab] = useState('type_lot'); // 'type_lot' | 'emplacement' | 'type_maison' | 'zone'
@@ -164,6 +165,14 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       setPerformance(perfData);
       setClientsPipeline(clientsData);
       setMonthlyBreakdown(monthlyData || []);
+
+      // Late payments (non-blocking — load separately)
+      try {
+        const lateData = await apiGet(`/api/dashboard/late-payments${queryString}`);
+        setLatePayments(lateData || []);
+      } catch (_) {
+        setLatePayments([]);
+      }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -1121,8 +1130,11 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           {(isManager() || isCommercial()) && alerts.summary.total_at_risk > 0 && (
             <div className="section-card">
               <div className="section-header">
-                <h3>
-                  <span className="kpis-section-icon">⚠️</span>
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
                   {isCommercial() ? 'Mes Alertes' : 'Alertes commerciales'}
                 </h3>
                 <span className="text-warning font-semibold">
@@ -1130,22 +1142,18 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 </span>
               </div>
 
-              <div className="stats-grid mb-lg">
-                <div className="stat-item">
-                  <div className="stat-value text-danger">{alerts.summary.expired_count || 0}</div>
+              <div className="stats-grid mb-lg" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                <div className="stat-item stat-item-danger">
+                  <div className="stat-value text-danger num">{alerts.summary.expired_count || 0}</div>
                   <div className="stat-label">Expirées</div>
                 </div>
-                <div className="stat-item">
-                  <div className="stat-value text-warning">{alerts.summary.expiring_soon_count || 0}</div>
+                <div className="stat-item stat-item-warning">
+                  <div className="stat-value text-warning num">{alerts.summary.expiring_soon_count || 0}</div>
                   <div className="stat-label">Expirent bientôt</div>
                 </div>
                 <div className="stat-item">
-                  <div className="stat-value">{formatNumber(alerts.summary.value_at_risk, 'MAD')}</div>
+                  <div className="stat-value num">{formatNumber(alerts.summary.value_at_risk, 'MAD')}</div>
                   <div className="stat-label">Valeur à risque</div>
-                </div>
-                <div className="stat-item">
-                  <div className="stat-value">{formatNumber(alerts.summary.deposit_at_risk, 'MAD')}</div>
-                  <div className="stat-label">Acomptes engagés</div>
                 </div>
               </div>
 
@@ -1153,33 +1161,51 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 {alerts.reservations.slice(0, 5).map((alert) => (
                   <div key={alert.id} className={`alert-card ${alert.risk_type}`}>
                     <div className="alert-icon">
-                      {alert.risk_type === 'expired' ? '🚨' : '⏰'}
+                      {alert.risk_type === 'expired' ? (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/>
+                          <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                      )}
                     </div>
                     <div className="alert-content">
                       <div className="alert-title">
-                        Lot {alert.lot_numero} - {alert.client_name}
+                        Lot {alert.lot_numero}
+                        <span className="alert-client-name"> — {alert.client_name}</span>
                       </div>
                       <div className="alert-details">
                         {alert.risk_type === 'expired' ? (
                           <span className="text-danger">Expirée depuis {Math.abs(Math.round(alert.days_remaining))} jour(s)</span>
                         ) : (
-                          <span>Expire dans {Math.round(alert.days_remaining)} jour(s)</span>
+                          <span>Expire dans <strong>{Math.round(alert.days_remaining)}</strong> jour(s)</span>
                         )}
-                        {' • '}{formatPrice(alert.lot_price)}
-                        {alert.deposit > 0 && ` • Acompte: ${formatPrice(alert.deposit)}`}
+                        <span className="alert-sep">·</span>
+                        <span className="num">{formatPrice(alert.lot_price)}</span>
+                        {alert.deposit > 0 && (
+                          <>
+                            <span className="alert-sep">·</span>
+                            <span>Acompte prévu : <span className="num">{formatPrice(alert.deposit)}</span></span>
+                          </>
+                        )}
                       </div>
                       <div className="alert-actions">
-                        <button
-                          className="btn btn-sm btn-success"
-                          onClick={() => handleConvertAlertToSale(alert)}
-                        >
-                          Convertir en vente
+                        <button className="btn btn-sm btn-ghost alert-btn-relance">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                          </svg>
+                          Relancer
                         </button>
-                        <button className="btn btn-sm btn-ghost">Relancer</button>
                         <button
-                          className="btn btn-sm btn-ghost"
+                          className="btn btn-sm btn-ghost alert-btn-liberer"
                           onClick={() => handleReleaseAlert(alert)}
                         >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                          </svg>
                           Libérer
                         </button>
                       </div>
@@ -1190,175 +1216,286 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
             </div>
           )}
 
+          {/* Late Payments Section */}
+          {(isManager() || isCommercial()) && latePayments.length > 0 && (
+            <div className="section-card">
+              <div className="section-header">
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-blocked)' }}>
+                    <path d="M8 2L1 13h14L8 2z" /><path d="M8 6v4M8 11.5v.5" />
+                  </svg>
+                  <span style={{ color: 'var(--color-blocked)' }}>
+                    {isCommercial() ? 'Mes paiements en retard' : 'Clients en retard de paiement'}
+                  </span>
+                </h3>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  {latePayments.length} échéance{latePayments.length > 1 ? 's' : ''} impayée{latePayments.length > 1 ? 's' : ''}
+                </span>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      {['Client', 'Lot', 'Projet', 'Type', 'Montant', 'Échéance', 'Retard'].map(h => (
+                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latePayments.map(p => (
+                      <tr key={p.installment_id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                        <td style={{ padding: '10px 12px' }}>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.client_name}</div>
+                          {p.client_phone && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{p.client_phone}</div>}
+                        </td>
+                        <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', color: 'var(--color-primary)', fontWeight: 600 }}>
+                          {p.lot_numero}
+                        </td>
+                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                          {p.project_name}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <span className={`badge ${p.payment_type === 'deposit' ? 'badge-gold' : 'badge-gray'}`} style={{ fontSize: '0.7rem' }}>
+                            {p.payment_type === 'deposit' ? `Acompte ${p.installment_number}` : `Solde ${p.installment_number}`}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                          {formatPrice(p.amount)}
+                        </td>
+                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                          {formatDate(p.due_date)}
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--color-blocked)', fontVariantNumeric: 'tabular-nums', fontSize: '0.8rem' }}>
+                            {p.days_late}j
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Lots Table */}
-          <div className="section-card">
+          <div className="section-card lots-opps-card">
             <div className="section-header">
-              <h3>
-                <span className="kpis-section-icon">📋</span>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                </svg>
                 {isCommercial() ? 'Mes Lots & Opportunités' : 'Stock & Opportunités'}
               </h3>
               <div className="section-actions">
-                <div style={{ display: 'flex', gap: 'var(--spacing-xs)', marginRight: 'var(--spacing-sm)' }}>
-                  {['sold', 'reserved', 'blocked'].map(status => (
+                <div className="lots-status-filters">
+                  {[
+                    { key: 'sold',      label: 'Vendu',   cls: 'filter-sold' },
+                    { key: 'blocked',   label: 'Bloqué',  cls: 'filter-blocked' },
+                    { key: 'reserved',  label: 'Réservé', cls: 'filter-reserved' },
+                    { key: 'validated', label: 'Validé',  cls: 'filter-validated' },
+                  ].map(({ key, label, cls }) => (
                     <button
-                      key={status}
-                      className={`btn btn-sm ${selectedStatuses.includes(status) ? 'btn-primary' : 'btn-ghost'}`}
-                      onClick={() => {
-                        setSelectedStatuses(prev =>
-                          prev.includes(status)
-                            ? prev.filter(s => s !== status)
-                            : [...prev, status]
-                        );
-                      }}
-                      style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                      key={key}
+                      className={`lots-filter-pill ${cls} ${selectedStatuses.includes(key) ? 'active' : ''}`}
+                      onClick={() => setSelectedStatuses(prev =>
+                        prev.includes(key) ? prev.filter(s => s !== key) : [...prev, key]
+                      )}
                     >
-                      {STATUS_LABELS[status]}
+                      <span className="filter-dot" />
+                      {label}
                     </button>
                   ))}
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={() => onNavigate && onNavigate('map')}>
-                  Voir la carte
+                <button className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }} onClick={() => onNavigate && onNavigate('map')}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+                    <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
+                  </svg>
+                  Carte
                 </button>
               </div>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
-              <table className="lots-table">
+              <table className="lots-table lots-table-v2">
                 <thead>
                   <tr>
                     <th>Lot</th>
-                    <th>Zone</th>
-                    <th>Surface</th>
-                    <th>Prix</th>
                     <th>Statut</th>
-                    <th>Jours</th>
-                    <th>Temps restant</th>
+                    <th style={{ minWidth: '80px' }}>Expir.</th>
+                    <th style={{ minWidth: '80px' }}>1er vers.</th>
+                    <th style={{ minWidth: '110px' }}>Acompte</th>
+                    <th style={{ minWidth: '110px' }}>Solde</th>
+                    <th>Prix</th>
                     <th>Client</th>
-                    <th>Actions</th>
+                    {(isManager() || isCommercial()) && <th>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {lots.filter(lot => selectedStatuses.length === 0 || selectedStatuses.includes(lot.status)).slice(0, 15).map((lot) => {
+                  {lots.filter(lot => {
+                    if (selectedStatuses.length === 0) return true;
+                    if (lot.status === 'reserved' && lot.reservation_status === 'validated') {
+                      return selectedStatuses.includes('validated');
+                    }
+                    return selectedStatuses.includes(lot.status);
+                  }).slice(0, 20).map((lot) => {
                     const daysRemaining = lot.status === 'reserved' ? getDaysRemaining(lot.expiration_date) : null;
                     const isExpiringSoon = daysRemaining !== null && daysRemaining <= 3 && daysRemaining > 0;
                     const isExpired = daysRemaining !== null && daysRemaining <= 0;
+                    const isValidated = lot.reservation_status === 'validated';
+                    // Effective display status
+                    const displayStatus = (lot.status === 'reserved' && isValidated) ? 'validated' : lot.status;
+                    // Payment data
+                    const depositPct = lot.deposit_paid_pct ?? null;
+                    const balancePct = lot.balance_paid_pct ?? null;
+                    const firstDepositDays = lot.first_deposit_days ?? null;
 
                     return (
-                    <tr key={lot.id} onClick={() => onSelectLot && onSelectLot(lot)} style={{ cursor: 'pointer' }}>
+                    <tr key={lot.id} className="lots-table-row" onClick={() => onSelectLot && onSelectLot(lot)} style={{ cursor: 'pointer' }}>
+                      {/* Lot + zone + surface en sous-texte */}
                       <td>
                         <span className="lot-numero">{lot.numero}</span>
-                      </td>
-                      <td className="lot-zone">{lot.zone || '-'}</td>
-                      <td>{lot.surface ? `${Math.round(parseFloat(lot.surface))} m²` : '-'}</td>
-                      <td className="font-semibold">{formatPrice(lot.price)}</td>
-                      <td>
-                        <span className={`status-badge ${lot.status}`}>
-                          <span className="status-dot"></span>
-                          {STATUS_LABELS[lot.status] || lot.status}
-                        </span>
-                      </td>
-                      <td className="text-muted">
-                        {lot.days_in_status ? Math.round(lot.days_in_status) : 0}j
-                      </td>
-                      <td>
-                        {lot.status === 'reserved' && daysRemaining !== null ? (
-                          <span style={{
-                            color: isExpired ? 'var(--color-danger)' : isExpiringSoon ? 'var(--color-warning)' : 'var(--text-primary)',
-                            fontWeight: (isExpired || isExpiringSoon) ? '600' : '400'
-                          }}>
-                            {isExpired ? `Expiré (${Math.abs(daysRemaining)}j)` : `${daysRemaining}j`}
-                          </span>
-                        ) : (
-                          <span className="text-muted">-</span>
+                        {(lot.zone || lot.surface) && (
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
+                            {[lot.zone, lot.surface ? `${Math.round(parseFloat(lot.surface))} m²` : null].filter(Boolean).join(' · ')}
+                          </div>
                         )}
                       </td>
-                      <td className="text-muted">
-                        {lot.client_name || '-'}
-                      </td>
+                      {/* Statut + jours en sous-texte */}
                       <td>
-                        <div className="flex gap-sm">
-                          {/* Seuls les managers et commerciaux peuvent effectuer des actions */}
-                          {(isManager() || isCommercial()) && (
-                            <>
-                              {lot.status === 'available' && (
-                                <>
-                                  <button className="btn btn-sm btn-warning" onClick={(e) => { e.stopPropagation(); }}>
-                                    Réserver
-                                  </button>
-                                  <button
-                                    className="btn btn-sm btn-success"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSellAvailableLot(lot);
-                                    }}
-                                  >
-                                    Vendre
-                                  </button>
-                                </>
-                              )}
-                              {lot.status === 'reserved' && (
-                                <>
-                                  <button
-                                    className="btn btn-sm btn-success"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSellReservedLot(lot);
-                                    }}
-                                  >
-                                    Vendre
-                                  </button>
-                                  <button
-                                    className="btn btn-sm btn-primary"
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      const days = prompt('Combien de jours voulez-vous ajouter à la réservation ?', '7');
-                                      if (days && !isNaN(parseInt(days)) && parseInt(days) > 0) {
-                                        try {
-                                          await apiPost(`/api/reservations/${lot.reservation_id}/extend`, {
-                                            additional_days: parseInt(days)
-                                          });
-                                          toast.success('Réservation prolongée avec succès');
-                                          loadDashboardData();
-                                        } catch (error) {
-                                          toast.error(error.message || 'Erreur lors de la prolongation');
-                                        }
-                                      }
-                                    }}
-                                  >
-                                    Prolonger
-                                  </button>
-                                  <button
-                                    className="btn btn-sm btn-ghost"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleReleaseLot(lot);
-                                    }}
-                                  >
-                                    Libérer
-                                  </button>
-                                </>
-                              )}
-                            </>
-                          )}
-                          {/* Les clients voient juste le statut */}
-                          {isClient() && lot.status === 'available' && (
-                            <span className="text-muted" style={{ fontSize: '0.85rem' }}>Contactez un commercial</span>
-                          )}
-                        </div>
+                        <span className={`status-badge ${displayStatus}`}>
+                          <span className="status-dot"></span>
+                          {STATUS_LABELS[displayStatus] || displayStatus}
+                        </span>
+                        {lot.days_in_status > 0 && (
+                          <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            {Math.round(lot.days_in_status)}j
+                          </div>
+                        )}
                       </td>
+                      {/* Expiration */}
+                      <td>
+                        {lot.status === 'reserved' && daysRemaining !== null ? (
+                          <span className={`expiry-chip ${isExpired ? 'expiry-expired' : isExpiringSoon ? 'expiry-soon' : 'expiry-ok'}`}>
+                            {isExpired ? `−${Math.abs(daysRemaining)}j` : `${daysRemaining}j`}
+                          </span>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      {/* 1er versement */}
+                      <td>
+                        {firstDepositDays !== null ? (
+                          <span className={`expiry-chip ${firstDepositDays < 0 ? 'expiry-expired' : firstDepositDays <= 7 ? 'expiry-soon' : 'expiry-ok'}`}>
+                            {firstDepositDays < 0 ? `−${Math.abs(firstDepositDays)}j` : `${firstDepositDays}j`}
+                          </span>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      {/* Acompte */}
+                      <td>
+                        {depositPct !== null ? (
+                          <div className="pay-progress">
+                            <div className="pay-progress-bar">
+                              <div className={`pay-progress-fill ${depositPct >= 100 ? 'fill-complete' : depositPct > 0 ? 'fill-partial' : 'fill-zero'}`} style={{ width: `${Math.min(depositPct, 100)}%` }} />
+                            </div>
+                            <span className="pay-progress-label num">{depositPct}%</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      {/* Solde */}
+                      <td>
+                        {balancePct !== null ? (
+                          <div className="pay-progress">
+                            <div className="pay-progress-bar">
+                              <div className={`pay-progress-fill ${balancePct >= 100 ? 'fill-complete' : balancePct > 0 ? 'fill-partial' : 'fill-zero'}`} style={{ width: `${Math.min(balancePct, 100)}%` }} />
+                            </div>
+                            <span className="pay-progress-label num">{balancePct}%</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      {/* Prix */}
+                      <td>
+                        <span className="lot-price-cell num">{formatPrice(lot.sale_price || lot.price)}</span>
+                      </td>
+                      {/* Client */}
+                      <td>
+                        {lot.client_name ? (
+                          <span className="lot-client-name">{lot.client_name}</span>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      {(isManager() || isCommercial()) && (
+                        <td onClick={(e) => e.stopPropagation()}>
+                          {lot.status === 'reserved' && (
+                            <div style={{ display: 'flex', gap: '0.375rem' }}>
+                              <button
+                                className="btn-lot-action btn-lot-extend"
+                                title="Prolonger la réservation"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const days = prompt('Jours à ajouter à la réservation :', '7');
+                                  if (days && !isNaN(parseInt(days)) && parseInt(days) > 0) {
+                                    try {
+                                      await apiPost(`/api/reservations/${lot.reservation_id}/extend`, {
+                                        additional_days: parseInt(days)
+                                      });
+                                      toast.success('Réservation prolongée');
+                                      loadDashboardData();
+                                    } catch (error) {
+                                      toast.error(error.message || 'Erreur lors de la prolongation');
+                                    }
+                                  }
+                                }}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                                </svg>
+                                Prolonger
+                              </button>
+                              <button
+                                className="btn-lot-action btn-lot-release"
+                                title="Libérer le lot"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleReleaseLot(lot);
+                                }}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                                </svg>
+                                Libérer
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   )})}
                 </tbody>
               </table>
             </div>
 
-            {lots.filter(lot => selectedStatuses.length === 0 || selectedStatuses.includes(lot.status)).length === 0 && (
+            {lots.filter(lot => {
+              if (selectedStatuses.length === 0) return true;
+              if (lot.status === 'reserved' && lot.reservation_status === 'validated') {
+                return selectedStatuses.includes('validated');
+              }
+              return selectedStatuses.includes(lot.status);
+            }).length === 0 && (
               <div className="empty-state">
-                <div className="empty-state-icon">📦</div>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 0.75rem' }}>
+                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                </svg>
                 <div className="empty-state-title">Aucun lot</div>
-                <div className="empty-state-description">
-                  Aucun lot ne correspond aux filtres sélectionnés.
-                </div>
+                <div className="empty-state-description">Aucun lot ne correspond aux filtres sélectionnés.</div>
               </div>
             )}
           </div>
@@ -1369,45 +1506,40 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         <div className="dashboard-sidebar">
           {/* Clients Pipeline - Seulement pour manager et commercial */}
           {(isManager() || isCommercial()) && (
-          <div className="section-card">
-            <div className="section-header">
+          <div className="section-card dc-clients-card">
+            <div className="section-header dc-clients-header">
               <h3>
-                <span className="kpis-section-icon">👥</span>
+                <svg className="dc-clients-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="7.5" cy="6" r="3"/><path d="M1 17c0-3.3 2.9-6 6.5-6"/><circle cx="14" cy="7" r="2.5"/><path d="M19 17c0-2.8-2.2-5-5-5s-5 2.2-5 5"/>
+                </svg>
                 {isCommercial() ? 'Mes Clients' : 'Pipeline clients'}
               </h3>
-              <button className="btn btn-ghost btn-sm" onClick={() => onNavigate && onNavigate('clients')}>
+              <button className="dc-voir-tout-btn" onClick={() => onNavigate && onNavigate('clients')}>
                 Voir tout
+                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="5 3 9 7 5 11"/>
+                </svg>
               </button>
             </div>
 
-            {/* Recherche rapide de client */}
-            <div style={{ marginBottom: 'var(--spacing-md)', padding: '0 var(--spacing-sm)' }}>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="text"
-                  placeholder="Rechercher un client..."
-                  value={clientSearchQuery}
-                  onChange={(e) => setClientSearchQuery(e.target.value)}
-                  className="form-input"
-                  style={{
-                    width: '100%',
-                    padding: 'var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) 2.5rem',
-                    fontSize: '0.875rem',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 'var(--radius-md)'
-                  }}
-                />
-                <span style={{
-                  position: 'absolute',
-                  left: '0.75rem',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  fontSize: '1rem',
-                  pointerEvents: 'none'
-                }}>
-                  🔍
-                </span>
-              </div>
+            {/* Search bar */}
+            <div className="search-bar dc-client-search">
+              <svg width="13" height="13" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10L13 13"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="Rechercher un client..."
+                value={clientSearchQuery}
+                onChange={(e) => setClientSearchQuery(e.target.value)}
+              />
+              {clientSearchQuery && (
+                <button className="dc-search-clear" onClick={() => setClientSearchQuery('')}>
+                  <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/>
+                  </svg>
+                </button>
+              )}
             </div>
 
             <div className="client-list">
@@ -1425,40 +1557,31 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 .map((client) => (
                 <div
                   key={client.id}
-                  className="client-card"
+                  className={`client-card dc-client-row dc-client--${client.pipeline_status || 'prospect'}`}
                   onClick={() => onNavigate && onNavigate('clients', client.id)}
-                  style={{
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateX(4px)';
-                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateX(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
                 >
-                  <div className="client-avatar">
+                  <div className="client-avatar dc-client-avatar">
                     {client.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'}
                   </div>
                   <div className="client-info">
                     <div className="client-name">{client.name}</div>
                     <div className="client-details">
                       {client.phone && (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          📱 {client.phone}
+                        <span className="dc-contact-item">
+                          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M10.5 8.5v1.3a.9.9 0 01-1 .9 8.7 8.7 0 01-3.8-1.4 8.6 8.6 0 01-2.6-2.6A8.7 8.7 0 011.7 2.6.9.9 0 012.6 1.6H4a.9.9 0 01.9.78c.057.43.163.85.315 1.25a.9.9 0 01-.2.95L4.4 5.15a7.2 7.2 0 002.6 2.6l.57-.57a.9.9 0 01.95-.2c.4.153.82.258 1.25.315A.9.9 0 0110.5 8.5z"/>
+                          </svg>
+                          {client.phone}
                         </span>
                       )}
                       {client.active_reservations > 0 && (
-                        <span>{client.active_reservations} réserv.</span>
+                        <span className="dc-stat-item">{client.active_reservations} réserv.</span>
                       )}
                       {client.total_sales > 0 && (
-                        <span>{client.total_sales} achat(s)</span>
+                        <span className="dc-stat-item">{client.total_sales} achat(s)</span>
                       )}
                       {client.total_deposit > 0 && (
-                        <span>{formatPrice(client.total_deposit)}</span>
+                        <span className="dc-stat-item dc-stat-price">{formatPrice(client.total_deposit)}</span>
                       )}
                     </div>
                   </div>
@@ -1479,7 +1602,9 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
               );
             }).length === 0 && (
               <div className="empty-state">
-                <div className="empty-state-icon">🔍</div>
+                <svg width="28" height="28" viewBox="0 0 15 15" fill="none" stroke="var(--text-muted)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 8px' }}>
+                  <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10L13 13"/>
+                </svg>
                 <div className="empty-state-title">Aucun client trouvé</div>
                 {clientSearchQuery && (
                   <button
@@ -1495,7 +1620,9 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
 
             {clientsPipeline.length === 0 && !clientSearchQuery && (
               <div className="empty-state">
-                <div className="empty-state-icon">👥</div>
+                <svg width="32" height="32" viewBox="0 0 20 20" fill="none" stroke="var(--text-muted)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 8px' }}>
+                  <circle cx="7.5" cy="6" r="3"/><path d="M1 17c0-3.3 2.9-6 6.5-6"/><circle cx="14" cy="7" r="2.5"/><path d="M19 17c0-2.8-2.2-5-5-5s-5 2.2-5 5"/>
+                </svg>
                 <div className="empty-state-title">Aucun client</div>
                 <button className="btn btn-primary btn-sm" onClick={() => onNavigate && onNavigate('clients')}>
                   Ajouter un client

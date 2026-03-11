@@ -3,10 +3,11 @@
 These models map to database tables and provide the persistence layer.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -97,6 +98,7 @@ class ProjectModel(Base):
     sold_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ca_objectif: Mapped[float | None] = mapped_column(Float, nullable=True)
     geojson_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id"),
@@ -259,6 +261,7 @@ class ClientModel(Base):
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     client_type: Mapped[str] = mapped_column(String(20), nullable=False, default="autre")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(
@@ -339,6 +342,10 @@ class ReservationModel(Base):
         nullable=False,
     )
     deposit: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    deposit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    deposit_refund_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    deposit_refund_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    release_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(
@@ -380,7 +387,7 @@ class ReservationModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('active', 'expired', 'released', 'converted')",
+            "status IN ('active', 'validated', 'expired', 'released', 'converted')",
             name="valid_reservation_status",
         ),
         Index("ix_reservations_status", "status"),

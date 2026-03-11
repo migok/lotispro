@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
@@ -107,6 +107,8 @@ class ProjectService:
                 sold_lots=p.sold_lots,
                 reserved_lots=reserved_lots_map.get(p.id, 0),
                 ca_objectif=ca_objectifs.get(p.id, 0.0),
+                geojson_file_url=p.geojson_file_url,
+                image_url=p.image_url,
                 created_by=p.created_by,
                 created_at=p.created_at,
                 updated_at=p.updated_at,
@@ -174,6 +176,8 @@ class ProjectService:
             sold_lots=project.sold_lots,
             reserved_lots=reserved_lots,
             ca_objectif=ca_objectif,
+            geojson_file_url=project.geojson_file_url,
+            image_url=project.image_url,
             created_by=project.created_by,
             created_at=project.created_at,
             updated_at=project.updated_at,
@@ -217,6 +221,8 @@ class ProjectService:
             total_lots=project.total_lots,
             sold_lots=project.sold_lots,
             ca_objectif=0.0,
+            geojson_file_url=project.geojson_file_url,
+            image_url=project.image_url,
             created_by=project.created_by,
             created_at=project.created_at,
             updated_at=project.updated_at,
@@ -269,6 +275,122 @@ class ProjectService:
             total_lots=updated.total_lots,
             sold_lots=updated.sold_lots,
             ca_objectif=ca_objectif,
+            geojson_file_url=updated.geojson_file_url,
+            image_url=updated.image_url,
+            created_by=updated.created_by,
+            created_at=updated.created_at,
+            updated_at=updated.updated_at,
+        )
+
+    async def upload_project_image(
+        self,
+        project_id: int,
+        file_content: bytes,
+        filename: str,
+        content_type: str,
+    ) -> "ProjectResponse":
+        """Upload a cover image for a project to Supabase Storage.
+
+        Args:
+            project_id: Project ID
+            file_content: Raw image bytes
+            filename: Original filename (used to determine extension)
+            content_type: MIME type of the image
+
+        Returns:
+            Updated project response
+
+        Raises:
+            NotFoundError: If project not found
+            StorageError: If Supabase is not configured or upload fails
+        """
+        from app.core.config import settings
+        from app.infrastructure.storage.supabase_storage import get_storage_client
+
+        if not settings.SUPABASE_URL or not settings.SUPABASE_SECRET_KEY:
+            raise StorageError(
+                message="Supabase Storage is not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY.",
+                storage_path="",
+            )
+
+        project = await self.project_repo.get_by_id(project_id)
+        if not project:
+            raise NotFoundError("Project", project_id)
+
+        ext = filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else "jpg"
+        storage_path = f"projects/{project_id}/cover.{ext}"
+
+        storage_client = get_storage_client()
+
+        # Delete previous image if one exists
+        if project.image_url:
+            try:
+                old_path = project.image_url.split(f"/{settings.SUPABASE_IMAGES_BUCKET}/")[-1]
+                storage_client.delete_image(old_path)
+            except Exception:
+                pass  # Non-blocking — proceed even if old file is missing
+
+        image_url = storage_client.upload_image(storage_path, file_content, content_type)
+        return await self._set_project_image_url(project_id, image_url)
+
+    async def remove_project_image(self, project_id: int) -> "ProjectResponse":
+        """Remove the cover image of a project from Supabase Storage.
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            Updated project response
+
+        Raises:
+            NotFoundError: If project not found
+        """
+        from app.core.config import settings
+        from app.infrastructure.storage.supabase_storage import get_storage_client
+
+        project = await self.project_repo.get_by_id(project_id)
+        if not project:
+            raise NotFoundError("Project", project_id)
+
+        if project.image_url:
+            try:
+                old_path = project.image_url.split(f"/{settings.SUPABASE_IMAGES_BUCKET}/")[-1]
+                get_storage_client().delete_image(old_path)
+            except Exception:
+                pass
+
+        return await self._set_project_image_url(project_id, None)
+
+    async def _set_project_image_url(
+        self,
+        project_id: int,
+        image_url: str | None,
+    ) -> "ProjectResponse":
+        """Persist image_url to DB and return updated ProjectResponse."""
+        await self.session.execute(
+            update(ProjectModel).where(ProjectModel.id == project_id).values(image_url=image_url)
+        )
+        await self.session.flush()
+
+        updated = await self.project_repo.get_by_id(project_id)
+
+        ca_objectif_result = await self.session.execute(
+            select(func.coalesce(func.sum(LotModel.price), 0)).where(
+                LotModel.project_id == project_id
+            )
+        )
+        ca_objectif = float(ca_objectif_result.scalar() or 0)
+
+        return ProjectResponse(
+            id=updated.id,
+            name=updated.name,
+            description=updated.description,
+            visibility=updated.visibility,
+            total_lots=updated.total_lots,
+            sold_lots=updated.sold_lots,
+            ca_objectif=ca_objectif,
+            geojson_file_url=updated.geojson_file_url,
+            image_url=updated.image_url,
             created_by=updated.created_by,
             created_at=updated.created_at,
             updated_at=updated.updated_at,
@@ -1373,6 +1495,61 @@ class ProjectService:
         # Get lots with details
         lots_data = await self.lot_repo.get_project_lots_with_details(project_id)
 
+        # Enrich with payment schedule data
+        from datetime import timezone as _tz
+        from sqlalchemy import select as _select
+        from sqlalchemy.orm import selectinload as _selectinload
+        from app.infrastructure.database.models import (
+            PaymentScheduleModel as _PSM,
+        )
+
+        _now = datetime.now(_tz.utc)
+        reservation_ids = [
+            lot["reservation_id"]
+            for lot in lots_data
+            if lot.get("reservation_id")
+        ]
+        _payment_info: dict[int, dict] = {}
+        if reservation_ids:
+            _sched_q = (
+                _select(_PSM)
+                .where(_PSM.reservation_id.in_(reservation_ids))
+                .options(_selectinload(_PSM.installments))
+            )
+            _sched_res = await self.lot_repo.session.execute(_sched_q)
+            for _sched in _sched_res.scalars().all():
+                _dep_paid = sum(
+                    i.amount for i in _sched.installments
+                    if i.payment_type == "deposit" and i.status == "paid"
+                )
+                _bal_paid = sum(
+                    i.amount for i in _sched.installments
+                    if i.payment_type == "balance" and i.status == "paid"
+                )
+                _dep_pct = (
+                    round(_dep_paid / _sched.deposit_total * 100)
+                    if _sched.deposit_total > 0 else 0
+                )
+                _bal_pct = (
+                    round(_bal_paid / _sched.balance_total * 100)
+                    if _sched.balance_total > 0 else 0
+                )
+                _pending = sorted(
+                    [i for i in _sched.installments if i.payment_type == "deposit" and i.status == "pending"],
+                    key=lambda i: i.due_date,
+                )
+                _first_due_days = None
+                if _pending:
+                    _due = _pending[0].due_date
+                    if _due.tzinfo is None:
+                        _due = _due.replace(tzinfo=_tz.utc)
+                    _first_due_days = (_due - _now).days
+                _payment_info[_sched.reservation_id] = {
+                    "deposit_paid_pct": _dep_pct,
+                    "balance_paid_pct": _bal_pct,
+                    "first_deposit_days": _first_due_days,
+                }
+
         features = []
         for lot in lots_data:
             # Parse geometry from string
@@ -1432,6 +1609,12 @@ class ProjectService:
                 properties["reserved_by"] = lot["reserved_by"]
             if lot.get("days_in_status") is not None:
                 properties["days_in_status"] = lot["days_in_status"]
+            if lot.get("reservation_status"):
+                properties["reservation_status"] = lot["reservation_status"]
+            # Payment schedule enrichment
+            rid = lot.get("reservation_id")
+            if rid and rid in _payment_info:
+                properties.update(_payment_info[rid])
 
             features.append(
                 {

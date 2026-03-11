@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { apiGet, apiPost } from '../utils/api';
+import { apiGet, apiPost, apiPatch } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatPrice, formatDate } from '../utils/formatters';
@@ -409,6 +409,12 @@ function AddClientPanel({ newClient, onChange, onSave, onCancel, saving }) {
           </div>
         ))}
         <div className="add-client-field add-client-field--full">
+          <label className="form-field-label">Adresse</label>
+          <input type="text" className="form-field-input" placeholder="Rue, ville, pays"
+            value={newClient.address}
+            onChange={e => onChange({ ...newClient, address: e.target.value })} />
+        </div>
+        <div className="add-client-field add-client-field--full">
           <label className="form-field-label">Type de client</label>
           <select className="form-field-input" value={newClient.client_type}
             onChange={e => onChange({ ...newClient, client_type: e.target.value })}>
@@ -433,7 +439,9 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
   const [depositAmount, setDepositAmount] = useState('');
+  const [firstPaymentImmediate, setFirstPaymentImmediate] = useState(false);
   const [reservationDays, setReservationDays] = useState(7);
+  const depositDate = (() => { const d = new Date(); d.setDate(d.getDate() + (parseInt(reservationDays) || 7)); return d.toISOString().split('T')[0]; })();
   const [finalPrice, setFinalPrice] = useState('');
   const [notes, setNotes] = useState('');
   const [mode, setMode] = useState(initialMode);
@@ -442,16 +450,48 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   const [paymentPlan, setPaymentPlan] = useState(DEFAULT_PAYMENT_PLAN);
   const [showAddClient, setShowAddClient] = useState(false);
   const [savingClient, setSavingClient] = useState(false);
-  const [newClient, setNewClient] = useState({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
+  const [newClient, setNewClient] = useState({ name: '', phone: '', email: '', cin: '', address: '', client_type: 'autre', notes: '' });
+  const [releaseData, setReleaseData] = useState({ deposit_refund_amount: '', deposit_refund_date: new Date().toISOString().split('T')[0], release_reason: '' });
+  const [paymentSchedule, setPaymentSchedule] = useState(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
 
   useEffect(() => {
     loadClients();
     if (lot?.price) setFinalPrice(lot.price.toString());
+    if (lot?.reservation_id) loadPaymentSchedule(lot.reservation_id);
   }, [lot]);
 
   const loadClients = async () => {
     try { const data = await apiGet('/api/clients'); setClients(data); }
     catch (error) { console.error('Error loading clients:', error); }
+  };
+
+  const loadPaymentSchedule = async (reservationId) => {
+    try {
+      const schedule = await apiGet(`/api/payments/schedules/reservation/${reservationId}`);
+      setPaymentSchedule(schedule);
+    } catch (_) {
+      setPaymentSchedule(null); // no schedule yet
+    }
+  };
+
+  const handleConfirmFirstPayment = async () => {
+    const firstDeposit = paymentSchedule?.installments
+      ?.filter(i => i.payment_type === 'deposit')
+      .sort((a, b) => a.installment_number - b.installment_number)[0];
+    if (!firstDeposit) return;
+    setConfirmingPayment(true);
+    try {
+      await apiPatch(`/api/payments/installments/${firstDeposit.id}`, {
+        status: 'paid',
+        paid_date: new Date().toISOString(),
+      });
+      toast.success('Premier versement confirmé — réservation validée');
+      await loadPaymentSchedule(lot.reservation_id);
+      if (onRefresh) onRefresh();
+    } catch (error) {
+      toast.error(error.message || 'Erreur lors de la confirmation');
+    } finally { setConfirmingPayment(false); }
   };
 
   const handleCreateClient = async () => {
@@ -463,12 +503,13 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
         phone: newClient.phone.trim() || null,
         email: newClient.email.trim() || null,
         cin: newClient.cin.trim() || null,
+        address: newClient.address.trim() || null,
         client_type: newClient.client_type,
         notes: newClient.notes.trim() || null,
       });
       await loadClients();
       setSelectedClient(createdClient);
-      setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
+      setNewClient({ name: '', phone: '', email: '', cin: '', address: '', client_type: 'autre', notes: '' });
       setShowAddClient(false);
       toast.success('Client créé avec succès');
     } catch (error) {
@@ -491,6 +532,13 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     resetFormState();
     setMode(newMode);
     if (newMode === 'sell' && lot?.price) setFinalPrice(lot.price.toString());
+    if (newMode === 'release') {
+      setReleaseData({
+        deposit_refund_amount: lot?.deposit > 0 ? String(lot.deposit) : '',
+        deposit_refund_date: new Date().toISOString().split('T')[0],
+        release_reason: '',
+      });
+    }
   };
 
   const handleReserve = async () => {
@@ -506,18 +554,32 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     try {
       const reservation = await apiPost('/api/reservations', {
         lot_id: lot.id, client_id: selectedClient.id,
-        reservation_days: days, deposit, notes: notes || undefined,
+        reservation_days: days, deposit,
+        deposit_date: depositDate || undefined,
+        notes: notes || undefined,
       });
       if (lot.price) {
         try {
-          await apiPost('/api/payments/schedules', {
-            reservation_id: reservation.id, lot_price: lot.price,
+          const remainingForPlan = Math.max(0, lot.price - deposit);
+          const schedule = await apiPost('/api/payments/schedules', {
+            reservation_id: reservation.id, lot_price: remainingForPlan,
             deposit_pct: parseFloat(paymentPlan.deposit_pct) || 50,
             deposit_start_date: paymentPlan.deposit_start_date || undefined,
             balance_delay_months: parseInt(paymentPlan.balance_delay_months) || 0,
             deposit_installments: { count: parseInt(paymentPlan.deposit_count) || 1, periodicity_months: parseInt(paymentPlan.deposit_periodicity) || 1 },
             balance_installments: { count: parseInt(paymentPlan.balance_count) || 1, periodicity_months: parseInt(paymentPlan.balance_periodicity) || 1 },
           });
+          if (firstPaymentImmediate && schedule?.installments?.length) {
+            const firstDeposit = schedule.installments
+              .filter(i => i.payment_type === 'deposit')
+              .sort((a, b) => a.installment_number - b.installment_number)[0];
+            if (firstDeposit) {
+              await apiPatch(`/api/payments/installments/${firstDeposit.id}`, {
+                status: 'paid',
+                paid_date: new Date().toISOString().slice(0, 10),
+              });
+            }
+          }
         } catch (err) {
           console.error('Error creating payment schedule:', err);
           toast.warning('Réservation créée, mais erreur lors de la création du plan de paiement');
@@ -549,11 +611,15 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     } finally { setLoading(false); }
   };
 
-  const handleRelease = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir libérer cette réservation?')) return;
+  const handleConfirmRelease = async () => {
     setLoading(true);
     try {
-      await apiPost(`/api/reservations/${lot.reservation_id}/release`, {});
+      const payload = {
+        deposit_refund_amount: releaseData.deposit_refund_amount !== '' ? parseFloat(releaseData.deposit_refund_amount) : null,
+        deposit_refund_date: releaseData.deposit_refund_date || null,
+        release_reason: releaseData.release_reason.trim() || null,
+      };
+      await apiPost(`/api/reservations/${lot.reservation_id}/release`, payload);
       toast.success('Réservation libérée avec succès');
       onClose();
       if (onRefresh) onRefresh();
@@ -563,6 +629,11 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   };
 
   if (!lot) return null;
+
+  // Remaining balance after initial deposit — used as base for payment plan
+  const remainingBalance = lot.price
+    ? Math.max(0, lot.price - (parseFloat(depositAmount) || 0))
+    : 0;
 
   const expiryDate = (() => {
     const d = new Date();
@@ -577,11 +648,19 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     return { diff, pct, positive: diff > 0 };
   })();
 
-  // Preview row count for panel header subtitle
+  // Preview row count for panel header subtitle (based on remaining balance)
   const previewRowCount = useMemo(
-    () => (lot?.price && enablePaymentPlan ? computePreview(lot.price, paymentPlan).allRows.length : 0),
-    [lot?.price, enablePaymentPlan, paymentPlan]
+    () => (remainingBalance > 0 && enablePaymentPlan ? computePreview(remainingBalance, paymentPlan).allRows.length : 0),
+    [remainingBalance, enablePaymentPlan, paymentPlan]
   );
+
+  // First deposit installment — for alert logic
+  const firstDepositInstallment = paymentSchedule?.installments
+    ?.filter(i => i.payment_type === 'deposit')
+    .sort((a, b) => a.installment_number - b.installment_number)[0] ?? null;
+  const firstPaymentIsOverdue = firstDepositInstallment?.status === 'pending'
+    && new Date(firstDepositInstallment.due_date) < new Date();
+  const isValidated = lot.reservation_status === 'validated';
 
   const lotStats = [
     lot.surface && { icon: <IcSurface />, value: `${lot.surface} m²`, label: 'Surface' },
@@ -628,15 +707,59 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
 
             {lot.status === 'reserved' && lot.client_name && (
               <div className="ldm-reservation-info">
-                <div className="ldm-ri-header"><IcUser /><span>Réservation en cours</span></div>
+                <div className="ldm-ri-header">
+                  <IcUser />
+                  <span>{isValidated ? 'Réservation validée' : 'Réservation en cours'}</span>
+                  {isValidated && (
+                    <span className="badge badge-green" style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>
+                      <IcCheck /> Premier versement reçu
+                    </span>
+                  )}
+                </div>
                 <div className="ldm-ri-rows">
                   <div className="ldm-ri-row"><span className="ldm-ri-key">Client</span><span className="ldm-ri-val">{lot.client_name}</span></div>
                   {lot.client_phone && <div className="ldm-ri-row"><span className="ldm-ri-key">Téléphone</span><span className="ldm-ri-val">{lot.client_phone}</span></div>}
                   {lot.reserved_by && <div className="ldm-ri-row"><span className="ldm-ri-key">Réservé par</span><span className="ldm-ri-val">{lot.reserved_by}</span></div>}
                   {lot.reservation_date && <div className="ldm-ri-row"><span className="ldm-ri-key">Date</span><span className="ldm-ri-val">{formatDate(lot.reservation_date)}</span></div>}
                   {lot.expiration_date && <div className="ldm-ri-row"><span className="ldm-ri-key">Expire le</span><span className="ldm-ri-val" style={{ color: 'var(--color-warning)' }}>{formatDate(lot.expiration_date)}</span></div>}
-                  {lot.deposit > 0 && <div className="ldm-ri-row"><span className="ldm-ri-key">Acompte</span><span className="ldm-ri-val ldm-ri-val--bold">{formatPrice(lot.deposit)}</span></div>}
+                  {lot.deposit > 0 && <div className="ldm-ri-row"><span className="ldm-ri-key">Acompte initial</span><span className="ldm-ri-val ldm-ri-val--bold">{formatPrice(lot.deposit)}</span></div>}
+                  {firstDepositInstallment && (
+                    <div className="ldm-ri-row">
+                      <span className="ldm-ri-key">1er versement plan</span>
+                      <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {formatPrice(firstDepositInstallment.amount)}
+                        {firstDepositInstallment.status === 'paid'
+                          ? <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Payé</span>
+                          : <span className="badge badge-red" style={{ fontSize: '0.65rem' }}>En attente</span>
+                        }
+                      </span>
+                    </div>
+                  )}
                 </div>
+                {/* First payment alert */}
+                {firstPaymentIsOverdue && (
+                  <div className="ldm-first-payment-alert">
+                    <div className="ldm-fpa-icon">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 2L1 13h14L8 2z" /><path d="M8 6v4M8 11.5v.5" />
+                      </svg>
+                    </div>
+                    <div className="ldm-fpa-body">
+                      <div className="ldm-fpa-title">Premier versement en retard</div>
+                      <div className="ldm-fpa-desc">
+                        Échéance du {formatDate(firstDepositInstallment.due_date)} — {formatPrice(firstDepositInstallment.amount)}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={handleConfirmFirstPayment}
+                      disabled={confirmingPayment}
+                      style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <IcCheck />
+                      {confirmingPayment ? 'Confirmation...' : 'Confirmer le paiement'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -653,8 +776,15 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
               const msg = `Seul ${lot.reserved_by || 'le commercial qui a réservé'} peut libérer ou finaliser cette réservation`;
               return (
                 <>
+                  {/* Quick confirm first payment if pending — accessible directly from footer */}
+                  {firstPaymentIsOverdue && canManage && (
+                    <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      onClick={handleConfirmFirstPayment} disabled={confirmingPayment}>
+                      <IcCheck /> {confirmingPayment ? 'Confirmation...' : 'Valider 1er paiement'}
+                    </button>
+                  )}
                   <button className="btn btn-ghost"
-                    onClick={handleRelease} disabled={loading || !canManage}
+                    onClick={() => handleSetMode('release')} disabled={loading || !canManage}
                     title={!canManage ? msg : ''}
                     style={!canManage ? { opacity: 0.5, cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: 6 } : { display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <IcUnlock /> Libérer
@@ -677,6 +807,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
 
   /* ── FORM VIEW — split layout ────────────────────────────── */
   const isReserve = mode === 'reserve';
+  const isRelease = mode === 'release';
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -713,7 +844,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
           <div className="msr-header">
             <div className="msr-header-left">
               <h3 className="msr-title">
-                {isReserve ? 'Réserver le lot' : (lot.status === 'reserved' ? 'Finaliser la vente' : 'Vendre le lot')}
+                {isReserve ? 'Réserver le lot' : isRelease ? 'Libérer la réservation' : (lot.status === 'reserved' ? 'Finaliser la vente' : 'Vendre le lot')}
               </h3>
               <div className="msr-subtitle">Lot {lot.numero}</div>
             </div>
@@ -726,8 +857,80 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
           </div>
 
           <div className="msr-form">
+
+            {/* ── Release form ── */}
+            {isRelease && (
+              <>
+                {/* Info client bloquée */}
+                {lot.client_name && (
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcUser /> Client</label>
+                    <div className="msr-client-locked">
+                      <div className="msr-client-locked-monogram">
+                        {lot.client_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="msr-client-locked-name">{lot.client_name}</div>
+                        <div className="msr-client-locked-sub">Client de la réservation</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Acompte versé (lecture seule) */}
+                {lot.deposit > 0 && (
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcMoney /> Acompte versé</label>
+                    <div className="msr-info-pill">
+                      <span className="msr-info-pill-value">{formatPrice(lot.deposit)}</span>
+                      {lot.deposit_date && <span className="msr-info-pill-sub">versé le {formatDate(lot.deposit_date)}</span>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Acompte récupéré */}
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcMoney /> Acompte récupéré par le client</label>
+                  <div className="msr-deposit-row">
+                    <input
+                      type="number" className="msr-input" min="0" step="1000"
+                      placeholder={lot.deposit > 0 ? lot.deposit.toString() : '0'}
+                      value={releaseData.deposit_refund_amount}
+                      onChange={e => setReleaseData(d => ({ ...d, deposit_refund_amount: e.target.value }))}
+                    />
+                    <span className="msr-currency">MAD</span>
+                  </div>
+                  <div className="msr-hint">Laisser vide si aucun remboursement</div>
+                </div>
+
+                {/* Date récupération */}
+                {releaseData.deposit_refund_amount !== '' && parseFloat(releaseData.deposit_refund_amount) > 0 && (
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcCalendar /> Date de récupération</label>
+                    <input
+                      type="date" className="msr-input"
+                      value={releaseData.deposit_refund_date}
+                      onChange={e => setReleaseData(d => ({ ...d, deposit_refund_date: e.target.value }))}
+                    />
+                  </div>
+                )}
+
+                {/* Motif de libération */}
+                <div className="msr-field-group">
+                  <label className="msr-label">Motif de libération</label>
+                  <textarea
+                    className="msr-textarea"
+                    rows={3}
+                    placeholder="Raison de la libération (optionnel)…"
+                    value={releaseData.release_reason}
+                    onChange={e => setReleaseData(d => ({ ...d, release_reason: e.target.value }))}
+                  />
+                </div>
+              </>
+            )}
+
             {/* Client selector */}
-            {(isReserve || lot.status !== 'reserved') && (
+            {!isRelease && (isReserve || lot.status !== 'reserved') && (
               <div className="msr-field-group">
                 <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
                 <div className="msr-client-row">
@@ -753,7 +956,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
             )}
 
             {/* Client locked from reservation */}
-            {!isReserve && lot.status === 'reserved' && lot.client_name && (
+            {!isReserve && !isRelease && lot.status === 'reserved' && lot.client_name && (
               <div className="msr-field-group">
                 <label className="msr-label"><IcUser /> Client</label>
                 <div className="msr-client-locked">
@@ -771,25 +974,61 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
             {/* Reservation duration */}
             {isReserve && (
               <div className="msr-field-group">
-                <label className="msr-label"><IcCalendar /> Durée avant 1er paiement <span className="msr-required">*</span></label>
-                <div className="msr-stepper">
-                  <button type="button" className="msr-stepper-btn"
-                    onClick={() => setReservationDays(d => Math.max(1, (parseInt(d) || 7) - 1))}>−</button>
-                  <input type="number" className="msr-stepper-input" min="1" max="365"
-                    value={reservationDays} onChange={e => setReservationDays(e.target.value)} />
-                  <span className="msr-stepper-unit">jours</span>
-                  <button type="button" className="msr-stepper-btn"
-                    onClick={() => setReservationDays(d => Math.min(365, (parseInt(d) || 7) + 1))}>+</button>
+                <div className="msr-duration-header">
+                  <label className="msr-label"><IcCalendar /> Durée avant 1er paiement <span className="msr-required">*</span></label>
+                  <label className="msr-immediate-toggle">
+                    <input type="checkbox" checked={firstPaymentImmediate}
+                      onChange={e => setFirstPaymentImmediate(e.target.checked)} />
+                    <span>Immédiat</span>
+                  </label>
                 </div>
-                <div className="msr-expiry-hint">
-                  <IcCalendar />
-                  1er versement prévu le <strong>{expiryDate}</strong>
+                {!firstPaymentImmediate && (
+                  <>
+                    <div className="msr-stepper">
+                      <button type="button" className="msr-stepper-btn"
+                        onClick={() => setReservationDays(d => Math.max(1, (parseInt(d) || 7) - 1))}>−</button>
+                      <input type="number" className="msr-stepper-input" min="1" max="365"
+                        value={reservationDays} onChange={e => setReservationDays(e.target.value)} />
+                      <span className="msr-stepper-unit">jours</span>
+                      <button type="button" className="msr-stepper-btn"
+                        onClick={() => setReservationDays(d => Math.min(365, (parseInt(d) || 7) + 1))}>+</button>
+                    </div>
+                    <div className="msr-expiry-hint">
+                      <IcCalendar />
+                      1er versement prévu le <strong>{expiryDate}</strong>
+                    </div>
+                  </>
+                )}
+                {firstPaymentImmediate && (
+                  <div className="msr-immediate-hint">
+                    <IcCheck /> Le 1er versement sera marqué payé dès la réservation
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Deposit amount + date (reserve only) */}
+            {isReserve && (
+              <div className="msr-field-group">
+                <label className="msr-label"><IcMoney /> Premier versement (acompte)</label>
+                <div className="msr-deposit-row">
+                  <div className="msr-price-input-wrap" style={{ flex: 1 }}>
+                    <input type="number" className="msr-price-input" placeholder="Montant reçu"
+                      value={depositAmount} onChange={e => setDepositAmount(e.target.value)}
+                      min="0" step="100" />
+                    <span className="msr-price-input-currency">MAD</span>
+                  </div>
                 </div>
+                {lot.price && depositAmount && parseFloat(depositAmount) > 0 && (
+                  <div className="msr-balance-hint">
+                    Solde restant : <strong>{formatPrice(lot.price - parseFloat(depositAmount))}</strong>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Final price (sell) */}
-            {!isReserve && (
+            {!isReserve && !isRelease && (
               <div className="msr-field-group">
                 <label className="msr-label"><IcMoney /> Prix final de vente <span className="msr-required">*</span></label>
                 <div className="msr-price-input-wrap">
@@ -806,11 +1045,13 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
             )}
 
             {/* Notes */}
-            <div className="msr-field-group">
-              <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
-              <textarea className="msr-textarea" placeholder="Ajouter une note sur cette transaction..."
-                value={notes} onChange={e => setNotes(e.target.value)} />
-            </div>
+            {!isRelease && (
+              <div className="msr-field-group">
+                <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
+                <textarea className="msr-textarea" placeholder="Ajouter une note sur cette transaction..."
+                  value={notes} onChange={e => setNotes(e.target.value)} />
+              </div>
+            )}
 
             {/* Payment plan toggle (reserve only) */}
             {isReserve && lot.price && (
@@ -843,6 +1084,11 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                 onClick={handleReserve} disabled={loading}>
                 <IcCheck />{loading ? 'Réservation...' : 'Confirmer la réservation'}
               </button>
+            ) : isRelease ? (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--release"
+                onClick={handleConfirmRelease} disabled={loading}>
+                <IcUnlock />{loading ? 'Libération...' : 'Confirmer la libération'}
+              </button>
             ) : (
               <button type="button" className="msr-btn-confirm msr-btn-confirm--sell"
                 onClick={handleSell} disabled={loading}>
@@ -860,10 +1106,10 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                 <span className="mpp-title">Plan de paiement</span>
                 <span className="mpp-subtitle">{previewRowCount} versement{previewRowCount > 1 ? 's' : ''}</span>
               </div>
-              <span className="mpp-total">{formatPrice(lot.price)}</span>
+              <span className="mpp-total">{formatPrice(remainingBalance)}</span>
             </div>
             <div className="mpp-body">
-              <PaymentPlanConfigurator lotPrice={lot.price} plan={paymentPlan} onChange={setPaymentPlan} panel />
+              <PaymentPlanConfigurator lotPrice={remainingBalance} plan={paymentPlan} onChange={setPaymentPlan} panel />
             </div>
           </div>
         )}

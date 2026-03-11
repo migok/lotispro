@@ -1,6 +1,6 @@
 """Client-related schemas for API requests and responses."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import EmailStr, Field
@@ -15,6 +15,7 @@ class ClientCreate(BaseSchema):
     phone: str | None = Field(default=None, max_length=20, description="Phone number")
     email: EmailStr | None = Field(default=None, description="Email address")
     cin: str | None = Field(default=None, max_length=20, description="National ID (CIN)")
+    address: str | None = Field(default=None, max_length=500, description="Client address")
     client_type: Literal["proprietaire", "revendeur", "investisseur", "autre"] = Field(
         default="autre",
         description="Client type",
@@ -29,6 +30,7 @@ class ClientUpdate(BaseSchema):
     phone: str | None = Field(default=None, max_length=20)
     email: EmailStr | None = None
     cin: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=500)
     client_type: Literal["proprietaire", "revendeur", "investisseur", "autre"] | None = None
     notes: str | None = Field(default=None, max_length=2000)
 
@@ -41,6 +43,7 @@ class ClientResponse(BaseSchema):
     phone: str | None
     email: str | None
     cin: str | None
+    address: str | None = None
     client_type: str | None
     notes: str | None
     created_by_user_id: int | None
@@ -71,6 +74,10 @@ class ReservationHistory(BaseSchema):
     reservation_date: datetime
     expiration_date: datetime
     deposit: float
+    deposit_date: date | None = None
+    deposit_refund_amount: float | None = None
+    deposit_refund_date: date | None = None
+    release_reason: str | None = None
     status: str
     notes: str | None
     lot_numero: str
