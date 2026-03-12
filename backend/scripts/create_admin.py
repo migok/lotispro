@@ -50,16 +50,7 @@ async def create_admin_user() -> None:
         existing_user = result.scalar_one_or_none()
 
         if existing_user:
-            print(f"[WARNING]  User with email {admin_email} already exists")
-            print(f"   Role: {existing_user.role}")
-
-            # Ask if we should update to manager role
-            if existing_user.role != "manager":
-                update = input("Update role to 'manager'? (y/n): ").lower()
-                if update == "y":
-                    existing_user.role = "manager"
-                    await session.commit()
-                    print("[SUCCESS] User role updated to 'manager'")
+            print(f"[INFO] User {admin_email} already exists (role: {existing_user.role}). Skipping.")
             return
 
         # Create new admin user
