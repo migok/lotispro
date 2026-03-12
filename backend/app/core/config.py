@@ -7,8 +7,25 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+import json
+
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
+
+
+_LIST_FIELDS = {"CORS_ORIGINS", "CORS_ALLOW_METHODS", "CORS_ALLOW_HEADERS"}
+
+
+class _CommaListEnvSource(EnvSettingsSource):
+    """Env source that accepts comma-separated strings for list fields."""
+
+    def prepare_field_value(self, field_name, field, value, value_is_complex):  # type: ignore[override]
+        if field_name.upper() in _LIST_FIELDS and isinstance(value, str):
+            stripped = value.strip()
+            if not stripped.startswith("["):
+                # Not JSON — wrap as JSON array so pydantic-settings can parse it
+                value = json.dumps([v.strip() for v in stripped.split(",") if v.strip()])
+        return super().prepare_field_value(field_name, field, value, value_is_complex)
 
 
 class Settings(BaseSettings):
@@ -117,6 +134,16 @@ class Settings(BaseSettings):
         path = Path(v)
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    @classmethod
+    def settings_customise_sources(cls, settings_cls, **kwargs):  # type: ignore[override]
+        """Use a custom env source that handles comma-separated list values."""
+        sources = super().settings_customise_sources(settings_cls, **kwargs)
+        # Replace the EnvSettingsSource with our tolerant subclass
+        return tuple(
+            _CommaListEnvSource(settings_cls) if isinstance(s, EnvSettingsSource) else s
+            for s in sources
+        )
 
     @property
     def is_production(self) -> bool:
