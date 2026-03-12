@@ -2,7 +2,7 @@
  * Utilitaires pour les appels API avec authentification
  */
 
-const API_BASE_URL = 'http://127.0.0.1:8000';
+import { API_BASE_URL } from './config';
 
 /**
  * Récupère le token d'authentification depuis le localStorage
@@ -59,7 +59,13 @@ export const apiFetch = async (endpoint, options = {}) => {
  */
 export const apiGet = async (endpoint) => {
   const response = await apiFetch(endpoint);
-  return response.json();
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.message || `Erreur ${response.status}`);
+  }
+
+  return data;
 };
 
 /**
@@ -70,7 +76,13 @@ export const apiPost = async (endpoint, data) => {
     method: 'POST',
     body: JSON.stringify(data),
   });
-  return response.json();
+  const responseData = await response.json();
+
+  if (!response.ok) {
+    throw new Error(responseData.detail || responseData.message || `Erreur ${response.status}`);
+  }
+
+  return responseData;
 };
 
 /**
@@ -81,7 +93,30 @@ export const apiPut = async (endpoint, data) => {
     method: 'PUT',
     body: JSON.stringify(data),
   });
-  return response.json();
+  const responseData = await response.json();
+
+  if (!response.ok) {
+    throw new Error(responseData.detail || responseData.message || `Erreur ${response.status}`);
+  }
+
+  return responseData;
+};
+
+/**
+ * PATCH request avec authentification
+ */
+export const apiPatch = async (endpoint, data) => {
+  const response = await apiFetch(endpoint, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+  const responseData = await response.json();
+
+  if (!response.ok) {
+    throw new Error(responseData.detail || responseData.message || `Erreur ${response.status}`);
+  }
+
+  return responseData;
 };
 
 /**
@@ -91,7 +126,45 @@ export const apiDelete = async (endpoint) => {
   const response = await apiFetch(endpoint, {
     method: 'DELETE',
   });
-  return response.json();
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.message || `Erreur ${response.status}`);
+  }
+
+  return data;
+};
+
+/**
+ * Upload file avec authentification
+ */
+export const apiUploadFile = async (endpoint, file, fieldName = 'file') => {
+  const token = getAuthToken();
+  const formData = new FormData();
+  formData.append(fieldName, file);
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (response.status === 401) {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+    window.location.href = '/login';
+    throw new Error('Session expirée');
+  }
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.message || `Erreur ${response.status}`);
+  }
+
+  return data;
 };
 
 export default {
@@ -99,5 +172,7 @@ export default {
   get: apiGet,
   post: apiPost,
   put: apiPut,
+  patch: apiPatch,
   delete: apiDelete,
+  uploadFile: apiUploadFile,
 };

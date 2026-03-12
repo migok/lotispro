@@ -1,0 +1,82 @@
+# ============================================
+# Lots API - Docker Compose pour Supabase
+# ============================================
+# Ce fichier configure le backend pour se connecter
+# à une instance Supabase locale déjà en cours d'exécution
+#
+# Prérequis: Supabase doit être lancé via "npx supabase start"
+#
+# Usage: docker compose -f docker-compose.supabase.yml up -d
+
+services:
+  # ----------------------------------------
+  # FastAPI Application (connecté à Supabase)
+  # ----------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: lots-api-supabase
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Override avec les noms de services Docker
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=console
+
+      # Connexion à la base Supabase via le réseau Docker
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@supabase_db_lot_webapp:5432/postgres
+
+      # URLs Supabase via Kong (API Gateway)
+      - SUPABASE_URL=http://supabase_kong_lot_webapp:8000
+      # External URL for browser-accessible public file links (images, etc.)
+      - SUPABASE_PUBLIC_URL=http://127.0.0.1:54321
+      - SUPABASE_REST_URL=http://supabase_kong_lot_webapp:8000/rest/v1
+      - SUPABASE_GRAPHQL_URL=http://supabase_kong_lot_webapp:8000/graphql/v1
+      - SUPABASE_STORAGE_URL=http://supabase_kong_lot_webapp:8000/storage/v1
+
+      # Services internes (si besoin d'accès direct)
+      - SUPABASE_AUTH_URL=http://supabase_auth_lot_webapp:9999
+      - SUPABASE_STORAGE_DIRECT_URL=http://supabase_storage_lot_webapp:5000
+      - SUPABASE_REALTIME_URL=http://supabase_realtime_lot_webapp:4000
+
+      # CORS pour le frontend (format JSON array)
+      - CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173","http://localhost:5174","http://127.0.0.1:5174","http://localhost:3000"]
+
+      # Clés Supabase
+      - SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}
+      - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+
+      # Email (Resend)
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM}
+
+    volumes:
+      # Hot-reload pour le développement
+      - ./app:/app/app:ro
+      - ./data:/app/data
+      - ./alembic:/app/alembic
+
+    # Connexion au réseau Supabase existant
+    networks:
+      - supabase_network_lot_webapp
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# ----------------------------------------
+# Réseaux
+# ----------------------------------------
+networks:
+  # Utilise le réseau créé par Supabase
+  supabase_network_lot_webapp:
+    external: true

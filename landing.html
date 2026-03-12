@@ -1,0 +1,1603 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LotisPro — La plateforme de gestion foncière pour les promoteurs</title>
+<meta name="description" content="LotisPro centralise vos projets, lots, réservations et paiements. Pilotez vos équipes commerciales. Visualisez vos parcelles sur carte. Finissez avec Excel.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,600&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─── RESET & TOKENS ────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+:root {
+  --bg0: #060a11;
+  --bg1: #090d16;
+  --bg2: #0f1624;
+  --bg3: #182035;
+  --bg4: #1e2840;
+  --bg5: #243050;
+  --brass: #d4973a;
+  --brass-dim: #a97628;
+  --brass-bright: #e8b45a;
+  --brass-glow: rgba(212,151,58,.18);
+  --text0: #ecf0fa;
+  --text1: #b8c4db;
+  --text2: #6e7e9e;
+  --text3: #3e4e68;
+  --green: #10b981;
+  --amber: #f59e0b;
+  --violet: #8b5cf6;
+  --red: #ef4444;
+
+  --font-display: 'Cormorant Garamond', serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+
+  --r-sm: 6px;
+  --r-md: 12px;
+  --r-lg: 20px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.87, 0, 0.13, 1);
+}
+
+body {
+  background: var(--bg0);
+  color: var(--text0);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* ─── CUSTOM CURSOR ─────────────────────────────────────────────────── */
+.cursor-dot {
+  width: 6px; height: 6px;
+  background: var(--brass);
+  border-radius: 50%;
+  position: fixed; top: 0; left: 0;
+  pointer-events: none; z-index: 9999;
+  transform: translate(-50%,-50%);
+  transition: background .2s;
+}
+.cursor-ring {
+  width: 28px; height: 28px;
+  border: 1.5px solid rgba(212,151,58,.5);
+  border-radius: 50%;
+  position: fixed; top: 0; left: 0;
+  pointer-events: none; z-index: 9998;
+  transform: translate(-50%,-50%);
+  transition: width .2s var(--ease-out), height .2s var(--ease-out), border-color .2s, opacity .3s;
+}
+body:has(a:hover) .cursor-ring,
+body:has(button:hover) .cursor-ring { width: 44px; height: 44px; border-color: var(--brass); }
+
+/* ─── CANVAS BG ─────────────────────────────────────────────────────── */
+#canvas-bg {
+  position: fixed; inset: 0;
+  z-index: 0; opacity: .35;
+  pointer-events: none;
+}
+
+/* ─── NAV ───────────────────────────────────────────────────────────── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 20px 48px;
+  display: flex; align-items: center; justify-content: space-between;
+  transition: background .4s, backdrop-filter .4s, border-color .4s;
+  border-bottom: 1px solid transparent;
+}
+nav.scrolled {
+  background: rgba(6,10,17,.85);
+  backdrop-filter: blur(20px);
+  border-color: rgba(212,151,58,.12);
+}
+.nav-logo {
+  font-family: var(--font-display);
+  font-size: 26px; font-weight: 600;
+  color: var(--text0);
+  letter-spacing: .02em;
+  text-decoration: none;
+}
+.nav-logo span { color: var(--brass); }
+.nav-links {
+  display: flex; align-items: center; gap: 36px;
+  list-style: none;
+}
+.nav-links a {
+  color: var(--text1);
+  text-decoration: none;
+  font-size: 14px; font-weight: 400;
+  letter-spacing: .04em;
+  transition: color .2s;
+  text-transform: uppercase;
+}
+.nav-links a:hover { color: var(--brass); }
+.nav-cta {
+  background: var(--brass);
+  color: #111827 !important;
+  padding: 10px 24px;
+  border-radius: var(--r-sm);
+  font-weight: 600 !important;
+  transition: background .2s, transform .15s !important;
+}
+.nav-cta:hover { background: var(--brass-bright) !important; transform: translateY(-1px); }
+
+/* ─── SECTIONS BASE ─────────────────────────────────────────────────── */
+section { position: relative; z-index: 1; }
+
+/* ─── HERO ──────────────────────────────────────────────────────────── */
+.hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 140px 48px 80px;
+  text-align: center;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: rgba(212,151,58,.1);
+  border: 1px solid rgba(212,151,58,.25);
+  border-radius: 100px;
+  padding: 6px 16px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--brass);
+  margin-bottom: 32px;
+  opacity: 0; transform: translateY(12px);
+  transition: opacity .6s .1s var(--ease-out), transform .6s .1s var(--ease-out);
+}
+.hero-eyebrow.visible { opacity: 1; transform: none; }
+.hero-eyebrow::before {
+  content: '';
+  width: 6px; height: 6px;
+  background: var(--brass);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .4; transform: scale(.7); }
+}
+
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(52px, 7vw, 108px);
+  font-weight: 300;
+  line-height: 1.0;
+  letter-spacing: -.02em;
+  color: var(--text0);
+  max-width: 960px;
+  opacity: 0; transform: translateY(24px);
+  transition: opacity .8s .2s var(--ease-out), transform .8s .2s var(--ease-out);
+}
+.hero h1.visible { opacity: 1; transform: none; }
+.hero h1 em {
+  font-style: italic;
+  color: var(--brass);
+}
+.hero h1 .line-block { display: block; }
+
+.hero-sub {
+  margin-top: 28px;
+  font-size: 18px; font-weight: 300;
+  color: var(--text1);
+  max-width: 560px;
+  line-height: 1.7;
+  opacity: 0; transform: translateY(20px);
+  transition: opacity .8s .4s var(--ease-out), transform .8s .4s var(--ease-out);
+}
+.hero-sub.visible { opacity: 1; transform: none; }
+
+.hero-actions {
+  margin-top: 44px;
+  display: flex; gap: 16px; align-items: center; justify-content: center;
+  flex-wrap: wrap;
+  opacity: 0; transform: translateY(16px);
+  transition: opacity .8s .55s var(--ease-out), transform .8s .55s var(--ease-out);
+}
+.hero-actions.visible { opacity: 1; transform: none; }
+
+.btn-primary {
+  background: var(--brass);
+  color: #111827;
+  border: none;
+  padding: 16px 36px;
+  border-radius: var(--r-sm);
+  font-family: var(--font-body);
+  font-size: 15px; font-weight: 600;
+  cursor: none;
+  transition: background .2s, transform .15s, box-shadow .2s;
+  text-decoration: none;
+  display: inline-block;
+  letter-spacing: .02em;
+}
+.btn-primary:hover {
+  background: var(--brass-bright);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(212,151,58,.3);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--text1);
+  border: 1px solid var(--text3);
+  padding: 15px 32px;
+  border-radius: var(--r-sm);
+  font-family: var(--font-body);
+  font-size: 15px; font-weight: 400;
+  cursor: none;
+  transition: border-color .2s, color .2s, transform .15s;
+  text-decoration: none;
+  display: inline-block;
+  letter-spacing: .02em;
+}
+.btn-ghost:hover { border-color: var(--brass); color: var(--brass); transform: translateY(-2px); }
+
+/* HERO DASHBOARD MOCKUP */
+.hero-visual {
+  margin-top: 80px;
+  width: 100%; max-width: 1100px;
+  opacity: 0; transform: translateY(40px) scale(.97);
+  transition: opacity 1s .7s var(--ease-out), transform 1s .7s var(--ease-out);
+}
+.hero-visual.visible { opacity: 1; transform: none; }
+.mockup-frame {
+  background: var(--bg2);
+  border: 1px solid rgba(212,151,58,.15);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: 0 60px 120px rgba(0,0,0,.7), 0 0 0 1px rgba(212,151,58,.08), 0 0 80px rgba(212,151,58,.06);
+}
+.mockup-topbar {
+  background: var(--bg3);
+  padding: 14px 20px;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid rgba(212,151,58,.08);
+}
+.mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
+.mockup-dot:nth-child(1) { background: #ef4444; }
+.mockup-dot:nth-child(2) { background: #f59e0b; }
+.mockup-dot:nth-child(3) { background: #10b981; }
+.mockup-url {
+  margin-left: 12px;
+  background: var(--bg4);
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px; color: var(--text2);
+  flex: 1; max-width: 280px; text-align: center;
+}
+.mockup-body {
+  display: grid; grid-template-columns: 220px 1fr;
+  height: 480px;
+}
+.mockup-sidebar {
+  background: var(--bg3);
+  border-right: 1px solid rgba(212,151,58,.08);
+  padding: 24px 0;
+}
+.mockup-nav-item {
+  padding: 10px 20px;
+  font-size: 12px; color: var(--text2);
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-body);
+}
+.mockup-nav-item.active {
+  background: rgba(212,151,58,.08);
+  color: var(--brass);
+  border-left: 2px solid var(--brass);
+}
+.mockup-nav-item .icon-dot {
+  width: 16px; height: 16px;
+  border-radius: 3px;
+  background: currentColor; opacity: .5;
+}
+.mockup-nav-label { font-size: 12px; font-weight: 500; }
+
+.mockup-content {
+  padding: 24px;
+  overflow: hidden;
+}
+.mockup-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  margin-bottom: 20px;
+}
+.mockup-stat {
+  background: var(--bg3);
+  border: 1px solid rgba(212,151,58,.08);
+  border-radius: var(--r-sm);
+  padding: 14px;
+}
+.mockup-stat-val {
+  font-family: var(--font-display);
+  font-size: 24px; font-weight: 600;
+  color: var(--text0);
+  font-variant-numeric: tabular-nums;
+}
+.mockup-stat-val.brass { color: var(--brass); }
+.mockup-stat-val.green { color: var(--green); }
+.mockup-stat-val.amber { color: var(--amber); }
+.mockup-stat-lbl { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: .08em; margin-top: 4px; }
+.mockup-trend { font-size: 10px; color: var(--green); margin-top: 2px; }
+
+.mockup-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mockup-card {
+  background: var(--bg3);
+  border: 1px solid rgba(212,151,58,.08);
+  border-radius: var(--r-sm);
+  padding: 14px;
+  height: 200px; overflow: hidden;
+}
+.mockup-card-title { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; }
+/* mini bar chart */
+.mini-bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; }
+.mini-bar {
+  flex: 1; border-radius: 3px 3px 0 0;
+  background: rgba(212,151,58,.25);
+  transition: background .2s;
+  animation: growUp .8s var(--ease-out) both;
+}
+.mini-bar:hover { background: var(--brass); }
+.mini-bar.highlight { background: var(--brass); }
+@keyframes growUp { from { transform: scaleY(0); transform-origin: bottom; } }
+.mini-bar:nth-child(1) { height: 40%; animation-delay: .05s; }
+.mini-bar:nth-child(2) { height: 65%; animation-delay: .1s; }
+.mini-bar:nth-child(3) { height: 50%; animation-delay: .15s; }
+.mini-bar:nth-child(4) { height: 80%; animation-delay: .2s; }
+.mini-bar:nth-child(5) { height: 60%; animation-delay: .25s; }
+.mini-bar:nth-child(6) { height: 90%; animation-delay: .3s; }
+.mini-bar:nth-child(7) { height: 100%; animation-delay: .35s; highlight: true; }
+/* map placeholder */
+.mini-map {
+  width: 100%; height: 100%;
+  background: var(--bg4);
+  border-radius: var(--r-sm);
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.map-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
+  width: 90%; padding: 8px;
+}
+.map-lot {
+  height: 22px; border-radius: 3px;
+  animation: fadeIn .6s var(--ease-out) both;
+}
+@keyframes fadeIn { from { opacity: 0; } }
+.map-lot.available { background: rgba(16,185,129,.5); }
+.map-lot.reserved { background: rgba(245,158,11,.5); }
+.map-lot.sold { background: rgba(239,68,68,.5); }
+.map-lot.blocked { background: rgba(107,114,128,.3); }
+
+/* ─── NUMBERS BAR ────────────────────────────────────────────────────── */
+.numbers-bar {
+  background: var(--bg2);
+  border-top: 1px solid rgba(212,151,58,.1);
+  border-bottom: 1px solid rgba(212,151,58,.1);
+  padding: 48px;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+}
+.number-item {
+  text-align: center;
+  padding: 0 24px;
+  border-right: 1px solid rgba(212,151,58,.1);
+}
+.number-item:last-child { border-right: none; }
+.number-val {
+  font-family: var(--font-display);
+  font-size: 56px; font-weight: 300;
+  color: var(--brass);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.number-unit { font-size: 24px; font-weight: 300; }
+.number-lbl { font-size: 13px; color: var(--text2); margin-top: 8px; letter-spacing: .04em; }
+
+/* ─── ANIMATE ON SCROLL ──────────────────────────────────────────────── */
+.reveal {
+  opacity: 0; transform: translateY(32px);
+  transition: opacity .7s var(--ease-out), transform .7s var(--ease-out);
+}
+.reveal.visible { opacity: 1; transform: none; }
+.reveal-delay-1 { transition-delay: .1s; }
+.reveal-delay-2 { transition-delay: .2s; }
+.reveal-delay-3 { transition-delay: .3s; }
+.reveal-delay-4 { transition-delay: .4s; }
+.reveal-delay-5 { transition-delay: .5s; }
+
+/* ─── PROBLEM SECTION ────────────────────────────────────────────────── */
+.section-problem {
+  padding: 120px 48px;
+  text-align: center;
+}
+.section-eyebrow {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--brass);
+  margin-bottom: 20px;
+}
+.section-title {
+  font-family: var(--font-display);
+  font-size: clamp(36px, 4.5vw, 68px);
+  font-weight: 300; line-height: 1.1;
+  letter-spacing: -.01em;
+}
+.section-title em { font-style: italic; color: var(--brass); }
+.section-sub {
+  margin-top: 20px;
+  font-size: 17px; color: var(--text1);
+  max-width: 600px; margin-inline: auto;
+  line-height: 1.7; font-weight: 300;
+}
+
+.pain-grid {
+  margin-top: 64px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+  max-width: 960px; margin-inline: auto;
+}
+.pain-card {
+  background: var(--bg2);
+  border: 1px solid rgba(255,255,255,.05);
+  border-radius: var(--r-md);
+  padding: 32px;
+  text-align: left;
+  position: relative; overflow: hidden;
+}
+.pain-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(239,68,68,.4), transparent);
+}
+.pain-icon {
+  width: 40px; height: 40px;
+  border-radius: var(--r-sm);
+  background: rgba(239,68,68,.1);
+  border: 1px solid rgba(239,68,68,.2);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 20px;
+}
+.pain-title { font-size: 16px; font-weight: 600; margin-bottom: 10px; color: var(--text0); }
+.pain-text { font-size: 14px; color: var(--text2); line-height: 1.6; }
+
+/* ─── FEATURES SECTION ───────────────────────────────────────────────── */
+.section-features {
+  padding: 120px 48px;
+  max-width: 1200px; margin-inline: auto;
+}
+.features-header { text-align: center; margin-bottom: 80px; }
+.features-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px;
+  background: rgba(212,151,58,.08);
+  border: 1px solid rgba(212,151,58,.08);
+  border-radius: var(--r-lg); overflow: hidden;
+}
+.feature-card {
+  background: var(--bg1);
+  padding: 44px 36px;
+  position: relative; overflow: hidden;
+  transition: background .3s;
+}
+.feature-card:hover { background: var(--bg2); }
+.feature-card::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(212,151,58,.05), transparent 50%);
+  opacity: 0; transition: opacity .3s;
+}
+.feature-card:hover::after { opacity: 1; }
+.feature-num {
+  font-family: var(--font-mono);
+  font-size: 11px; color: var(--text3);
+  letter-spacing: .1em; margin-bottom: 20px;
+}
+.feature-icon {
+  width: 48px; height: 48px;
+  border-radius: var(--r-md);
+  background: var(--brass-glow);
+  border: 1px solid rgba(212,151,58,.2);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 24px;
+  color: var(--brass);
+}
+.feature-title {
+  font-size: 20px; font-weight: 600;
+  margin-bottom: 12px; color: var(--text0);
+  line-height: 1.3;
+}
+.feature-text { font-size: 14px; color: var(--text2); line-height: 1.7; }
+.feature-tag {
+  display: inline-block;
+  margin-top: 20px;
+  padding: 4px 10px;
+  background: rgba(212,151,58,.08);
+  border: 1px solid rgba(212,151,58,.15);
+  border-radius: 100px;
+  font-size: 11px; color: var(--brass);
+  letter-spacing: .06em;
+}
+
+/* ─── WORKFLOW SECTION ───────────────────────────────────────────────── */
+.section-workflow {
+  padding: 120px 48px;
+  background: var(--bg2);
+  border-top: 1px solid rgba(212,151,58,.08);
+  border-bottom: 1px solid rgba(212,151,58,.08);
+}
+.workflow-inner { max-width: 1100px; margin-inline: auto; }
+.workflow-header { text-align: center; margin-bottom: 80px; }
+.workflow-steps {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  position: relative;
+}
+.workflow-steps::before {
+  content: '';
+  position: absolute;
+  top: 28px; left: calc(12.5% + 16px); right: calc(12.5% + 16px);
+  height: 1px;
+  background: linear-gradient(90deg, var(--brass-dim), var(--brass), var(--brass-dim));
+  opacity: .4;
+}
+.workflow-step {
+  text-align: center;
+  padding: 0 20px;
+  position: relative;
+}
+.step-circle {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: var(--bg3);
+  border: 2px solid var(--brass-dim);
+  display: flex; align-items: center; justify-content: center;
+  margin-inline: auto;
+  margin-bottom: 24px;
+  color: var(--brass);
+  font-family: var(--font-mono);
+  font-size: 13px; font-weight: 500;
+  position: relative; z-index: 1;
+  transition: background .2s, border-color .2s, transform .2s;
+}
+.workflow-step:hover .step-circle {
+  background: var(--brass-glow);
+  border-color: var(--brass);
+  transform: scale(1.1);
+}
+.step-status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.step-status.available { background: rgba(16,185,129,.1); color: var(--green); border: 1px solid rgba(16,185,129,.25); }
+.step-status.reserved { background: rgba(245,158,11,.1); color: var(--amber); border: 1px solid rgba(245,158,11,.25); }
+.step-status.validated { background: rgba(139,92,246,.1); color: var(--violet); border: 1px solid rgba(139,92,246,.25); }
+.step-status.sold { background: rgba(239,68,68,.1); color: var(--red); border: 1px solid rgba(239,68,68,.25); }
+.step-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+.step-text { font-size: 13px; color: var(--text2); line-height: 1.6; }
+
+/* ─── ROLES SECTION ──────────────────────────────────────────────────── */
+.section-roles {
+  padding: 120px 48px;
+  max-width: 1200px; margin-inline: auto;
+}
+.roles-header { text-align: center; margin-bottom: 80px; }
+.roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.role-card {
+  background: var(--bg2);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: var(--r-lg);
+  padding: 48px 36px;
+  position: relative; overflow: hidden;
+  transition: transform .25s var(--ease-out), box-shadow .25s;
+}
+.role-card:hover { transform: translateY(-6px); box-shadow: 0 24px 60px rgba(0,0,0,.4); }
+.role-card.manager { border-color: rgba(212,151,58,.2); }
+.role-card.manager::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--brass), transparent);
+}
+.role-card.commercial::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--violet), transparent);
+}
+.role-card.client::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--green), transparent);
+}
+.role-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px;
+  border-radius: 100px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase;
+  margin-bottom: 28px;
+}
+.role-badge.manager { background: rgba(212,151,58,.1); color: var(--brass); border: 1px solid rgba(212,151,58,.2); }
+.role-badge.commercial { background: rgba(139,92,246,.1); color: var(--violet); border: 1px solid rgba(139,92,246,.2); }
+.role-badge.client { background: rgba(16,185,129,.1); color: var(--green); border: 1px solid rgba(16,185,129,.2); }
+.role-title {
+  font-family: var(--font-display);
+  font-size: 32px; font-weight: 400; font-style: italic;
+  margin-bottom: 12px;
+}
+.role-desc { font-size: 14px; color: var(--text2); margin-bottom: 28px; line-height: 1.7; }
+.role-features { list-style: none; }
+.role-features li {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 14px; color: var(--text1);
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.role-features li:last-child { border-bottom: none; }
+.check-icon { color: var(--brass); flex-shrink: 0; margin-top: 2px; }
+.check-icon.violet { color: var(--violet); }
+.check-icon.green { color: var(--green); }
+
+/* ─── MAP SECTION ────────────────────────────────────────────────────── */
+.section-map {
+  padding: 120px 48px;
+  background: var(--bg2);
+  border-top: 1px solid rgba(212,151,58,.08);
+  overflow: hidden;
+}
+.map-inner {
+  max-width: 1200px; margin-inline: auto;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center;
+}
+.map-text { }
+.map-title {
+  font-family: var(--font-display);
+  font-size: clamp(36px, 4vw, 64px);
+  font-weight: 300; line-height: 1.1;
+  margin-bottom: 24px;
+}
+.map-title em { font-style: italic; color: var(--brass); }
+.map-desc { font-size: 16px; color: var(--text1); line-height: 1.7; font-weight: 300; margin-bottom: 36px; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 36px; }
+.legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text1); }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+.map-visual {
+  background: var(--bg3);
+  border: 1px solid rgba(212,151,58,.12);
+  border-radius: var(--r-lg);
+  height: 420px;
+  position: relative; overflow: hidden;
+}
+.map-visual-bg {
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(212,151,58,.03) 0, rgba(212,151,58,.03) 1px, transparent 1px, transparent 40px),
+              repeating-linear-gradient(90deg, rgba(212,151,58,.03) 0, rgba(212,151,58,.03) 1px, transparent 1px, transparent 40px);
+}
+.map-lots-grid {
+  position: absolute; inset: 20px;
+  display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(6, 1fr);
+  gap: 4px;
+}
+.lot-poly {
+  border-radius: 3px;
+  position: relative; overflow: hidden;
+  transition: transform .2s, filter .2s;
+  cursor: none;
+}
+.lot-poly:hover { transform: scale(1.08); z-index: 10; filter: brightness(1.3); }
+.lot-poly.av { background: rgba(16,185,129,.45); border: 1px solid rgba(16,185,129,.7); }
+.lot-poly.rs { background: rgba(245,158,11,.45); border: 1px solid rgba(245,158,11,.7); }
+.lot-poly.sd { background: rgba(239,68,68,.4); border: 1px solid rgba(239,68,68,.6); }
+.lot-poly.bl { background: rgba(107,114,128,.3); border: 1px solid rgba(107,114,128,.5); }
+.lot-poly.vl { background: rgba(139,92,246,.4); border: 1px solid rgba(139,92,246,.6); }
+.lot-poly.span2 { grid-column: span 2; }
+.lot-poly.row2 { grid-row: span 2; }
+.lot-num {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-family: var(--font-mono);
+  color: rgba(255,255,255,.7); font-weight: 500;
+}
+
+/* ─── PAYMENT SECTION ────────────────────────────────────────────────── */
+.section-payment {
+  padding: 120px 48px;
+  max-width: 1200px; margin-inline: auto;
+}
+.payment-inner {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center;
+}
+.payment-ui {
+  background: var(--bg2);
+  border: 1px solid rgba(212,151,58,.12);
+  border-radius: var(--r-lg);
+  padding: 32px;
+}
+.payment-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 28px;
+}
+.payment-title-ui { font-size: 14px; font-weight: 600; color: var(--text0); }
+.payment-badge-ui {
+  font-size: 11px; padding: 4px 10px; border-radius: 100px;
+  background: rgba(16,185,129,.1); color: var(--green); border: 1px solid rgba(16,185,129,.2);
+}
+.payment-progress-bar {
+  height: 6px; background: var(--bg4); border-radius: 3px; margin-bottom: 20px; overflow: hidden;
+}
+.payment-progress-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--brass-dim), var(--brass));
+  width: 65%;
+  animation: progressFill 1.5s var(--ease-out) both;
+}
+@keyframes progressFill { from { width: 0; } }
+.payment-installments { display: flex; flex-direction: column; gap: 8px; }
+.installment-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg3);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+}
+.installment-row.paid { opacity: .7; }
+.installment-num { font-family: var(--font-mono); color: var(--text2); font-size: 11px; }
+.installment-date { color: var(--text1); }
+.installment-amount { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text0); }
+.installment-status {
+  font-size: 10px; padding: 3px 8px; border-radius: 100px; font-weight: 600;
+}
+.installment-status.paid { background: rgba(16,185,129,.1); color: var(--green); }
+.installment-status.pending { background: rgba(245,158,11,.1); color: var(--amber); }
+.installment-status.late { background: rgba(239,68,68,.1); color: var(--red); }
+
+/* ─── PRICING ────────────────────────────────────────────────────────── */
+.section-pricing {
+  padding: 120px 48px;
+  background: var(--bg2);
+  border-top: 1px solid rgba(212,151,58,.08);
+}
+.pricing-header { text-align: center; margin-bottom: 72px; }
+.pricing-grid {
+  max-width: 1000px; margin-inline: auto;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+}
+.pricing-card {
+  background: var(--bg1);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: var(--r-lg);
+  padding: 40px 32px;
+  position: relative;
+  transition: transform .25s var(--ease-out), box-shadow .25s;
+}
+.pricing-card:hover { transform: translateY(-4px); box-shadow: 0 20px 50px rgba(0,0,0,.4); }
+.pricing-card.popular {
+  border-color: rgba(212,151,58,.3);
+  background: var(--bg2);
+}
+.pricing-card.popular::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--brass), transparent);
+}
+.popular-badge {
+  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+  background: var(--brass); color: #111827;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase;
+  padding: 4px 14px; border-radius: 100px;
+}
+.plan-name {
+  font-size: 13px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--text2); margin-bottom: 8px;
+}
+.plan-name.gold { color: var(--brass); }
+.plan-price {
+  font-family: var(--font-display);
+  font-size: 52px; font-weight: 300; line-height: 1;
+  color: var(--text0); margin-bottom: 4px;
+}
+.plan-price sup { font-size: 20px; font-weight: 400; vertical-align: top; margin-top: 10px; display: inline-block; }
+.plan-period { font-size: 13px; color: var(--text2); margin-bottom: 28px; }
+.plan-desc { font-size: 14px; color: var(--text2); margin-bottom: 28px; line-height: 1.6; min-height: 60px; }
+.plan-divider { height: 1px; background: rgba(255,255,255,.06); margin-bottom: 28px; }
+.plan-features { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 36px; }
+.plan-features li { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--text1); }
+.plan-features li svg { flex-shrink: 0; color: var(--green); margin-top: 1px; }
+.plan-features li.muted { color: var(--text3); }
+.plan-features li.muted svg { color: var(--text3); }
+.btn-plan {
+  width: 100%; padding: 14px;
+  border-radius: var(--r-sm);
+  font-size: 14px; font-weight: 600;
+  cursor: none; transition: all .2s; border: none;
+  font-family: var(--font-body); text-align: center; display: block; text-decoration: none;
+}
+.btn-plan.primary { background: var(--brass); color: #111827; }
+.btn-plan.primary:hover { background: var(--brass-bright); }
+.btn-plan.outline { background: transparent; border: 1px solid var(--text3); color: var(--text1); }
+.btn-plan.outline:hover { border-color: var(--brass); color: var(--brass); }
+
+/* ─── CTA ────────────────────────────────────────────────────────────── */
+.section-cta {
+  padding: 160px 48px;
+  text-align: center;
+  position: relative; overflow: hidden;
+}
+.section-cta::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px; height: 400px;
+  background: radial-gradient(ellipse, rgba(212,151,58,.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.cta-title {
+  font-family: var(--font-display);
+  font-size: clamp(48px, 6vw, 96px);
+  font-weight: 300; line-height: 1.05;
+  letter-spacing: -.02em;
+  margin-bottom: 28px;
+}
+.cta-title em { font-style: italic; color: var(--brass); }
+.cta-sub { font-size: 18px; color: var(--text1); font-weight: 300; margin-bottom: 48px; }
+
+/* ─── FOOTER ─────────────────────────────────────────────────────────── */
+footer {
+  background: var(--bg2);
+  border-top: 1px solid rgba(212,151,58,.08);
+  padding: 64px 48px 40px;
+}
+.footer-top {
+  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px;
+  margin-bottom: 48px;
+}
+.footer-brand { }
+.footer-logo {
+  font-family: var(--font-display);
+  font-size: 28px; font-weight: 600;
+  color: var(--text0); margin-bottom: 16px;
+}
+.footer-logo span { color: var(--brass); }
+.footer-tagline { font-size: 14px; color: var(--text2); line-height: 1.7; max-width: 280px; }
+.footer-col-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--brass); margin-bottom: 20px; }
+.footer-links { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.footer-links a { font-size: 14px; color: var(--text2); text-decoration: none; transition: color .2s; }
+.footer-links a:hover { color: var(--text0); }
+.footer-bottom {
+  border-top: 1px solid rgba(255,255,255,.06);
+  padding-top: 28px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.footer-copy { font-size: 13px; color: var(--text3); }
+.footer-made { font-size: 13px; color: var(--text3); }
+.footer-made span { color: var(--brass); }
+
+/* ─── MOBILE ─────────────────────────────────────────────────────────── */
+.nav-mobile { display: none; }
+@media (max-width: 1024px) {
+  nav { padding: 16px 24px; }
+  .nav-links { display: none; }
+  .nav-mobile { display: block; cursor: none; }
+  .hero { padding: 120px 24px 60px; }
+  .numbers-bar { grid-template-columns: repeat(2, 1fr); padding: 40px 24px; }
+  .number-item:nth-child(2) { border-right: none; }
+  .pain-grid { grid-template-columns: 1fr; max-width: 480px; }
+  .features-grid { grid-template-columns: 1fr; }
+  .workflow-steps { grid-template-columns: repeat(2, 1fr); gap: 32px; }
+  .workflow-steps::before { display: none; }
+  .roles-grid { grid-template-columns: 1fr; max-width: 480px; margin-inline: auto; }
+  .map-inner { grid-template-columns: 1fr; gap: 40px; }
+  .payment-inner { grid-template-columns: 1fr; gap: 40px; }
+  .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin-inline: auto; }
+  .footer-top { grid-template-columns: 1fr 1fr; gap: 32px; }
+  .section-features { padding: 80px 24px; }
+  .section-problem, .section-workflow, .section-roles, .section-map, .section-payment, .section-pricing, .section-cta { padding: 80px 24px; }
+  .mockup-body { grid-template-columns: 1fr; }
+  .mockup-sidebar { display: none; }
+  .mockup-stats { grid-template-columns: repeat(2, 1fr); }
+  .map-inner { padding: 0 0px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Custom cursor -->
+<div class="cursor-dot" id="cursorDot"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<!-- Canvas background -->
+<canvas id="canvas-bg"></canvas>
+
+<!-- ─── NAV ─────────────────────────────────────────────────────────── -->
+<nav id="nav">
+  <a href="#" class="nav-logo">Lotis<span>Pro</span></a>
+  <ul class="nav-links">
+    <li><a href="#fonctionnalites">Fonctionnalités</a></li>
+    <li><a href="#roles">Équipes</a></li>
+    <li><a href="#carte">Cartographie</a></li>
+    <li><a href="#tarifs">Tarifs</a></li>
+    <li><a href="#demo" class="nav-cta">Demander une démo</a></li>
+  </ul>
+  <button class="nav-mobile btn-ghost" style="padding:8px 16px;font-size:13px;">Menu</button>
+</nav>
+
+<!-- ─── HERO ─────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-eyebrow" id="heroEyebrow">
+    Gestion foncière nouvelle génération
+  </div>
+  <h1 id="heroTitle">
+    <span class="line-block">Pilotez vos projets</span>
+    <span class="line-block"><em>immobiliers</em> depuis</span>
+    <span class="line-block">un seul tableau</span>
+  </h1>
+  <p class="hero-sub" id="heroSub">
+    LotisPro centralise vos lots, réservations, équipes commerciales et plannings de paiement. Visualisez chaque parcelle sur carte. Prenez des décisions en temps réel.
+  </p>
+  <div class="hero-actions" id="heroActions">
+    <a href="#demo" class="btn-primary">Demander une démo gratuite</a>
+    <a href="#fonctionnalites" class="btn-ghost">Découvrir les fonctionnalités</a>
+  </div>
+
+  <!-- Dashboard Mockup -->
+  <div class="hero-visual reveal" id="heroVisual">
+    <div class="mockup-frame">
+      <div class="mockup-topbar">
+        <div class="mockup-dot"></div>
+        <div class="mockup-dot"></div>
+        <div class="mockup-dot"></div>
+        <div class="mockup-url">app.lotispro.com/dashboard</div>
+      </div>
+      <div class="mockup-body">
+        <div class="mockup-sidebar">
+          <div class="mockup-nav-item active">
+            <div class="icon-dot"></div>
+            <span class="mockup-nav-label">Tableau de bord</span>
+          </div>
+          <div class="mockup-nav-item">
+            <div class="icon-dot"></div>
+            <span class="mockup-nav-label">Projets</span>
+          </div>
+          <div class="mockup-nav-item">
+            <div class="icon-dot"></div>
+            <span class="mockup-nav-label">Clients</span>
+          </div>
+          <div class="mockup-nav-item">
+            <div class="icon-dot"></div>
+            <span class="mockup-nav-label">Équipe commerciale</span>
+          </div>
+          <div class="mockup-nav-item">
+            <div class="icon-dot"></div>
+            <span class="mockup-nav-label">Paiements</span>
+          </div>
+          <div class="mockup-nav-item">
+            <div class="icon-dot"></div>
+            <span class="mockup-nav-label">Rapports</span>
+          </div>
+        </div>
+        <div class="mockup-content">
+          <div class="mockup-stats">
+            <div class="mockup-stat">
+              <div class="mockup-stat-val brass">247</div>
+              <div class="mockup-stat-lbl">Lots total</div>
+            </div>
+            <div class="mockup-stat">
+              <div class="mockup-stat-val green">89</div>
+              <div class="mockup-stat-lbl">Disponibles</div>
+              <div class="mockup-trend">↑ 12%</div>
+            </div>
+            <div class="mockup-stat">
+              <div class="mockup-stat-val amber">112</div>
+              <div class="mockup-stat-lbl">Réservés</div>
+            </div>
+            <div class="mockup-stat">
+              <div class="mockup-stat-val" style="color:var(--red)">46</div>
+              <div class="mockup-stat-lbl">Vendus</div>
+              <div class="mockup-trend">↑ 8%</div>
+            </div>
+          </div>
+          <div class="mockup-bottom">
+            <div class="mockup-card">
+              <div class="mockup-card-title">Ventes mensuelles</div>
+              <div class="mini-bars">
+                <div class="mini-bar"></div>
+                <div class="mini-bar"></div>
+                <div class="mini-bar"></div>
+                <div class="mini-bar"></div>
+                <div class="mini-bar"></div>
+                <div class="mini-bar"></div>
+                <div class="mini-bar highlight"></div>
+              </div>
+            </div>
+            <div class="mockup-card">
+              <div class="mockup-card-title">Carte du projet</div>
+              <div class="mini-map">
+                <div class="map-grid">
+                  <div class="map-lot available"></div>
+                  <div class="map-lot reserved"></div>
+                  <div class="map-lot sold"></div>
+                  <div class="map-lot available"></div>
+                  <div class="map-lot available"></div>
+                  <div class="map-lot reserved"></div>
+                  <div class="map-lot reserved"></div>
+                  <div class="map-lot available"></div>
+                  <div class="map-lot blocked"></div>
+                  <div class="map-lot sold"></div>
+                  <div class="map-lot available"></div>
+                  <div class="map-lot reserved"></div>
+                  <div class="map-lot available"></div>
+                  <div class="map-lot sold"></div>
+                  <div class="map-lot available"></div>
+                  <div class="map-lot reserved"></div>
+                  <div class="map-lot available"></div>
+                  <div class="map-lot available"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── NUMBERS BAR ──────────────────────────────────────────────────── -->
+<div class="numbers-bar">
+  <div class="number-item reveal">
+    <div class="number-val"><span class="counter" data-target="10">0</span><span class="number-unit">+</span></div>
+    <div class="number-lbl">Projets gérés simultanément</div>
+  </div>
+  <div class="number-item reveal reveal-delay-1">
+    <div class="number-val"><span class="counter" data-target="500">0</span><span class="number-unit">+</span></div>
+    <div class="number-lbl">Lots par projet en moyenne</div>
+  </div>
+  <div class="number-item reveal reveal-delay-2">
+    <div class="number-val"><span class="counter" data-target="3">0</span></div>
+    <div class="number-lbl">Rôles avec accès contrôlé</div>
+  </div>
+  <div class="number-item reveal reveal-delay-3">
+    <div class="number-val"><span class="counter" data-target="100">0</span><span class="number-unit">%</span></div>
+    <div class="number-lbl">Traçabilité des opérations</div>
+  </div>
+</div>
+
+<!-- ─── PROBLEM SECTION ─────────────────────────────────────────────── -->
+<section class="section-problem">
+  <div class="section-eyebrow reveal">Le problème</div>
+  <h2 class="section-title reveal reveal-delay-1">
+    Fini les tableurs Excel<br><em>et les informations éparpillées</em>
+  </h2>
+  <p class="section-sub reveal reveal-delay-2">
+    La majorité des promoteurs immobiliers gèrent encore leurs projets fonciers avec des fichiers Excel partagés, des chaînes d'e-mails et des tableaux blancs. Résultat : erreurs, doublons, et prise de décision à l'aveugle.
+  </p>
+  <div class="pain-grid" style="margin-top:64px">
+    <div class="pain-card reveal">
+      <div class="pain-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div class="pain-title">Versions Excel incontrôlables</div>
+      <div class="pain-text">Qui a la dernière version ? Quelle réservation est valide ? Les doublons et conflits coûtent des ventes manquées et des erreurs contractuelles.</div>
+    </div>
+    <div class="pain-card reveal reveal-delay-1">
+      <div class="pain-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+      <div class="pain-title">Zéro visibilité en temps réel</div>
+      <div class="pain-text">Quels lots sont disponibles ? Quelles réservations expirent demain ? Sans tableau de bord centralisé, vous naviguez à l'aveugle.</div>
+    </div>
+    <div class="pain-card reveal reveal-delay-2">
+      <div class="pain-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <div class="pain-title">Équipe non coordonnée</div>
+      <div class="pain-text">Vos commerciaux ne savent pas quels lots sont disponibles en temps réel. Deux agents réservent le même lot au même client. Le chaos opérationnel.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FEATURES SECTION ─────────────────────────────────────────────── -->
+<section class="section-features" id="fonctionnalites">
+  <div class="features-header">
+    <div class="section-eyebrow reveal">Fonctionnalités</div>
+    <h2 class="section-title reveal reveal-delay-1">
+      Tout ce dont un promoteur<br><em>a besoin, dans un seul outil</em>
+    </h2>
+  </div>
+  <div class="features-grid reveal">
+    <div class="feature-card">
+      <div class="feature-num">01</div>
+      <div class="feature-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+      </div>
+      <div class="feature-title">Cartographie interactive des lots</div>
+      <div class="feature-text">Visualisez l'intégralité de vos projets sur une carte Leaflet avec polygones colorés par statut. Cliquez sur un lot pour voir ses détails et le réserver directement depuis la carte.</div>
+      <div class="feature-tag">GeoJSON · Leaflet</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-num">02</div>
+      <div class="feature-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      </div>
+      <div class="feature-title">Pipeline de réservation complet</div>
+      <div class="feature-text">Créez une réservation, définissez la date d'expiration, enregistrez le dépôt de garantie. Prolongez, libérez ou convertissez en vente. Chaque étape tracée, chaque action auditée.</div>
+      <div class="feature-tag">Réservations · Ventes</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-num">03</div>
+      <div class="feature-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <div class="feature-title">Tableaux de bord KPI en temps réel</div>
+      <div class="feature-text">CA objectif vs. réalisé, taux de réservation, vélocité des ventes, classement des commerciaux. Chaque rôle voit ses propres métriques, en direct.</div>
+      <div class="feature-tag">Analytics · KPIs</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-num">04</div>
+      <div class="feature-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+      <div class="feature-title">Plans de paiement échelonnés</div>
+      <div class="feature-text">Définissez les conditions financières : pourcentage d'acompte, montant du solde, délai et périodicité. Le système génère automatiquement les échéances et alerte sur les retards.</div>
+      <div class="feature-tag">Paiements · Échéanciers</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-num">05</div>
+      <div class="feature-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <div class="feature-title">Gestion d'équipe avec RBAC</div>
+      <div class="feature-text">Invitez vos agents commerciaux par e-mail. Assignez-les à des projets spécifiques. Chaque rôle (directeur, commercial, client) voit uniquement ce qu'il doit voir.</div>
+      <div class="feature-tag">Équipe · Permissions</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-num">06</div>
+      <div class="feature-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div class="feature-title">Audit complet & conformité</div>
+      <div class="feature-text">Chaque création, modification et suppression est enregistrée avec horodatage et identité. Journal d'audit intégral pour la conformité réglementaire France/Maroc.</div>
+      <div class="feature-tag">Audit · Conformité</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── WORKFLOW SECTION ─────────────────────────────────────────────── -->
+<section class="section-workflow">
+  <div class="workflow-inner">
+    <div class="workflow-header">
+      <div class="section-eyebrow reveal">Cycle de vie d'un lot</div>
+      <h2 class="section-title reveal reveal-delay-1">Du lot disponible à la vente<br><em>en quatre étapes claires</em></h2>
+    </div>
+    <div class="workflow-steps">
+      <div class="workflow-step reveal">
+        <div class="step-circle">01</div>
+        <div class="step-status available">Disponible</div>
+        <div class="step-title">Lot créé</div>
+        <div class="step-text">Importez vos lots par CSV ou créez-les manuellement. Surface, prix, zone, géométrie. Tout est centralisé.</div>
+      </div>
+      <div class="workflow-step reveal reveal-delay-1">
+        <div class="step-circle">02</div>
+        <div class="step-status reserved">Réservé</div>
+        <div class="step-title">Réservation</div>
+        <div class="step-text">Le commercial associe le lot à un client. Dépôt de garantie, date d'expiration et plan de paiement définis.</div>
+      </div>
+      <div class="workflow-step reveal reveal-delay-2">
+        <div class="step-circle">03</div>
+        <div class="step-status validated">Validé</div>
+        <div class="step-title">Validation</div>
+        <div class="step-text">Le directeur valide la réservation. Les documents sont vérifiés, les conditions financières confirmées.</div>
+      </div>
+      <div class="workflow-step reveal reveal-delay-3">
+        <div class="step-circle">04</div>
+        <div class="step-status sold">Vendu</div>
+        <div class="step-title">Vente finalisée</div>
+        <div class="step-text">Le lot est marqué vendu, le CA est mis à jour, les échéances de paiement continuent d'être suivies.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── ROLES SECTION ────────────────────────────────────────────────── -->
+<section class="section-roles" id="roles">
+  <div class="roles-header">
+    <div class="section-eyebrow reveal">Conçu pour chaque rôle</div>
+    <h2 class="section-title reveal reveal-delay-1">Une plateforme,<br><em>trois expériences</em></h2>
+    <p class="section-sub reveal reveal-delay-2">Chaque utilisateur accède exactement à ce dont il a besoin, sans surcharge d'informations.</p>
+  </div>
+  <div class="roles-grid">
+    <div class="role-card manager reveal">
+      <div class="role-badge manager">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Directeur
+      </div>
+      <div class="role-title">Vue d'ensemble totale</div>
+      <div class="role-desc">Le directeur pilote l'ensemble du portefeuille, gère l'équipe et prend des décisions basées sur les données.</div>
+      <ul class="role-features">
+        <li><svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Dashboard global multi-projets</li>
+        <li><svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Gestion et invitation de l'équipe</li>
+        <li><svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Affectation des commerciaux aux projets</li>
+        <li><svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Validation des réservations et ventes</li>
+        <li><svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Accès au journal d'audit complet</li>
+        <li><svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>KPIs par commercial et par projet</li>
+      </ul>
+    </div>
+    <div class="role-card commercial reveal reveal-delay-1">
+      <div class="role-badge commercial">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Commercial
+      </div>
+      <div class="role-title">Focus sur la vente</div>
+      <div class="role-desc">L'agent voit ses projets assignés, ses clients et ses performances personnelles. Rien de plus, rien de moins.</div>
+      <ul class="role-features">
+        <li><svg class="check-icon violet" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Carte interactive des lots disponibles</li>
+        <li><svg class="check-icon violet" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Création et gestion des réservations</li>
+        <li><svg class="check-icon violet" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Gestion de son portefeuille clients</li>
+        <li><svg class="check-icon violet" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Plans de paiement et échéanciers</li>
+        <li><svg class="check-icon violet" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>KPIs personnels (ventes, CA, rang)</li>
+        <li><svg class="check-icon violet" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Alertes réservations expirant bientôt</li>
+      </ul>
+    </div>
+    <div class="role-card client reveal reveal-delay-2">
+      <div class="role-badge client">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+        Client
+      </div>
+      <div class="role-title">Transparence totale</div>
+      <div class="role-desc">L'acheteur accède à son espace personnel pour suivre sa réservation et ses échéances de paiement.</div>
+      <ul class="role-features">
+        <li><svg class="check-icon green" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Suivi de sa réservation en direct</li>
+        <li><svg class="check-icon green" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Calendrier des échéances de paiement</li>
+        <li><svg class="check-icon green" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Statut des paiements (payé/en attente)</li>
+        <li><svg class="check-icon green" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Informations sur son lot et projet</li>
+        <li><svg class="check-icon green" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Historique complet des transactions</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ─── MAP SECTION ──────────────────────────────────────────────────── -->
+<section class="section-map" id="carte">
+  <div class="map-inner">
+    <div class="map-text reveal">
+      <div class="section-eyebrow">Cartographie</div>
+      <h2 class="map-title">Voyez votre projet<br><em>comme jamais</em></h2>
+      <p class="map-desc">Chaque lot est représenté par son polygone géographique réel. Disponible, réservé, validé, vendu, bloqué — la couleur raconte le statut. Cliquez, zoomez, filtrez.</p>
+      <div class="map-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div> Disponible</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div> Réservé</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div> Validé</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div> Vendu</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#6b7280"></div> Bloqué</div>
+      </div>
+      <a href="#demo" class="btn-primary">Voir une démo cartographique</a>
+    </div>
+    <div class="map-visual reveal reveal-delay-2">
+      <div class="map-visual-bg"></div>
+      <div class="map-lots-grid">
+        <div class="lot-poly av span2"><div class="lot-num">A01</div></div>
+        <div class="lot-poly rs"><div class="lot-num">A02</div></div>
+        <div class="lot-poly av"><div class="lot-num">A03</div></div>
+        <div class="lot-poly sd"><div class="lot-num">A04</div></div>
+        <div class="lot-poly av row2"><div class="lot-num">B01</div></div>
+        <div class="lot-poly vl span2"><div class="lot-num">B02</div></div>
+        <div class="lot-poly rs"><div class="lot-num">B03</div></div>
+        <div class="lot-poly av"><div class="lot-num">B04</div></div>
+        <div class="lot-poly bl"><div class="lot-num">B05</div></div>
+        <div class="lot-poly sd span2 row2"><div class="lot-num">C01</div></div>
+        <div class="lot-poly av"><div class="lot-num">C02</div></div>
+        <div class="lot-poly rs"><div class="lot-num">C03</div></div>
+        <div class="lot-poly av row2"><div class="lot-num">C04</div></div>
+        <div class="lot-poly vl"><div class="lot-num">D01</div></div>
+        <div class="lot-poly rs"><div class="lot-num">D02</div></div>
+        <div class="lot-poly av span2"><div class="lot-num">D03</div></div>
+        <div class="lot-poly sd"><div class="lot-num">D04</div></div>
+        <div class="lot-poly bl span2"><div class="lot-num">E01</div></div>
+        <div class="lot-poly av"><div class="lot-num">E02</div></div>
+        <div class="lot-poly rs row2"><div class="lot-num">E03</div></div>
+        <div class="lot-poly av"><div class="lot-num">E04</div></div>
+        <div class="lot-poly sd span2"><div class="lot-num">F01</div></div>
+        <div class="lot-poly av"><div class="lot-num">F02</div></div>
+        <div class="lot-poly vl span2"><div class="lot-num">F03</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PAYMENT SECTION ──────────────────────────────────────────────── -->
+<section class="section-payment">
+  <div class="payment-inner">
+    <div class="reveal">
+      <div class="section-eyebrow">Plans de paiement</div>
+      <h2 class="section-title" style="text-align:left; font-size:clamp(36px,3.5vw,56px)">
+        Des échéanciers<br><em>automatiques</em>
+      </h2>
+      <p class="section-sub" style="margin-inline:0; margin-top:16px; font-size:15px">
+        Définissez les conditions financières une seule fois : pourcentage d'acompte, solde, périodicité. LotisPro génère les échéances, vous alertes en cas de retard et vous aide à suivre chaque paiement reçu.
+      </p>
+      <div style="margin-top:28px; display:flex; flex-direction:column; gap:12px">
+        <div style="display:flex; align-items:center; gap:12px; font-size:14px; color:var(--text1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brass)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Génération automatique des échéances
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; font-size:14px; color:var(--text1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brass)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Alertes tableau de bord pour les retards
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; font-size:14px; color:var(--text1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brass)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Vue client : ce qui est dû, quand et combien
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; font-size:14px; color:var(--text1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brass)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          Suivi des remboursements d'acompte
+        </div>
+      </div>
+    </div>
+    <div class="payment-ui reveal reveal-delay-2">
+      <div class="payment-header">
+        <div class="payment-title-ui">Lot A14 — Plan de paiement</div>
+        <div class="payment-badge-ui">En cours</div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text2); margin-bottom:8px">
+        <span>Progression</span>
+        <span style="color:var(--text0); font-weight:600">650 000 MAD / 1 000 000 MAD</span>
+      </div>
+      <div class="payment-progress-bar"><div class="payment-progress-fill"></div></div>
+      <div class="payment-installments">
+        <div class="installment-row paid">
+          <span class="installment-num">#1</span>
+          <span class="installment-date">15 jan. 2026</span>
+          <span class="installment-amount">200 000 MAD</span>
+          <span class="installment-status paid">Payé</span>
+        </div>
+        <div class="installment-row paid">
+          <span class="installment-num">#2</span>
+          <span class="installment-date">15 fév. 2026</span>
+          <span class="installment-amount">150 000 MAD</span>
+          <span class="installment-status paid">Payé</span>
+        </div>
+        <div class="installment-row paid">
+          <span class="installment-num">#3</span>
+          <span class="installment-date">15 mar. 2026</span>
+          <span class="installment-amount">150 000 MAD</span>
+          <span class="installment-status paid">Payé</span>
+        </div>
+        <div class="installment-row">
+          <span class="installment-num">#4</span>
+          <span class="installment-date">15 avr. 2026</span>
+          <span class="installment-amount">150 000 MAD</span>
+          <span class="installment-status pending">En attente</span>
+        </div>
+        <div class="installment-row">
+          <span class="installment-num">#5</span>
+          <span class="installment-date">15 mai 2026</span>
+          <span class="installment-amount">150 000 MAD</span>
+          <span class="installment-status late">En retard</span>
+        </div>
+        <div class="installment-row">
+          <span class="installment-num">#6</span>
+          <span class="installment-date">15 jun. 2026</span>
+          <span class="installment-amount">200 000 MAD</span>
+          <span class="installment-status pending">En attente</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PRICING ──────────────────────────────────────────────────────── -->
+<section class="section-pricing" id="tarifs">
+  <div class="pricing-header">
+    <div class="section-eyebrow reveal">Tarifs</div>
+    <h2 class="section-title reveal reveal-delay-1">Simple, transparent,<br><em>sans mauvaises surprises</em></h2>
+    <p class="section-sub reveal reveal-delay-2">Tous les plans incluent l'onboarding, la migration de données et le support technique.</p>
+  </div>
+  <div class="pricing-grid">
+    <div class="pricing-card reveal">
+      <div class="plan-name">Starter</div>
+      <div class="plan-price"><sup>€</sup>149</div>
+      <div class="plan-period">par mois, facturé annuellement</div>
+      <div class="plan-desc">Pour les petits promoteurs qui démarrent leur digitalisation.</div>
+      <div class="plan-divider"></div>
+      <ul class="plan-features">
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>3 projets actifs</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>200 lots par projet</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>5 utilisateurs commerciaux</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Carte interactive</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Pipeline réservation / vente</li>
+        <li class="muted"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Plans de paiement avancés</li>
+        <li class="muted"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>API accès</li>
+      </ul>
+      <a href="#demo" class="btn-plan outline">Essayer gratuitement</a>
+    </div>
+    <div class="pricing-card popular reveal reveal-delay-1">
+      <div class="popular-badge">Le plus populaire</div>
+      <div class="plan-name gold">Professionnel</div>
+      <div class="plan-price"><sup>€</sup>349</div>
+      <div class="plan-period">par mois, facturé annuellement</div>
+      <div class="plan-desc">Pour les promoteurs en croissance gérant plusieurs projets et équipes.</div>
+      <div class="plan-divider"></div>
+      <ul class="plan-features">
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Projets illimités</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Lots illimités</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>20 utilisateurs commerciaux</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Plans de paiement échelonnés</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Analytics avancées & KPIs</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Journal d'audit complet</li>
+        <li class="muted"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>API accès</li>
+      </ul>
+      <a href="#demo" class="btn-plan primary">Commencer maintenant</a>
+    </div>
+    <div class="pricing-card reveal reveal-delay-2">
+      <div class="plan-name">Entreprise</div>
+      <div class="plan-price" style="font-size:36px; padding-top:8px">Sur mesure</div>
+      <div class="plan-period">tarification personnalisée</div>
+      <div class="plan-desc">Pour les grands groupes immobiliers avec des besoins spécifiques et des volumes élevés.</div>
+      <div class="plan-divider"></div>
+      <ul class="plan-features">
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Tout du plan Professionnel</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Utilisateurs illimités</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Accès API complet</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Intégrations sur mesure</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>SLA garanti 99.9%</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Manager de compte dédié</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Déploiement on-premise disponible</li>
+      </ul>
+      <a href="#demo" class="btn-plan outline">Contacter l'équipe commerciale</a>
+    </div>
+  </div>
+</section>
+
+<!-- ─── CTA ──────────────────────────────────────────────────────────── -->
+<section class="section-cta" id="demo">
+  <div class="section-eyebrow reveal">Prêt à démarrer ?</div>
+  <h2 class="cta-title reveal reveal-delay-1">
+    Transformez votre façon<br>de <em>gérer vos projets</em>
+  </h2>
+  <p class="cta-sub reveal reveal-delay-2">
+    Rejoignez les promoteurs qui ont arrêté Excel.<br>Démo personnalisée en 30 minutes, migration incluse.
+  </p>
+  <div class="hero-actions reveal reveal-delay-3" style="justify-content:center">
+    <a href="mailto:contact@lotispro.com" class="btn-primary" style="font-size:16px; padding:18px 44px">Demander une démo gratuite</a>
+    <a href="tel:+212000000000" class="btn-ghost" style="font-size:16px; padding:17px 36px">Nous appeler</a>
+  </div>
+</section>
+
+<!-- ─── FOOTER ───────────────────────────────────────────────────────── -->
+<footer>
+  <div class="footer-top">
+    <div class="footer-brand">
+      <div class="footer-logo">Lotis<span>Pro</span></div>
+      <div class="footer-tagline">La plateforme de référence pour la gestion foncière et immobilière en France et au Maroc.</div>
+    </div>
+    <div>
+      <div class="footer-col-title">Produit</div>
+      <ul class="footer-links">
+        <li><a href="#fonctionnalites">Fonctionnalités</a></li>
+        <li><a href="#tarifs">Tarifs</a></li>
+        <li><a href="#demo">Démo</a></li>
+        <li><a href="#">Roadmap</a></li>
+        <li><a href="#">Nouveautés</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="footer-col-title">Entreprise</div>
+      <ul class="footer-links">
+        <li><a href="#">À propos</a></li>
+        <li><a href="#">Blog</a></li>
+        <li><a href="#">Carrières</a></li>
+        <li><a href="#">Presse</a></li>
+      </ul>
+    </div>
+    <div>
+      <div class="footer-col-title">Support</div>
+      <ul class="footer-links">
+        <li><a href="#">Documentation</a></li>
+        <li><a href="#">Centre d'aide</a></li>
+        <li><a href="#">Contact</a></li>
+        <li><a href="#">Mentions légales</a></li>
+        <li><a href="#">Confidentialité</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="footer-copy">© 2026 LotisPro. Tous droits réservés.</div>
+    <div class="footer-made">Fait avec <span>◆</span> pour les promoteurs immobiliers</div>
+  </div>
+</footer>
+
+<!-- ─── SCRIPTS ──────────────────────────────────────────────────────── -->
+<script>
+// Custom cursor
+const dot = document.getElementById('cursorDot');
+const ring = document.getElementById('cursorRing');
+let mouseX = 0, mouseY = 0, ringX = 0, ringY = 0;
+document.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; dot.style.left = mouseX+'px'; dot.style.top = mouseY+'px'; });
+function animateRing() {
+  ringX += (mouseX - ringX) * .12;
+  ringY += (mouseY - ringY) * .12;
+  ring.style.left = ringX+'px'; ring.style.top = ringY+'px';
+  requestAnimationFrame(animateRing);
+}
+animateRing();
+
+// Canvas background — animated lot grid
+const canvas = document.getElementById('canvas-bg');
+const ctx = canvas.getContext('2d');
+let W, H, lots = [], mouse = {x:-999,y:-999};
+function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; buildLots(); }
+function buildLots() {
+  lots = [];
+  const cols = Math.ceil(W/80)+2, rows = Math.ceil(H/60)+2;
+  for(let r=0; r<rows; r++) for(let c=0; c<cols; c++) {
+    lots.push({ x: c*80-40, y: r*60-30, w: 60+Math.random()*20, h: 44+Math.random()*14, alpha: .08+Math.random()*.12, phase: Math.random()*Math.PI*2, speed: .0004+Math.random()*.0006 });
+  }
+}
+function drawCanvas(t) {
+  ctx.clearRect(0,0,W,H);
+  lots.forEach(l => {
+    const dist = Math.hypot(mouse.x-l.x-l.w/2, mouse.y-l.y-l.h/2);
+    const hover = Math.max(0, 1-(dist/200));
+    const a = l.alpha + hover*.25 + Math.sin(t*l.speed+l.phase)*.03;
+    ctx.strokeStyle = `rgba(212,151,58,${a})`;
+    ctx.lineWidth = .5 + hover*1.5;
+    ctx.strokeRect(l.x, l.y, l.w, l.h);
+    if(hover>.3) { ctx.fillStyle = `rgba(212,151,58,${hover*.05})`; ctx.fillRect(l.x, l.y, l.w, l.h); }
+  });
+  requestAnimationFrame(drawCanvas);
+}
+window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(drawCanvas);
+
+// Nav scroll
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => { nav.classList.toggle('scrolled', window.scrollY > 40); });
+
+// Intersection observer for reveal animations
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting) { e.target.classList.add('visible'); } });
+}, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+document.querySelectorAll('.reveal, .hero-eyebrow, .hero h1, .hero-sub, .hero-actions').forEach(el => io.observe(el));
+
+// Hero specific
+['heroEyebrow','heroTitle','heroSub','heroActions','heroVisual'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) setTimeout(() => el.classList.add('visible'), 100);
+});
+
+// Counter animation
+function animateCounter(el) {
+  const target = parseInt(el.dataset.target);
+  let current = 0;
+  const step = target / 60;
+  const timer = setInterval(() => {
+    current = Math.min(current + step, target);
+    el.textContent = Math.floor(current);
+    if(current >= target) clearInterval(timer);
+  }, 16);
+}
+const counterObs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if(e.isIntersecting) { animateCounter(e.target); counterObs.unobserve(e.target); } });
+}, { threshold: 0.5 });
+document.querySelectorAll('.counter').forEach(el => counterObs.observe(el));
+
+// Feature card mouse glow
+document.querySelectorAll('.feature-card').forEach(card => {
+  card.addEventListener('mousemove', e => {
+    const r = card.getBoundingClientRect();
+    card.style.setProperty('--mouse-x', (e.clientX-r.left)+'px');
+    card.style.setProperty('--mouse-y', (e.clientY-r.top)+'px');
+  });
+});
+</script>
+</body>
+</html>
