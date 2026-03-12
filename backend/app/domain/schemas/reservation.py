@@ -7,6 +7,16 @@ from pydantic import Field
 from app.domain.schemas.common import BaseSchema
 
 
+class ReservationFilter(BaseSchema):
+    """Schema for filtering reservations."""
+
+    project_id: int | None = None
+    lot_id: int | None = None
+    client_id: int | None = None
+    status: str | None = None
+    reserved_by_user_id: int | None = None
+
+
 class ReservationCreate(BaseSchema):
     """Schema for creating a new reservation."""
 
