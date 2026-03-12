@@ -24,15 +24,10 @@ const IconTrash = () => (
     <line x1="5.5" y1="6.5" x2="5.5" y2="10.5"/><line x1="9.5" y1="6.5" x2="9.5" y2="10.5"/>
   </svg>
 );
-const IconEye = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="1.8"/>
-  </svg>
-);
-const IconEyeOff = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="1.8"/>
-    <line x1="2" y1="2" x2="14" y2="14"/>
+const IconMail = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="1" y="3" width="12" height="8" rx="1"/>
+    <polyline points="1 3 7 8 13 3"/>
   </svg>
 );
 const IconBuilding = () => (
@@ -78,10 +73,9 @@ export default function ManagersPage() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  const emptyForm = { first_name: '', last_name: '', email: '', address: '', company: '', password: '', confirmPassword: '' };
+  const emptyForm = { first_name: '', last_name: '', email: '', address: '', company: '' };
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => { loadManagers(); }, []);
@@ -103,21 +97,17 @@ export default function ManagersPage() {
     setFormError('');
     if (!form.first_name.trim() || !form.last_name.trim()) return setFormError('Le prénom et le nom sont requis.');
     if (!form.email.trim()) return setFormError("L'email est requis.");
-    if (form.password.length < 6) return setFormError('Mot de passe minimum 6 caractères.');
-    if (form.password !== form.confirmPassword) return setFormError('Les mots de passe ne correspondent pas.');
     setSaving(true);
     try {
-      await apiPost('/api/users', {
+      await apiPost('/api/users/invite', {
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
-        name: `${form.first_name.trim()} ${form.last_name.trim()}`,
         email: form.email.trim(),
         address: form.address.trim() || null,
         company: form.company.trim() || null,
-        password: form.password,
         role: 'manager',
       });
-      toast.success('Manager créé avec succès');
+      toast.success('Invitation envoyée par email');
       setShowModal(false);
       setForm(emptyForm);
       loadManagers();
@@ -253,7 +243,10 @@ export default function ManagersPage() {
                     <div className="cp-identity">
                       <div className="cp-identity-row">
                         <span className="identity-name">{getDisplayName(m)}</span>
-                        <span className="cp-perf-badge cp-badge-gold">Manager</span>
+                        {m.is_pending
+                          ? <span className="cp-perf-badge cp-badge-gray">En attente</span>
+                          : <span className="cp-perf-badge cp-badge-gold">Manager</span>
+                        }
                       </div>
                       <div className="identity-email">{m.email}</div>
                     </div>
@@ -280,6 +273,23 @@ export default function ManagersPage() {
                       </span>
                     )}
                   </div>
+
+                  {/* Invitation link (dev fallback when email not received) */}
+                  {m.is_pending && m.invitation_token && (
+                    <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--border-subtle)' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: '0.68rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>Lien d&apos;invitation</p>
+                      <p style={{ margin: '0 0 6px', fontSize: '0.72rem', color: 'var(--text-muted)', wordBreak: 'break-all', lineHeight: 1.4 }}>
+                        {`${window.location.origin}/set-password?token=${m.invitation_token}`}
+                      </p>
+                      <button
+                        type="button"
+                        style={{ fontSize: '0.72rem', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                        onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/set-password?token=${m.invitation_token}`); }}
+                      >
+                        Copier le lien
+                      </button>
+                    </div>
+                  )}
 
                   {/* Footer */}
                   <div className="mg-card-footer">
@@ -416,27 +426,9 @@ export default function ManagersPage() {
                     value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
                 </div>
 
-                <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '4px 0' }} />
-
-                <div className="field-group">
-                  <label className="field-label">Mot de passe *</label>
-                  <div style={{ position: 'relative' }}>
-                    <input className="field-input" type={showPassword ? 'text' : 'password'}
-                      placeholder="Minimum 6 caractères" value={form.password}
-                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                      style={{ paddingRight: 40 }} />
-                    <button type="button" className="cp-eye-btn" onClick={() => setShowPassword(v => !v)}>
-                      {showPassword ? <IconEyeOff /> : <IconEye />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="field-group">
-                  <label className="field-label">Confirmer le mot de passe *</label>
-                  <input className="field-input" type={showPassword ? 'text' : 'password'}
-                    placeholder="Répéter le mot de passe" value={form.confirmPassword}
-                    onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} />
-                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+                  Un email d&apos;invitation sera envoyé pour que le manager crée son propre mot de passe.
+                </p>
 
                 {formError && <div className="error-box">{formError}</div>}
               </div>
@@ -444,7 +436,7 @@ export default function ManagersPage() {
               <div className="cp-modal-footer">
                 <button type="button" className="cp-btn-ghost" onClick={() => setShowModal(false)}>Annuler</button>
                 <button type="submit" className="cp-btn-primary" disabled={saving}>
-                  {saving ? 'Création…' : 'Créer le manager'}
+                  {saving ? 'Envoi…' : <><IconMail /> &nbsp;Envoyer l&apos;invitation</>}
                 </button>
               </div>
             </form>

@@ -1362,21 +1362,16 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                           </div>
                         )}
                       </td>
-                      {/* Statut + jours en sous-texte */}
+                      {/* Statut */}
                       <td>
                         <span className={`status-badge ${displayStatus}`}>
                           <span className="status-dot"></span>
                           {STATUS_LABELS[displayStatus] || displayStatus}
                         </span>
-                        {lot.days_in_status > 0 && (
-                          <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            {Math.round(lot.days_in_status)}j
-                          </div>
-                        )}
                       </td>
                       {/* Expiration */}
                       <td>
-                        {lot.status === 'reserved' && daysRemaining !== null ? (
+                        {lot.status === 'reserved' && !isValidated && daysRemaining !== null ? (
                           <span className={`expiry-chip ${isExpired ? 'expiry-expired' : isExpiringSoon ? 'expiry-soon' : 'expiry-ok'}`}>
                             {isExpired ? `−${Math.abs(daysRemaining)}j` : `${daysRemaining}j`}
                           </span>
@@ -1436,30 +1431,32 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                         <td onClick={(e) => e.stopPropagation()}>
                           {lot.status === 'reserved' && (
                             <div style={{ display: 'flex', gap: '0.375rem' }}>
-                              <button
-                                className="btn-lot-action btn-lot-extend"
-                                title="Prolonger la réservation"
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  const days = prompt('Jours à ajouter à la réservation :', '7');
-                                  if (days && !isNaN(parseInt(days)) && parseInt(days) > 0) {
-                                    try {
-                                      await apiPost(`/api/reservations/${lot.reservation_id}/extend`, {
-                                        additional_days: parseInt(days)
-                                      });
-                                      toast.success('Réservation prolongée');
-                                      loadDashboardData();
-                                    } catch (error) {
-                                      toast.error(error.message || 'Erreur lors de la prolongation');
+                              {!isValidated && (
+                                <button
+                                  className="btn-lot-action btn-lot-extend"
+                                  title="Prolonger la réservation"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const days = prompt('Jours à ajouter à la réservation :', '7');
+                                    if (days && !isNaN(parseInt(days)) && parseInt(days) > 0) {
+                                      try {
+                                        await apiPost(`/api/reservations/${lot.reservation_id}/extend`, {
+                                          additional_days: parseInt(days)
+                                        });
+                                        toast.success('Réservation prolongée');
+                                        loadDashboardData();
+                                      } catch (error) {
+                                        toast.error(error.message || 'Erreur lors de la prolongation');
+                                      }
                                     }
-                                  }
-                                }}
-                              >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                                </svg>
-                                Prolonger
-                              </button>
+                                  }}
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                                  </svg>
+                                  Prolonger
+                                </button>
+                              )}
                               <button
                                 className="btn-lot-action btn-lot-release"
                                 title="Libérer le lot"

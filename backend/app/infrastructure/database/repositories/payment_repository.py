@@ -84,6 +84,22 @@ class PaymentRepository(BaseRepository[PaymentScheduleModel]):
         )
         await self.session.flush()
 
+    async def get_installment_with_schedule(
+        self,
+        installment_id: int,
+    ) -> PaymentInstallmentModel | None:
+        """Get an installment with its schedule (and all sibling installments) loaded."""
+        result = await self.session.execute(
+            select(PaymentInstallmentModel)
+            .where(PaymentInstallmentModel.id == installment_id)
+            .options(
+                selectinload(PaymentInstallmentModel.schedule).selectinload(
+                    PaymentScheduleModel.installments
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def get_installment_with_context(
         self,
         installment_id: int,

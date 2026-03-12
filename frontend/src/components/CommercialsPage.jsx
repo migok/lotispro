@@ -25,17 +25,6 @@ const IconChevronDown = () => (
     <polyline points="2 4 6 8 10 4"/>
   </svg>
 );
-const IconEyeOpen = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="1.8"/>
-  </svg>
-);
-const IconEyeOff = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="1.8"/>
-    <line x1="2" y1="2" x2="14" y2="14"/>
-  </svg>
-);
 const IconTrash = () => (
   <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="2 4 13 4"/><path d="M5 4V2.5h5V4"/><path d="M2.5 4l.9 9h8.2l.9-9"/>
@@ -248,11 +237,10 @@ export default function CommercialsPage() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [monthlyData, setMonthlyData] = useState([]);
   const [chartMetric, setChartMetric] = useState('ca');
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
+  const [form, setForm] = useState({ first_name: '', last_name: '', email: '' });
 
   useEffect(() => {
     if (token) {
@@ -320,21 +308,19 @@ export default function CommercialsPage() {
   const handleCreate = async (e) => {
     e.preventDefault();
     setError('');
-    if (!form.name.trim()) return setError('Le nom est requis');
+    if (!form.first_name.trim() || !form.last_name.trim()) return setError('Le prénom et le nom sont requis');
     if (!form.email.trim()) return setError("L'email est requis");
-    if (form.password.length < 6) return setError('Mot de passe minimum 6 caractères');
-    if (form.password !== form.confirmPassword) return setError('Les mots de passe ne correspondent pas');
     setSaving(true);
     try {
-      await apiPost('/api/users', {
-        name: form.name.trim(),
+      await apiPost('/api/users/invite', {
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
         email: form.email.trim(),
-        password: form.password,
         role: 'commercial',
       });
-      toast.success('Commercial créé avec succès');
+      toast.success('Invitation envoyée par email');
       setShowModal(false);
-      setForm({ name: '', email: '', password: '', confirmPassword: '' });
+      setForm({ first_name: '', last_name: '', email: '' });
       loadCommercials();
       loadStats();
     } catch (err) {
@@ -409,8 +395,7 @@ export default function CommercialsPage() {
             onClick={() => {
               setShowModal(true);
               setError('');
-              setShowPassword(false);
-              setForm({ name: '', email: '', password: '', confirmPassword: '' });
+              setForm({ first_name: '', last_name: '', email: '' });
             }}
           >
             <IconPlus />
@@ -542,7 +527,10 @@ export default function CommercialsPage() {
                       <div className="cp-identity">
                         <div className="cp-identity-row">
                           <span className="identity-name">{c.name}</span>
-                          <span className={`cp-perf-badge ${perf.cls}`}>{perf.label}</span>
+                          {c.is_pending
+                            ? <span className="cp-perf-badge cp-badge-gray">En attente</span>
+                            : <span className={`cp-perf-badge ${perf.cls}`}>{perf.label}</span>
+                          }
                         </div>
                         <span className="identity-email">{c.email}</span>
                         {c.created_at && (
@@ -577,6 +565,23 @@ export default function CommercialsPage() {
                         <span className="cp-mini-lbl">Acomptes</span>
                       </div>
                     </div>
+
+                    {/* Invitation link (dev fallback) */}
+                    {c.is_pending && c.invitation_token && (
+                      <div style={{ margin: '8px 0', padding: '8px 10px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--border-subtle)' }}>
+                        <p style={{ margin: '0 0 4px', fontSize: '0.68rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>Lien d&apos;invitation</p>
+                        <p style={{ margin: '0 0 6px', fontSize: '0.72rem', color: 'var(--text-muted)', wordBreak: 'break-all', lineHeight: 1.4 }}>
+                          {`${window.location.origin}/set-password?token=${c.invitation_token}`}
+                        </p>
+                        <button
+                          type="button"
+                          style={{ fontSize: '0.72rem', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                          onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/set-password?token=${c.invitation_token}`); }}
+                        >
+                          Copier le lien
+                        </button>
+                      </div>
+                    )}
 
                     {/* CA + progress bar */}
                     <div className="cp-ca-row">
@@ -690,16 +695,28 @@ export default function CommercialsPage() {
 
             <form onSubmit={handleCreate}>
               <div className="cp-modal-body">
-                <div className="field-group">
-                  <label className="field-label">Nom complet *</label>
-                  <input
-                    className="field-input"
-                    type="text"
-                    placeholder="Jean Dupont"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    autoFocus
-                  />
+                <div className="form-2col">
+                  <div className="field-group">
+                    <label className="field-label">Prénom *</label>
+                    <input
+                      className="field-input"
+                      type="text"
+                      placeholder="Jean"
+                      value={form.first_name}
+                      onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Nom *</label>
+                    <input
+                      className="field-input"
+                      type="text"
+                      placeholder="Dupont"
+                      value={form.last_name}
+                      onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}
+                    />
+                  </div>
                 </div>
                 <div className="field-group">
                   <label className="field-label">Email *</label>
@@ -711,41 +728,9 @@ export default function CommercialsPage() {
                     onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   />
                 </div>
-
-                <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '4px 0' }} />
-
-                <div className="field-group">
-                  <label className="field-label">Mot de passe *</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      className="field-input"
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Minimum 6 caractères"
-                      value={form.password}
-                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                      style={{ paddingRight: 40 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(v => !v)}
-                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}
-                    >
-                      {showPassword ? <IconEyeOff /> : <IconEyeOpen />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="field-group">
-                  <label className="field-label">Confirmer le mot de passe *</label>
-                  <input
-                    className="field-input"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Répéter le mot de passe"
-                    value={form.confirmPassword}
-                    onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
-                  />
-                </div>
-
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+                  Un email d&apos;invitation sera envoyé pour que le commercial crée son propre mot de passe.
+                </p>
                 {error && <div className="error-box">{error}</div>}
               </div>
 
@@ -754,7 +739,7 @@ export default function CommercialsPage() {
                   Annuler
                 </button>
                 <button type="submit" className="cp-btn-primary" disabled={saving}>
-                  {saving ? 'Création…' : 'Créer le commercial'}
+                  {saving ? 'Envoi…' : 'Envoyer l\'invitation'}
                 </button>
               </div>
             </form>

@@ -3065,9 +3065,52 @@ body {
 
 .project-detail-header {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
+  align-items: flex-start;
+  gap: var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pdp-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-top: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.pdp-back-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--border-gold);
+  background: var(--color-primary-subtle);
+}
+
+.pdp-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+.pdp-project-title {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0 0 2px;
 }
 
 /* Tabs */
@@ -3078,26 +3121,35 @@ body {
   border-bottom: 1px solid var(--border-subtle);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
 
+.tabs::-webkit-scrollbar { display: none; }
+
 .tab {
-  padding: 10px var(--spacing-lg);
+  padding: 11px var(--spacing-lg);
   background: none;
   border: none;
   color: var(--text-muted);
   font-family: var(--font-body);
   font-weight: 400;
-  font-size: 0.82rem;
-  letter-spacing: 0.04em;
+  font-size: 0.78rem;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: 7px;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: all 0.18s ease;
   white-space: nowrap;
+}
+
+.tab svg {
+  opacity: 0.45;
+  transition: opacity 0.18s;
+  flex-shrink: 0;
 }
 
 .tab:hover {
@@ -3105,10 +3157,18 @@ body {
   background-color: transparent;
 }
 
+.tab:hover svg {
+  opacity: 0.72;
+}
+
 .tab.active {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
   font-weight: 500;
+}
+
+.tab.active svg {
+  opacity: 1;
 }
 
 .tab-content {
@@ -7664,6 +7724,22 @@ body {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+.cd-cert-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.cd-cert-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-right: 2px;
+}
 .cd-cert-btn {
   display: inline-flex;
   align-items: center;
@@ -7671,7 +7747,6 @@ body {
   font-size: 0.75rem;
   padding: 4px 10px;
   border-radius: var(--radius-sm);
-  margin-top: 4px;
   white-space: nowrap;
   opacity: 0.75;
   transition: opacity 0.15s;

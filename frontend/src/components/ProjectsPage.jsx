@@ -215,7 +215,7 @@ export default function ProjectsPage() {
               <div
                 key={project.id}
                 className="project-card"
-                onClick={() => navigate(`/projects/${project.id}`)}
+                onClick={() => navigate(`/app/projects/${project.id}`)}
               >
                 {/* Cover */}
                 <div className="project-card-cover">

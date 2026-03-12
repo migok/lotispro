@@ -94,6 +94,19 @@ const IconCertificate = () => (
   </svg>
 );
 
+const IconDownload = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+    <path d="M10 3v10M6 9l4 4 4-4" />
+    <path d="M3 16h14" />
+  </svg>
+);
+
+const IconSend = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+    <path d="M17 3L3 9l5.5 2.5L11 17l2-5.5L17 3z" />
+  </svg>
+);
+
 const IconClock = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
     <circle cx="8" cy="8" r="6" />
@@ -169,18 +182,22 @@ function DonutChart({ paidPct, color, size = 80 }) {
 }
 
 /* ── Installment table brick (with donut) ───────────────────── */
-function InstallmentBrick({ type, label, items, onInstallmentUpdate }) {
+function InstallmentBrick({ type, label, items, onInstallmentUpdate, prerequisitesMet = true }) {
   const total = items.reduce((s, i) => s + i.amount, 0);
   const paid  = items.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0);
   const paidPct = total > 0 ? (paid / total) * 100 : 0;
   const allPaid = items.length > 0 && items.every(i => i.status === 'paid');
   const color = type === 'deposit' ? 'var(--color-primary)' : 'var(--color-success, #2ecc71)';
+  // Always display by date order
+  const sortedItems = [...items].sort(
+    (a, b) => new Date(a.due_date) - new Date(b.due_date) || a.installment_number - b.installment_number
+  );
 
   return (
     <div className={`pay-brick pay-brick--${type}`}>
       {/* Summary row with donut */}
       <div className="pay-brick-summary">
-        <DonutChart paidPct={paidPct} color={color} size={64} />
+        <DonutChart paidPct={prerequisitesMet ? paidPct : 0} color={color} size={64} />
         <div className="pay-brick-meta">
           <div className="pay-brick-label">{label}</div>
           <div className="pay-brick-amounts">
@@ -190,11 +207,18 @@ function InstallmentBrick({ type, label, items, onInstallmentUpdate }) {
           </div>
           <div className="pay-brick-remaining">Restant : {formatPrice(total - paid)}</div>
         </div>
-        {allPaid
+        {allPaid && prerequisitesMet
           ? <span className="badge badge-green pay-brick-status"><IconCheck /> Soldé</span>
           : <span className="badge badge-gray pay-brick-status">{items.filter(i => i.status === 'paid').length}/{items.length} versements</span>
         }
       </div>
+      {/* prerequisite warning */}
+      {!prerequisitesMet && (
+        <div style={{ padding: '8px 12px', fontSize: '0.78rem', color: 'var(--color-warning, #f59e0b)', display: 'flex', alignItems: 'center', gap: 6, borderTop: '1px solid var(--border-color)' }}>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2L1 13h14L8 2z"/><path d="M8 6v4M8 11.5v.5"/></svg>
+          L'échéancier acompte doit être intégralement payé avant de valider le solde.
+        </div>
+      )}
       {/* Table */}
       {items.length > 0 && (
         <table className="pay-table">
@@ -202,29 +226,50 @@ function InstallmentBrick({ type, label, items, onInstallmentUpdate }) {
             <tr><th>#</th><th>Échéance</th><th>Montant</th><th>Statut</th><th></th></tr>
           </thead>
           <tbody>
-            {items.map(inst => {
+            {sortedItems.map((inst, idx) => {
               const isOverdue = inst.status === 'pending' && new Date(inst.due_date) < new Date();
+              // Previous installment (by sorted order) must be paid; also prerequisites must be met
+              const prevPaid = idx === 0 ? true : sortedItems[idx - 1].status === 'paid';
+              const canMark = prerequisitesMet && prevPaid;
+              const blockedTooltip = !prerequisitesMet
+                ? 'L\'échéancier acompte doit être soldé en premier'
+                : !prevPaid
+                  ? 'Le versement précédent doit être validé en premier'
+                  : '';
               return (
                 <tr key={inst.id} className={[
                   inst.status === 'paid' ? 'pay-row--paid' : '',
                   isOverdue ? 'pay-row--overdue' : '',
+                  !canMark && inst.status !== 'paid' ? 'pay-row--blocked' : '',
                 ].filter(Boolean).join(' ')}>
                   <td className="pay-cell-num">{inst.installment_number}</td>
                   <td className="pay-cell-date">{formatDate(inst.due_date)}</td>
                   <td className="pay-cell-amount">{formatPrice(inst.amount)}</td>
                   <td>
-                    <span className={`badge ${inst.status === 'paid' ? 'badge-green' : isOverdue ? 'badge-red' : 'badge-gray'}`}>
+                    <span className={`badge ${inst.status === 'paid' ? 'badge-green' : isOverdue && canMark ? 'badge-red' : 'badge-gray'}`}>
                       {inst.status === 'paid' ? <><IconCheck /> Payé</> : <><IconClock /> En attente</>}
                     </span>
                   </td>
                   <td>
-                    <button
-                      className={`pay-toggle-btn ${inst.status === 'paid' ? 'pay-toggle-btn--undo' : 'pay-toggle-btn--mark'}`}
-                      onClick={() => onInstallmentUpdate(inst.id, inst.status === 'paid' ? 'pending' : 'paid')}
-                      title={inst.status === 'paid' ? 'Marquer non payé' : 'Marquer payé'}
-                    >
-                      {inst.status === 'paid' ? '↩' : '✓'}
-                    </button>
+                    {inst.status === 'paid' ? (
+                      <button
+                        className="pay-toggle-btn pay-toggle-btn--undo"
+                        onClick={() => onInstallmentUpdate(inst.id, 'pending')}
+                        title="Annuler le paiement"
+                      >↩</button>
+                    ) : (
+                      <button
+                        className={`pay-toggle-btn pay-toggle-btn--mark${!canMark ? ' pay-toggle-btn--locked' : ''}`}
+                        onClick={() => canMark && onInstallmentUpdate(inst.id, 'paid')}
+                        disabled={!canMark}
+                        title={canMark ? 'Marquer payé' : blockedTooltip}
+                        style={!canMark ? { opacity: 0.35, cursor: 'not-allowed' } : {}}
+                      >
+                        {!canMark
+                        ? <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7.5" width="12" height="7" rx="1.5"/><path d="M5 7.5V5a3 3 0 016 0v2.5"/></svg>
+                        : '✓'}
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -314,6 +359,7 @@ function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate }) {
             label="Échéancier acompte"
             items={depositInstallments}
             onInstallmentUpdate={onInstallmentUpdate}
+            prerequisitesMet={isValidated}
           />
 
           {/* ── Brique 3 : Échéancier solde ── */}
@@ -322,6 +368,7 @@ function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate }) {
             label="Échéancier solde"
             items={balanceInstallments}
             onInstallmentUpdate={onInstallmentUpdate}
+            prerequisitesMet={isValidated && depositInstallments.every(i => i.status === 'paid')}
           />
         </div>
       )}
@@ -442,6 +489,15 @@ export default function ClientDetailPage() {
     }
   };
 
+  const handleSendCertificateEmail = async (reservationId) => {
+    try {
+      const result = await apiPost(`/api/reservations/${reservationId}/certificate/email`, {});
+      toast.success(result.message || 'Certificat envoyé par email');
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de l\'envoi du certificat');
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -462,7 +518,7 @@ export default function ClientDetailPage() {
     <div className="page-container">
       <div className="empty-state">
         <p style={{ color: 'var(--color-danger)', marginBottom: 'var(--spacing-md)' }}>{error}</p>
-        <button className="btn btn-primary" onClick={() => navigate('/clients')}>
+        <button className="btn btn-primary" onClick={() => navigate('/app/clients')}>
           Retour aux clients
         </button>
       </div>
@@ -531,7 +587,7 @@ export default function ClientDetailPage() {
 
       {/* ── Header ──────────────────────────────────────── */}
       <div className="cd-header">
-        <button className="cd-back-btn" onClick={() => navigate('/clients')}>
+        <button className="cd-back-btn" onClick={() => navigate('/app/clients')}>
           <IconChevronLeft />
           Retour
         </button>
@@ -883,14 +939,27 @@ export default function ClientDetailPage() {
                         {res.status === 'active' && res.expiration_date && (
                           <div className="cd-list-expire">Expire {formatDate(res.expiration_date)}</div>
                         )}
-                        <button
-                          className="btn btn-ghost btn-sm cd-cert-btn"
-                          onClick={() => handleDownloadCertificate(res.id, res.lot_numero)}
-                          title="Télécharger l'acte de réservation PDF"
-                        >
-                          <IconCertificate />
-                          Certificat
-                        </button>
+                        <div className="cd-cert-actions">
+                          <span className="cd-cert-label">Acte de réservation</span>
+                          <button
+                            className="btn btn-ghost btn-sm cd-cert-btn"
+                            onClick={() => handleDownloadCertificate(res.id, res.lot_numero)}
+                            title="Télécharger l'acte de réservation en PDF"
+                          >
+                            <IconDownload />
+                            Télécharger
+                          </button>
+                          {client.email && (
+                            <button
+                              className="btn btn-ghost btn-sm cd-cert-btn"
+                              onClick={() => handleSendCertificateEmail(res.id)}
+                              title={`Envoyer l'acte par email à ${client.email}`}
+                            >
+                              <IconSend />
+                              Envoyer par email
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );

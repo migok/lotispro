@@ -13,9 +13,22 @@ import ClientDetailPage from "./components/ClientDetailPage";
 import CommercialsPage from "./components/CommercialsPage";
 import ManagersPage from "./components/ManagersPage";
 import Login from "./components/Login";
+import SetPassword from "./components/SetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProjectsPage from "./components/ProjectsPage";
 import ProjectDetailPage from "./components/ProjectDetailPage";
+import LandingPage from "./components/LandingPage";
+import GlobalDashboard from "./components/GlobalDashboard";
+
+// Dashboard icon
+const IconDashboard = () => (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="7" height="9" rx="1"/>
+    <rect x="11" y="2" width="7" height="5" rx="1"/>
+    <rect x="2" y="13" width="7" height="5" rx="1"/>
+    <rect x="11" y="9" width="7" height="9" rx="1"/>
+  </svg>
+);
 
 // Logo — location pin with lot grid (real estate concept)
 const LogoIcon = ({ size = 28 }) => (
@@ -84,29 +97,36 @@ const IconLogout = () => (
 // Navigation items with role-based access
 const NAV_ITEMS = [
   {
+    id: "dashboard",
+    path: "/app/dashboard",
+    label: "Tableau de Bord",
+    Icon: IconDashboard,
+    allowedRoles: ["manager", "commercial"]
+  },
+  {
     id: "projects",
-    path: "/projects",
+    path: "/app/projects",
     label: "Projets",
     Icon: IconProjects,
     allowedRoles: ["manager", "commercial"]
   },
   {
     id: "clients",
-    path: "/clients",
+    path: "/app/clients",
     label: "Clients",
     Icon: IconClients,
     allowedRoles: ["manager", "commercial"]
   },
   {
     id: "commerciaux",
-    path: "/commerciaux",
+    path: "/app/commerciaux",
     label: "Commerciaux",
     Icon: IconCommerciaux,
     allowedRoles: ["manager"]
   },
   {
     id: "managers",
-    path: "/managers",
+    path: "/app/managers",
     label: "Managers",
     Icon: IconManagers,
     allowedRoles: ["manager"]
@@ -121,12 +141,12 @@ function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Déterminer la page actuelle depuis l'URL
-  const currentPage = location.pathname.split('/')[1] || 'dashboard';
+  // Déterminer la page actuelle depuis l'URL (/app/projects → 'projects')
+  const currentPage = location.pathname.split('/')[2] || 'dashboard';
 
   const handleLogout = () => {
     logout();
-    navigate("/login");
+    navigate("/");
   };
 
   const closeMobileMenu = () => {
@@ -239,8 +259,15 @@ function AppContent() {
       {/* Main Content */}
       <main className={`main-content ${sidebarCollapsed ? 'main-content-expanded' : ''}`}>
         <Routes>
-          <Route path="/" element={<Navigate to="/projects" replace />} />
-          <Route path="/dashboard" element={<Navigate to="/projects" replace />} />
+          <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["manager", "commercial"]}>
+                <GlobalDashboard />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/projects"
             element={
@@ -299,8 +326,10 @@ function AppContent() {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/*" element={<AppContent />} />
+      <Route path="/set-password" element={<SetPassword />} />
+      <Route path="/app/*" element={<AppContent />} />
     </Routes>
   );
 }

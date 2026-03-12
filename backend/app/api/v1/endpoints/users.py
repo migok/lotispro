@@ -4,25 +4,40 @@ from fastapi import APIRouter, status
 
 from app.api.dependencies import ManagerUser, UserServiceDep
 from app.domain.schemas.common import MessageResponse
-from app.domain.schemas.user import UserCreate, UserResponse
+from app.domain.schemas.user import SetPasswordRequest, UserInvite, UserResponse
 
 router = APIRouter()
 
 
 @router.post(
-    "",
+    "/invite",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create user",
-    description="Create a new user (manager only). Used to add commercials.",
+    summary="Invite user",
+    description="Create a pending account and send an invitation email (manager only).",
 )
-async def create_user(
-    user_data: UserCreate,
+async def invite_user(
+    data: UserInvite,
     current_user: ManagerUser,
     user_service: UserServiceDep,
 ) -> UserResponse:
-    """Create a new user. Manager only."""
-    return await user_service.create_user(user_data, current_user.id)
+    """Invite a new manager or commercial. Manager only."""
+    return await user_service.invite_user(data, current_user.id)
+
+
+@router.post(
+    "/set-password",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Set password from invitation",
+    description="Activate a pending account using the invitation token received by email. No auth required.",
+)
+async def set_password(
+    data: SetPasswordRequest,
+    user_service: UserServiceDep,
+) -> UserResponse:
+    """Set password via invitation token. Public endpoint — no auth required."""
+    return await user_service.set_password_from_token(data)
 
 
 @router.get(

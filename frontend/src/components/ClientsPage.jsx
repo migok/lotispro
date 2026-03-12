@@ -311,7 +311,7 @@ export default function ClientsPage() {
                     key={c.id}
                     className="cp-card"
                     style={{ animationDelay: `${idx * 0.05}s`, cursor: 'pointer' }}
-                    onClick={() => navigate(`/clients/${c.id}`)}
+                    onClick={() => navigate(`/app/clients/${c.id}`)}
                   >
                     {/* Identity */}
                     <div className="cp-card-top">
@@ -339,7 +339,7 @@ export default function ClientsPage() {
                       <div className="cp-card-btns">
                         <button
                           className="cl-view-btn"
-                          onClick={e => { e.stopPropagation(); navigate(`/clients/${c.id}`); }}
+                          onClick={e => { e.stopPropagation(); navigate(`/app/clients/${c.id}`); }}
                           title="Voir le profil"
                         >
                           <IconChevronRight />
@@ -427,7 +427,7 @@ export default function ClientsPage() {
                       key={c.id}
                       className="cp-lb-row"
                       style={{ cursor: 'pointer' }}
-                      onClick={() => navigate(`/clients/${c.id}`)}
+                      onClick={() => navigate(`/app/clients/${c.id}`)}
                     >
                       <span className={`cp-lb-rank${i === 0 ? ' cp-lb-rank-1' : ''}`}>{i + 1}</span>
                       <div className="monogram monogram-sm">{getInitials(c.name)}</div>

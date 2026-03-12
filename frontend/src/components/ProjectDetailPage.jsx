@@ -28,14 +28,57 @@ const SELECTION_STYLE = {
   fillOpacity: 0.7,
 };
 
+// SVG icons for tabs — no emojis (design system rule)
+const TAB_ICONS = {
+  carte: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+      <line x1="8" y1="2" x2="8" y2="18"/>
+      <line x1="16" y1="6" x2="16" y2="22"/>
+    </svg>
+  ),
+  dashboard: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1"/>
+      <rect x="14" y="3" width="7" height="7" rx="1"/>
+      <rect x="3" y="14" width="7" height="7" rx="1"/>
+      <rect x="14" y="14" width="7" height="7" rx="1"/>
+    </svg>
+  ),
+  kpis: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+  ),
+  performance: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10"/>
+      <line x1="12" y1="20" x2="12" y2="4"/>
+      <line x1="6" y1="20" x2="6" y2="14"/>
+    </svg>
+  ),
+  historique: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <polyline points="12 6 12 12 16 14"/>
+    </svg>
+  ),
+  parametres: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/>
+    </svg>
+  ),
+};
+
 // Fonction pour générer les onglets dynamiquement selon le rôle
 const getTabs = (isManager) => [
-  { id: 'carte', label: 'Carte', icon: '🗺️' },
-  { id: 'dashboard', label: isManager ? 'Tableau de Bord' : 'Dashboard', icon: '📊' },
-  { id: 'kpis', label: 'KPIs', icon: '📈' },
-  { id: 'performance', label: 'Performance', icon: '👔' },
-  { id: 'historique', label: 'Historique', icon: '📋' },
-  { id: 'parametres', label: 'Paramètres', icon: '⚙️' },
+  { id: 'carte', label: 'Carte' },
+  { id: 'dashboard', label: isManager ? 'Tableau de Bord' : 'Dashboard' },
+  { id: 'kpis', label: 'KPIs' },
+  { id: 'performance', label: 'Performance' },
+  { id: 'historique', label: 'Historique' },
+  { id: 'parametres', label: 'Paramètres' },
 ];
 
 export default function ProjectDetailPage() {
@@ -533,7 +576,7 @@ export default function ProjectDetailPage() {
         <div className="alert alert-error">
           {error || 'Projet introuvable'}
         </div>
-        <button className="btn btn-ghost" onClick={() => navigate('/projects')}>
+        <button className="btn btn-ghost" onClick={() => navigate('/app/projects')}>
           ← Retour aux projets
         </button>
       </div>
@@ -544,11 +587,15 @@ export default function ProjectDetailPage() {
     <div className="project-detail-page">
       {/* Header */}
       <div className="project-detail-header">
-        <button className="btn btn-ghost" onClick={() => navigate('/projects')}>
-          ← Retour
+        <button className="pdp-back-btn" onClick={() => navigate('/app/projects')}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 5l-7 7 7 7"/>
+          </svg>
+          Retour
         </button>
-        <div>
-          <h1 className="page-title">{project.name}</h1>
+        <div className="pdp-title-block">
+          <div className="page-eyebrow">Projet</div>
+          <h1 className="pdp-project-title">{project.name}</h1>
           {project.description && (
             <p className="page-subtitle">{project.description}</p>
           )}
@@ -571,7 +618,7 @@ export default function ProjectDetailPage() {
             className={`tab ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
-            <span>{tab.icon}</span>
+            {TAB_ICONS[tab.id]}
             <span>{tab.label}</span>
           </button>
         ))}
@@ -584,8 +631,8 @@ export default function ProjectDetailPage() {
             projectId={parseInt(projectId)}
             onNavigate={(page, clientId) => {
               if (page === 'map') setActiveTab('carte');
-              if (page === 'clients' && clientId) navigate(`/clients/${clientId}`);
-              else if (page === 'clients') navigate('/clients');
+              if (page === 'clients' && clientId) navigate(`/app/clients/${clientId}`);
+              else if (page === 'clients') navigate('/app/clients');
             }}
           />
         )}

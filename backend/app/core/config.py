@@ -87,9 +87,13 @@ class Settings(BaseSettings):
         """
         return (self.SUPABASE_PUBLIC_URL or self.SUPABASE_URL or "").rstrip("/")
 
+    # Frontend
+    FRONTEND_URL: str = "http://localhost:5173"
+
     # Email (Resend)
     RESEND_API_KEY: str | None = None
     EMAIL_FROM: str = "LotisPro <noreply@resend.dev>"
+    INVITATION_EXPIRE_HOURS: int = 48
 
     # Logging
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"

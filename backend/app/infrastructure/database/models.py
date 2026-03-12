@@ -49,6 +49,8 @@ class UserModel(Base):
         nullable=False,
         default="client",
     )
+    invitation_token: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
+    invitation_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
