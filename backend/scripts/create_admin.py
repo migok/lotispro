@@ -74,4 +74,8 @@ async def create_admin_user() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(create_admin_user())
+    try:
+        asyncio.run(create_admin_user())
+    except Exception as e:
+        print(f"[WARN] Admin creation failed (non-fatal): {e}")
+        sys.exit(0)
