@@ -37,7 +37,7 @@ class Settings(BaseSettings):
         description="Secret key for JWT encoding. Must be at least 32 characters.",
     )
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour
 
     # Database
     DATABASE_URL: str = Field(
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     ]
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: list[str] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
-    CORS_ALLOW_HEADERS: list[str] = ["*"]
+    CORS_ALLOW_HEADERS: list[str] = ["Authorization", "Content-Type", "X-Request-ID"]
 
     # Rate Limiting
     RATE_LIMIT_ENABLED: bool = True

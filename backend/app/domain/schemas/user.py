@@ -70,14 +70,6 @@ class UserResponse(BaseSchema):
     updated_at: datetime
 
 
-class UserBrief(BaseSchema):
-    """Minimal user info for embedding in other responses."""
-
-    id: int
-    name: str
-    email: str
-
-
 class TokenResponse(BaseSchema):
     """Schema for authentication token response."""
 

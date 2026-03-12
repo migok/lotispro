@@ -108,13 +108,3 @@ class ClientDetails(ClientResponse):
     sales_history: list[SaleHistory] = Field(default_factory=list)
     reservations_history: list[ReservationHistory] = Field(default_factory=list)
     stats: ClientStats | None = None
-
-
-class ClientFilter(BaseSchema):
-    """Schema for client filtering parameters."""
-
-    search: str | None = Field(
-        default=None,
-        description="Search by name, phone, or CIN",
-    )
-    client_type: Literal["proprietaire", "revendeur", "investisseur", "autre"] | None = None

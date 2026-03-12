@@ -6,6 +6,7 @@ Provides async session factory and dependency injection for FastAPI.
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -89,14 +90,16 @@ async def init_db() -> None:
     Should be called on application startup.
     In production, use Alembic migrations instead.
     """
-    from app.infrastructure.database.models import Base
-
     logger.info("Initializing database", database_url=database_url[:50] + "...")
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    if settings.is_development:
+        from app.infrastructure.database.models import Base
 
-    logger.info("Database initialized successfully")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables created (development mode)")
+    else:
+        logger.info("Production mode: skipping create_all — run 'alembic upgrade head'")
 
 
 async def close_db() -> None:
@@ -117,7 +120,7 @@ async def check_db_connection() -> bool:
     """
     try:
         async with async_session_factory() as session:
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
             return True
     except Exception as e:
         logger.error("Database connection check failed", error=str(e))
