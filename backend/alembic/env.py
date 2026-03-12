@@ -1,7 +1,19 @@
 """Alembic environment configuration for async SQLAlchemy."""
 
 import asyncio
+import socket
 from logging.config import fileConfig
+
+# Force IPv4 — Railway does not support IPv6 egress; asyncpg tries IPv6 first
+# and gets ENETUNREACH. Monkey-patching getaddrinfo to AF_INET prevents this.
+_orig_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):  # noqa: A002
+    return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+
+
+socket.getaddrinfo = _ipv4_only_getaddrinfo
 
 from alembic import context
 from sqlalchemy import pool
