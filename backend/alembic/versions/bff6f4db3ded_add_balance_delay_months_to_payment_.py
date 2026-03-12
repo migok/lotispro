@@ -19,10 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Add missing balance_delay_months column to payment_schedules."""
-    op.add_column(
-        'payment_schedules',
-        sa.Column('balance_delay_months', sa.Integer(), nullable=False, server_default='0'),
+    """Add missing balance_delay_months column to payment_schedules (idempotent)."""
+    op.execute(
+        "ALTER TABLE payment_schedules ADD COLUMN IF NOT EXISTS balance_delay_months INTEGER NOT NULL DEFAULT 0"
     )
 
 
