@@ -51,32 +51,3 @@ class ReservationResponse(BaseSchema):
     status: str
     created_at: datetime
     updated_at: datetime
-
-
-class ReservationWithDetails(ReservationResponse):
-    """Schema for reservation with extended details."""
-
-    lot_numero: str
-    lot_price: float | None
-    lot_surface: float | None
-    client_name: str
-    client_phone: str | None
-    client_email: str | None
-    reserved_by_name: str | None
-
-
-class ReservationAtRisk(ReservationWithDetails):
-    """Schema for at-risk reservation (expiring soon or expired)."""
-
-    risk_type: str = Field(description="expired or expiring_soon")
-    days_remaining: int = Field(description="Days until expiration (negative if expired)")
-
-
-class ReservationFilter(BaseSchema):
-    """Schema for reservation filtering parameters."""
-
-    project_id: int | None = None
-    lot_id: int | None = None
-    client_id: int | None = None
-    status: str | None = None
-    reserved_by_user_id: int | None = None

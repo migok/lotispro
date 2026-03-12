@@ -37,26 +37,3 @@ class SaleResponse(BaseSchema):
     price: float
     notes: str | None
     created_at: datetime
-
-
-class SaleWithDetails(SaleResponse):
-    """Schema for sale with extended details."""
-
-    lot_numero: str
-    lot_surface: float | None
-    lot_zone: str | None
-    client_name: str
-    client_phone: str | None
-    project_name: str
-    sold_by_name: str | None
-
-
-class SaleFilter(BaseSchema):
-    """Schema for sale filtering parameters."""
-
-    project_id: int | None = None
-    lot_id: int | None = None
-    client_id: int | None = None
-    sold_by_user_id: int | None = None
-    date_from: datetime | None = None
-    date_to: datetime | None = None
