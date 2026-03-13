@@ -34,7 +34,7 @@ async def create_admin_user() -> None:
 
     if not admin_email or not admin_password:
         print("[WARN] ADMIN_EMAIL or ADMIN_PASSWORD not set — skipping admin creation.")
-        sys.exit(0)
+        return
 
     # Create async engine and session
     engine = create_async_engine(settings.DATABASE_URL, echo=False)

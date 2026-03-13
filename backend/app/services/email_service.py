@@ -34,7 +34,7 @@ def _build_invitation_html(first_name: str, last_name: str, role: str, set_passw
           <tr>
             <td style="background:#090d16;padding:32px 40px;text-align:center;">
               <p style="margin:0;font-size:11px;letter-spacing:3px;text-transform:uppercase;
-                        color:#d4973a;font-weight:600;">Pyramide Promotion</p>
+                        color:#d4973a;font-weight:600;">LotisPro</p>
               <h1 style="margin:8px 0 0;font-size:24px;color:#ecf0fa;font-weight:300;
                          letter-spacing:0.5px;">Vous êtes invité(e)</h1>
             </td>
@@ -87,11 +87,8 @@ def _build_invitation_html(first_name: str, last_name: str, role: str, set_passw
           <!-- Footer -->
           <tr>
             <td style="background:#090d16;padding:24px 40px;text-align:center;">
-              <p style="margin:0 0 4px;color:#6e7e9e;font-size:12px;">
-                PYRAMIDE PROMOTION — Oujda, Maroc
-              </p>
               <p style="margin:0;color:#6e7e9e;font-size:12px;">
-                +212 0536 71 16 65 &nbsp;|&nbsp; +212 0696 62 91 25
+                LOTISPRO
               </p>
             </td>
           </tr>
@@ -159,7 +156,7 @@ def _build_payment_confirmation_html(
           <tr>
             <td style="background:#090d16;padding:32px 40px;text-align:center;">
               <p style="margin:0;font-size:11px;letter-spacing:3px;text-transform:uppercase;
-                        color:#d4973a;font-weight:600;">Pyramide Promotion</p>
+                        color:#d4973a;font-weight:600;">LotisPro</p>
               <h1 style="margin:8px 0 0;font-size:24px;color:#ecf0fa;font-weight:300;
                          letter-spacing:0.5px;">Confirmation de paiement</h1>
             </td>
@@ -257,11 +254,8 @@ def _build_payment_confirmation_html(
           <!-- Footer -->
           <tr>
             <td style="background:#090d16;padding:24px 40px;text-align:center;">
-              <p style="margin:0 0 4px;color:#6e7e9e;font-size:12px;">
-                PYRAMIDE PROMOTION — Oujda, Maroc
-              </p>
               <p style="margin:0;color:#6e7e9e;font-size:12px;">
-                +212 0536 71 16 65 &nbsp;|&nbsp; +212 0696 62 91 25
+                LOTISPRO
               </p>
             </td>
           </tr>
@@ -299,7 +293,7 @@ def _build_certificate_email_html(
           <tr>
             <td style="background:#090d16;padding:32px 40px;text-align:center;">
               <p style="margin:0;font-size:11px;letter-spacing:3px;text-transform:uppercase;
-                        color:#d4973a;font-weight:600;">Pyramide Promotion</p>
+                        color:#d4973a;font-weight:600;">LotisPro</p>
               <h1 style="margin:8px 0 0;font-size:24px;color:#ecf0fa;font-weight:300;
                          letter-spacing:0.5px;">Acte de réservation</h1>
             </td>
@@ -334,11 +328,8 @@ def _build_certificate_email_html(
           <!-- Footer -->
           <tr>
             <td style="background:#090d16;padding:24px 40px;text-align:center;">
-              <p style="margin:0 0 4px;color:#6e7e9e;font-size:12px;">
-                PYRAMIDE PROMOTION — Oujda, Maroc
-              </p>
               <p style="margin:0;color:#6e7e9e;font-size:12px;">
-                +212 0536 71 16 65 &nbsp;|&nbsp; +212 0696 62 91 25
+                LOTISPRO
               </p>
             </td>
           </tr>
