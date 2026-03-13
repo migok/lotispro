@@ -15,7 +15,8 @@ const CLIENT_TYPE_LABELS = {
 
 const RESERVATION_STATUS = {
   active:    { label: 'Active',    cls: 'badge-gold' },
-  converted: { label: 'Convertie', cls: 'badge-green' },
+  validated: { label: 'Validée',   cls: 'badge-green' },
+  converted: { label: 'Vendu',     cls: 'badge-red' },
   released:  { label: 'Libérée',   cls: 'badge-gray' },
   expired:   { label: 'Expirée',   cls: 'badge-red' },
 };
@@ -282,12 +283,14 @@ function InstallmentBrick({ type, label, items, onInstallmentUpdate, prerequisit
 }
 
 /* ── Payment overview card ──────────────────────────────────── */
-function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate }) {
+function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate, onValidateDeposit }) {
   const res = reservations.find(r => r.id === schedule.reservation_id);
   const label = res
     ? `Lot ${res.lot_numero} — ${res.project_name}`
     : `Réservation #${schedule.reservation_id}`;
-  const isValidated = res?.status === 'validated';
+  // Dépôt initial reçu = réservation validée ou convertie (vendu)
+  const isValidated = res?.status === 'validated' || res?.status === 'converted';
+  const isConverted = res?.status === 'converted';
 
   const firstPaymentAmount = res?.deposit ?? 0;
   const firstPaymentDate = res?.deposit_date || res?.reservation_date;
@@ -299,21 +302,49 @@ function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate }) {
     .filter(i => i.payment_type === 'balance')
     .sort((a, b) => a.installment_number - b.installment_number);
 
+  const allDepositPaid = depositInstallments.length > 0 && depositInstallments.every(i => i.status === 'paid');
+  const allBalancePaid = balanceInstallments.length > 0 && balanceInstallments.every(i => i.status === 'paid');
+  const isFullyPaid = allDepositPaid && allBalancePaid;
+
   const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div className="pay-overview-card">
+      {/* Bandeau vendu — toutes échéances réglées */}
+      {isFullyPaid && isConverted && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 16px',
+          background: 'color-mix(in srgb, #ef4444 12%, var(--bg-surface))',
+          borderBottom: '1px solid color-mix(in srgb, #ef4444 30%, transparent)',
+          borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
+        }}>
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#ef4444" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 12l2 2 4-4"/><rect x="2" y="3" width="16" height="14" rx="2"/>
+          </svg>
+          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#ef4444', letterSpacing: '0.02em' }}>
+            Lot vendu — Toutes les échéances réglées
+          </span>
+        </div>
+      )}
       {/* Header */}
       <div className="pay-overview-header" onClick={() => setCollapsed(v => !v)}>
         <div className="pay-overview-label">
           {label}
-          {isValidated && (
+          {isValidated && !isFullyPaid && (
             <span className="badge badge-green pay-validated-badge">
               <IconCheck /> Réservation validée
             </span>
           )}
+          {isFullyPaid && isConverted && (
+            <span className="badge pay-validated-badge" style={{ background: 'color-mix(in srgb, #ef4444 18%, var(--bg-surface))', color: '#ef4444', border: '1px solid color-mix(in srgb, #ef4444 35%, transparent)' }}>
+              <IconCheck /> Vendu
+            </span>
+          )}
         </div>
-        <div className="pay-overview-price">{formatPrice(schedule.lot_price)}</div>
+        <div className="pay-overview-price" title={`Dont 1er versement : ${formatPrice(firstPaymentAmount)}`}>
+          {formatPrice(firstPaymentAmount + schedule.lot_price)}
+        </div>
         <button className={`pay-overview-toggle ${collapsed ? '' : 'open'}`}>
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
             <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
@@ -343,10 +374,7 @@ function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate }) {
             {!isValidated && (
               <button
                 className="pay-first-payment-confirm"
-                onClick={() => {
-                  const firstInst = depositInstallments[0];
-                  if (firstInst) onInstallmentUpdate(firstInst.id, 'paid');
-                }}
+                onClick={() => res && onValidateDeposit && onValidateDeposit(res.id)}
               >
                 <IconCheck /> Confirmer la réception
               </button>
@@ -456,6 +484,16 @@ export default function ClientDetailPage() {
     }
   };
 
+  const handleValidateDeposit = async (reservationId) => {
+    try {
+      await apiPost(`/api/reservations/${reservationId}/validate-deposit`, {});
+      await Promise.all([loadPaymentSchedules(), loadClient()]);
+      toast.success('1er versement confirmé — réservation validée');
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de la confirmation du versement');
+    }
+  };
+
   const handleInstallmentUpdate = async (installmentId, newStatus) => {
     try {
       await apiPatch(`/api/payments/installments/${installmentId}`, {
@@ -551,6 +589,7 @@ export default function ClientDetailPage() {
     total_deposit: reservations.reduce((sum, r) => sum + (r.deposit || 0), 0),
     total_refund: reservations.filter(r => r.status === 'released').reduce((sum, r) => sum + (r.deposit_refund_amount || 0), 0),
     active_reservations: reservations.filter(r => r.status === 'active' || r.status === 'validated').length,
+    lots_liberes: reservations.filter(r => r.status === 'released' || r.status === 'expired').length,
   };
 
   const remaining = stats.total_purchases - stats.total_deposit;
@@ -676,6 +715,12 @@ export default function ClientDetailPage() {
           <div className="stat-tile-value num">{stats.active_reservations || 0}</div>
           <div className="stat-tile-label">Réservations actives</div>
         </div>
+        {stats.lots_liberes > 0 && (
+          <div className="stat-tile">
+            <div className="stat-tile-value num" style={{ color: '#a78bfa' }}>{stats.lots_liberes}</div>
+            <div className="stat-tile-label">Lots libérés</div>
+          </div>
+        )}
       </div>
 
       {/* ── Body grid: résumé + timeline ────────────────── */}
@@ -1015,6 +1060,7 @@ export default function ClientDetailPage() {
                             schedule={schedule}
                             reservations={allReservations}
                             onInstallmentUpdate={handleInstallmentUpdate}
+                            onValidateDeposit={handleValidateDeposit}
                           />
                         ))}
                       </div>

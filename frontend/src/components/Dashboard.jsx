@@ -400,13 +400,25 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         <div className="manager-kpis-summary" style={{ marginBottom: 'var(--spacing-lg)' }}>
           <div className="kpis-section-header" style={{ marginBottom: 'var(--spacing-md)' }}>
             <h3>
-              <span className="kpis-section-icon">🎯</span>
+              <svg className="kpis-section-icon-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="10" cy="10" r="8"/>
+                <circle cx="10" cy="10" r="3.5"/>
+                <line x1="10" y1="2" x2="10" y2="5.5"/>
+                <line x1="10" y1="14.5" x2="10" y2="18"/>
+                <line x1="2" y1="10" x2="5.5" y2="10"/>
+                <line x1="14.5" y1="10" x2="18" y2="10"/>
+              </svg>
               Indicateurs Clés de Décision
             </h3>
             {projectKpis?.ca_objectif > 0 && (
               <span className="kpis-section-badge" style={{
-                background: (projectKpis?.progression_ca || 0) >= 75 ? 'var(--color-success)' : (projectKpis?.progression_ca || 0) >= 50 ? 'var(--color-warning)' : 'var(--color-danger)',
-                color: 'white'
+                background: (projectKpis?.progression_ca || 0) >= 75
+                  ? 'color-mix(in srgb, #10b981 18%, var(--bg-surface))'
+                  : (projectKpis?.progression_ca || 0) >= 50
+                    ? 'color-mix(in srgb, #f59e0b 18%, var(--bg-surface))'
+                    : 'color-mix(in srgb, #ef4444 18%, var(--bg-surface))',
+                color: (projectKpis?.progression_ca || 0) >= 75 ? '#10b981' : (projectKpis?.progression_ca || 0) >= 50 ? '#f59e0b' : '#ef4444',
+                border: `1px solid ${(projectKpis?.progression_ca || 0) >= 75 ? 'rgba(16,185,129,.3)' : (projectKpis?.progression_ca || 0) >= 50 ? 'rgba(245,158,11,.3)' : 'rgba(239,68,68,.3)'}`,
               }}>
                 {projectKpis?.progression_ca || 0}% de l'objectif
               </span>
@@ -416,7 +428,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           {/* Hero KPIs Cards */}
           <div className="kpis-hero">
             <div className="kpis-hero-grid">
-              <div className="kpis-hero-card gradient-success">
+              <div className="kpis-hero-card gradient-success" style={{ '--card-accent': '#10b981' }}>
                 <div className="kpis-hero-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
@@ -424,7 +436,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 </div>
                 <div className="kpis-hero-content">
                   <div className="kpis-hero-value">{formatNumber(projectKpis?.ca_realise, 'MAD')}</div>
-                  <div className="kpis-hero-label">CA Réalisé</div>
+                  <div className="kpis-hero-label">CA Réalisé <span className="kpis-info-icon" title="Ventes finalisées + acomptes des réservations validées">ⓘ</span></div>
                   {projectKpis?.ca_objectif > 0 && (
                     <div className="kpis-hero-progress">
                       <div className="kpis-hero-progress-bar">
@@ -438,7 +450,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 </div>
               </div>
 
-              <div className="kpis-hero-card gradient-primary">
+              <div className="kpis-hero-card gradient-primary" style={{ '--card-accent': '#d4973a' }}>
                 <div className="kpis-hero-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10"/>
@@ -447,12 +459,12 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 </div>
                 <div className="kpis-hero-content">
                   <div className="kpis-hero-value">{formatNumber(projectKpis?.ca_potentiel, 'MAD')}</div>
-                  <div className="kpis-hero-label">CA Potentiel</div>
+                  <div className="kpis-hero-label">CA Potentiel <span className="kpis-info-icon" title="Valeur totale des lots avec réservation active — non encore convertis en vente">ⓘ</span></div>
                   <div className="kpis-hero-subtitle">Lots réservés</div>
                 </div>
               </div>
 
-              <div className="kpis-hero-card gradient-warning">
+              <div className="kpis-hero-card gradient-warning" style={{ '--card-accent': '#f59e0b' }}>
                 <div className="kpis-hero-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 20V10M18 20V4M6 20v-4"/>
@@ -460,14 +472,14 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 </div>
                 <div className="kpis-hero-content">
                   <div className="kpis-hero-value">{projectKpis?.ventes_mois || 0}</div>
-                  <div className="kpis-hero-label">Ventes ce Mois</div>
+                  <div className="kpis-hero-label">Ventes ce Mois <span className="kpis-info-icon" title="Nombre de lots vendus définitivement sur le mois en cours">ⓘ</span></div>
                   <div className="kpis-hero-trend" style={{ color: getTendanceIcon(projectKpis?.tendance_ventes || 0).color }}>
                     {getTendanceIcon(projectKpis?.tendance_ventes || 0).icon} {getTendanceIcon(projectKpis?.tendance_ventes || 0).label}
                   </div>
                 </div>
               </div>
 
-              <div className="kpis-hero-card gradient-info">
+              <div className="kpis-hero-card gradient-info" style={{ '--card-accent': '#60a5fa' }}>
                 <div className="kpis-hero-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
@@ -475,7 +487,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 </div>
                 <div className="kpis-hero-content">
                   <div className="kpis-hero-value">{formatNumber(projectKpis?.ca_mois, 'MAD')}</div>
-                  <div className="kpis-hero-label">CA ce Mois</div>
+                  <div className="kpis-hero-label">CA ce Mois <span className="kpis-info-icon" title="Chiffre d'affaires généré par les ventes finalisées sur le mois en cours">ⓘ</span></div>
                   <div className="kpis-hero-trend" style={{ color: getTendanceIcon(projectKpis?.tendance_ca || 0).color }}>
                     {getTendanceIcon(projectKpis?.tendance_ca || 0).icon} {getTendanceIcon(projectKpis?.tendance_ca || 0).label}
                   </div>
@@ -488,19 +500,19 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           <div className="kpis-decision-metrics">
             <div>
               <div>{formatNumber(projectKpis?.prix_moyen_lot, 'MAD')}</div>
-              <div>Prix Moyen / Lot</div>
+              <div>Prix Moyen / Lot <span className="kpis-info-icon kpis-info-icon-dark" title="Prix moyen de vente par lot sur ce projet">ⓘ</span></div>
             </div>
             <div>
               <div>{formatNumber(projectKpis?.prix_moyen_m2, 'MAD')}</div>
-              <div>Prix Moyen / m²</div>
+              <div>Prix Moyen / m² <span className="kpis-info-icon kpis-info-icon-dark" title="Prix moyen au m² calculé sur les ventes réalisées">ⓘ</span></div>
             </div>
             <div>
               <div>{formatNumber(projectKpis?.total_deposits, 'MAD')}</div>
-              <div>Total Acomptes</div>
+              <div>Total Acomptes <span className="kpis-info-icon kpis-info-icon-dark" title="Somme des acomptes perçus sur les réservations validées (non encore vendues)">ⓘ</span></div>
             </div>
             <div>
               <div>{formatNumber(projectKpis?.ca_objectif, 'MAD')}</div>
-              <div>CA Objectif</div>
+              <div>CA Objectif <span className="kpis-info-icon kpis-info-icon-dark" title="Objectif de chiffre d'affaires défini pour ce projet — sert à calculer le taux de progression">ⓘ</span></div>
             </div>
           </div>
         </div>
@@ -511,7 +523,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
         <div className="kpis-section-header">
           <h3>
-            <span className="kpis-section-icon">💰</span>
+            <svg className="kpis-section-icon-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 2v2M10 16v2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M2 10h2M16 10h2M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42"/>
+              <circle cx="10" cy="10" r="4"/>
+            </svg>
             {isCommercial() ? 'Ma Performance' : 'Performance Financière'}
           </h3>
           <span className="kpis-section-badge">
@@ -589,7 +604,10 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
         <div className="kpis-section-header">
           <h3>
-            <span className="kpis-section-icon">📦</span>
+            <svg className="kpis-section-icon-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 6l8-4 8 4v8l-8 4-8-4V6z"/>
+              <path d="M10 2v16M2 6l8 4 8-4"/>
+            </svg>
             Stock de Lots
           </h3>
           <span className="kpis-section-badge">{stats?.counts?.total || 0} lots</span>
@@ -689,6 +707,35 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 <div className="kpis-stock-label">
                   Bloqués
                   <span className="kpis-info-icon kpis-info-icon-dark" title="Lots temporairement indisponibles">ⓘ</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(stats?.lots_liberes > 0 || !isCommercial()) && (
+            <div className="kpis-stock-card" style={{ '--stock-accent': 'var(--text-muted)', '--stock-circle': '#a78bfa' }}>
+              <div className="kpis-stock-visual">
+                <svg viewBox="0 0 36 36" className="kpis-circular-chart">
+                  <path
+                    className="kpis-circle-bg"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  <path
+                    style={{ stroke: '#a78bfa' }}
+                    strokeDasharray={`${stats?.counts?.total ? Math.round((stats.lots_liberes / stats.counts.total) * 100) : 0}, 100`}
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none" strokeWidth="2.8" strokeLinecap="round"
+                  />
+                </svg>
+                <div className="kpis-stock-percent" style={{ color: '#a78bfa' }}>
+                  {stats?.counts?.total ? Math.round((stats.lots_liberes / stats.counts.total) * 100) : 0}%
+                </div>
+              </div>
+              <div className="kpis-stock-info">
+                <div className="kpis-stock-value" style={{ color: '#a78bfa' }}>{stats?.lots_liberes || 0}</div>
+                <div className="kpis-stock-label">
+                  Libérés
+                  <span className="kpis-info-icon kpis-info-icon-dark" title="Réservations annulées ou expirées — lots remis en disponible">ⓘ</span>
                 </div>
               </div>
             </div>

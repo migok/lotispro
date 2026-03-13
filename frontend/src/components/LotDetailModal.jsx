@@ -569,16 +569,8 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
             deposit_installments: { count: parseInt(paymentPlan.deposit_count) || 1, periodicity_months: parseInt(paymentPlan.deposit_periodicity) || 1 },
             balance_installments: { count: parseInt(paymentPlan.balance_count) || 1, periodicity_months: parseInt(paymentPlan.balance_periodicity) || 1 },
           });
-          if (firstPaymentImmediate && schedule?.installments?.length) {
-            const firstDeposit = schedule.installments
-              .filter(i => i.payment_type === 'deposit')
-              .sort((a, b) => a.installment_number - b.installment_number)[0];
-            if (firstDeposit) {
-              await apiPatch(`/api/payments/installments/${firstDeposit.id}`, {
-                status: 'paid',
-                paid_date: new Date().toISOString().slice(0, 10),
-              });
-            }
+          if (firstPaymentImmediate) {
+            await apiPost(`/api/reservations/${reservation.id}/validate-deposit`, {});
           }
         } catch (err) {
           console.error('Error creating payment schedule:', err);

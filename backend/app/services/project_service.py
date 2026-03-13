@@ -585,11 +585,20 @@ class ProjectService:
         )
         surface_row = surface_result.one()
 
-        # CA realized (from sales)
+        # CA realized (sales + deposits from validated reservations only)
         ca_result = await self.session.execute(
             select(func.sum(SaleModel.price)).where(SaleModel.project_id == project_id)
         )
         ca_realise = float(ca_result.scalar() or 0)
+
+        # Add deposits from validated reservations only (confirmed by commercial, lot not yet sold)
+        deposits_validated_result = await self.session.execute(
+            select(func.coalesce(func.sum(ReservationModel.deposit), 0)).where(
+                ReservationModel.project_id == project_id,
+                ReservationModel.status == "validated",
+            )
+        )
+        ca_realise += float(deposits_validated_result.scalar() or 0)
 
         # CA potential (from active reservations - more accurate than lot status)
         potential_result = await self.session.execute(
@@ -647,11 +656,11 @@ class ProjectService:
         if surface_vendue > 0:
             prix_moyen_m2 = round(ca_realise / surface_vendue, 2)
 
-        # Total deposits from active reservations
+        # Total deposits from validated reservations only (confirmed by commercial)
         deposits_result = await self.session.execute(
             select(func.coalesce(func.sum(ReservationModel.deposit), 0)).where(
                 ReservationModel.project_id == project_id,
-                ReservationModel.status == "active",
+                ReservationModel.status == "validated",
             )
         )
         total_deposits = float(deposits_result.scalar() or 0)
@@ -710,6 +719,15 @@ class ProjectService:
         elif ca_mois > 0:
             tendance_ca = 100.0
 
+        # Lots libérés (released or expired reservations)
+        liberes_result = await self.session.execute(
+            select(func.count()).where(
+                ReservationModel.project_id == project_id,
+                ReservationModel.status.in_(("released", "expired")),
+            )
+        )
+        lots_liberes = liberes_result.scalar() or 0
+
         return ProjectKPIs(
             project_id=project_id,
             total_lots=sum(status_counts.values()),
@@ -731,6 +749,7 @@ class ProjectService:
             taux_reservation=taux_reservation,
             taux_transformation=taux_transformation,
             taux_conversion=taux_transformation,
+            lots_liberes=lots_liberes,
             total_deposits=total_deposits,
             ventes_mois=ventes_mois,
             ca_mois=ca_mois,
@@ -777,7 +796,7 @@ class ProjectService:
         )
         sold_lots = sold_count_result.scalar() or 0
 
-        # CA realized (from user's sales)
+        # CA realized (user's sales + deposits from their validated reservations)
         ca_result = await self.session.execute(
             select(func.coalesce(func.sum(SaleModel.price), 0)).where(
                 SaleModel.project_id == project_id,
@@ -785,6 +804,16 @@ class ProjectService:
             )
         )
         ca_realise = float(ca_result.scalar() or 0)
+
+        # Add deposits from user's validated reservations only (confirmed by commercial)
+        deposits_validated_result = await self.session.execute(
+            select(func.coalesce(func.sum(ReservationModel.deposit), 0)).where(
+                ReservationModel.project_id == project_id,
+                ReservationModel.reserved_by_user_id == filter_user_id,
+                ReservationModel.status == "validated",
+            )
+        )
+        ca_realise += float(deposits_validated_result.scalar() or 0)
 
         # CA potential (from user's active reservations)
         potential_result = await self.session.execute(
@@ -873,12 +902,12 @@ class ProjectService:
         if surface_vendue > 0:
             prix_moyen_m2 = round(ca_realise / surface_vendue, 2)
 
-        # Total deposits from user's active reservations
+        # Total deposits from user's validated reservations only (confirmed by commercial)
         deposits_result = await self.session.execute(
             select(func.coalesce(func.sum(ReservationModel.deposit), 0)).where(
                 ReservationModel.project_id == project_id,
                 ReservationModel.reserved_by_user_id == filter_user_id,
-                ReservationModel.status == "active",
+                ReservationModel.status == "validated",
             )
         )
         total_deposits = float(deposits_result.scalar() or 0)
@@ -935,6 +964,16 @@ class ProjectService:
         elif ca_mois > 0:
             tendance_ca = 100.0
 
+        # Lots libérés for this user
+        liberes_result = await self.session.execute(
+            select(func.count()).where(
+                ReservationModel.project_id == project_id,
+                ReservationModel.reserved_by_user_id == filter_user_id,
+                ReservationModel.status.in_(("released", "expired")),
+            )
+        )
+        lots_liberes = liberes_result.scalar() or 0
+
         return ProjectKPIs(
             project_id=project_id,
             total_lots=total_lots,
@@ -956,6 +995,7 @@ class ProjectService:
             taux_reservation=taux_reservation,
             taux_transformation=taux_transformation,
             taux_conversion=taux_transformation,
+            lots_liberes=lots_liberes,
             total_deposits=total_deposits,
             ventes_mois=ventes_mois,
             ca_mois=ca_mois,

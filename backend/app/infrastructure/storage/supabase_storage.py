@@ -194,6 +194,15 @@ class SupabaseStorageClient:
                     options={"public": True},
                 )
                 logger.info(f"Created public images bucket: {images_bucket}")
+            else:
+                # Ensure the existing bucket is public
+                try:
+                    self.client.storage.update_bucket(
+                        images_bucket,
+                        options={"public": True},
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("update_bucket skipped (not supported by this Supabase version)", exc=str(exc))
 
             self.client.storage.from_(images_bucket).upload(
                 path=file_path,

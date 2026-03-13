@@ -206,6 +206,52 @@ class ReservationService:
             updated_at=reservation.updated_at,
         )
 
+    async def validate_deposit(self, reservation_id: int) -> ReservationResponse:
+        """Mark the initial deposit as received — set reservation status to 'validated'.
+
+        This is independent of the payment schedule installments.
+
+        Raises:
+            NotFoundError: If reservation not found
+            BusinessRuleError: If reservation is not in active status
+        """
+        reservation = await self.reservation_repo.get_by_id(reservation_id)
+        if not reservation:
+            raise NotFoundError("Reservation", reservation_id)
+
+        if reservation.status not in ("active", "validated"):
+            raise BusinessRuleError(
+                message="La réservation doit être active pour confirmer le versement initial.",
+                rule="reservation_not_active",
+            )
+
+        if reservation.status == "active":
+            await self.reservation_repo.update(reservation_id, status="validated")
+            logger.info(
+                "Reservation deposit validated",
+                reservation_id=reservation_id,
+            )
+
+        updated = await self.reservation_repo.get_by_id(reservation_id)
+        return ReservationResponse(
+            id=updated.id,
+            project_id=updated.project_id,
+            lot_id=updated.lot_id,
+            client_id=updated.client_id,
+            reserved_by_user_id=updated.reserved_by_user_id,
+            reservation_date=updated.reservation_date,
+            expiration_date=updated.expiration_date,
+            deposit=updated.deposit,
+            deposit_date=updated.deposit_date,
+            deposit_refund_amount=updated.deposit_refund_amount,
+            deposit_refund_date=updated.deposit_refund_date,
+            release_reason=updated.release_reason,
+            notes=updated.notes,
+            status=updated.status,
+            created_at=updated.created_at,
+            updated_at=updated.updated_at,
+        )
+
     async def release_reservation(
         self,
         reservation_id: int,
