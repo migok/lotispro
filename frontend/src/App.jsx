@@ -14,6 +14,7 @@ import CommercialsPage from "./components/CommercialsPage";
 import ManagersPage from "./components/ManagersPage";
 import Login from "./components/Login";
 import SetPassword from "./components/SetPassword";
+import ForgotPassword from "./components/ForgotPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProjectsPage from "./components/ProjectsPage";
 import ProjectDetailPage from "./components/ProjectDetailPage";
@@ -329,6 +330,7 @@ function AppRoutes() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/set-password" element={<SetPassword />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/app/*" element={<AppContent />} />
     </Routes>
   );

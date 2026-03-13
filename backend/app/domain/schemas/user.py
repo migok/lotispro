@@ -46,6 +46,12 @@ class UserCreate(BaseSchema):
     )
 
 
+class ForgotPasswordRequest(BaseSchema):
+    """Schema for requesting a password reset email."""
+
+    email: EmailStr = Field(description="User email address")
+
+
 class UserLogin(BaseSchema):
     """Schema for user login."""
 

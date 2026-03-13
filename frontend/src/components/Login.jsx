@@ -3,9 +3,22 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../hooks/useTheme";
 
+const IconEye = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="1.8"/>
+  </svg>
+);
+const IconEyeOff = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="1.8"/>
+    <line x1="2" y1="2" x2="14" y2="14"/>
+  </svg>
+);
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -129,17 +142,37 @@ export default function Login() {
             </div>
 
             <div className="login-form-group">
-              <label htmlFor="password" className="login-label">Mot de passe</label>
-              <input
-                id="password"
-                type="password"
-                className="login-input"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <label htmlFor="password" className="login-label" style={{ marginBottom: 0 }}>Mot de passe</label>
+                <button
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: '0.78rem', padding: 0, fontFamily: 'inherit' }}
+                >
+                  Mot de passe oublié ?
+                </button>
+              </div>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="password"
+                  type={showPwd ? "text" : "password"}
+                  className="login-input"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  style={{ paddingRight: 40 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(v => !v)}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 0 }}
+                  tabIndex={-1}
+                >
+                  {showPwd ? <IconEyeOff /> : <IconEye />}
+                </button>
+              </div>
             </div>
 
             <button
