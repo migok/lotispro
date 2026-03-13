@@ -33,10 +33,8 @@ async def create_admin_user() -> None:
     admin_name = os.getenv("ADMIN_NAME", "System Administrator")
 
     if not admin_email or not admin_password:
-        print("[ERROR] Error: ADMIN_EMAIL and ADMIN_PASSWORD must be set")
-        print("\nUsage:")
-        print("  ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=secure_pass python scripts/create_admin.py")
-        sys.exit(1)
+        print("[WARN] ADMIN_EMAIL or ADMIN_PASSWORD not set — skipping admin creation.")
+        return
 
     # Create async engine and session
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
