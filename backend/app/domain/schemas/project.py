@@ -93,6 +93,8 @@ class ProjectKPIs(BaseSchema):
     taux_reservation: float = Field(default=0, description="Reservation rate percentage")
     taux_transformation: float = Field(description="Reservation to sale conversion rate")
     taux_conversion: float = Field(default=0, description="Alias for taux_transformation")
+    # Lots libérés
+    lots_liberes: int = Field(default=0, description="Count of released/expired reservations (lots freed up)")
     # Deposits
     total_deposits: float = Field(default=0, description="Total deposits from active reservations")
     # Monthly stats

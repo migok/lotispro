@@ -19,8 +19,8 @@ export const STATUS_COLORS = {
 
 export const PIPELINE_LABELS = {
   buyer: 'Acheteur',
-  active_reservation: 'Reservation active',
-  past_reservation: 'Ancienne reservation',
+  active_reservation: 'Réservation active',
+  past_reservation: 'Lot libéré',
   prospect: 'Prospect',
 };
 

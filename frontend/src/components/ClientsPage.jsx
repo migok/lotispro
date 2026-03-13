@@ -72,7 +72,7 @@ const TYPE_CONFIG = {
 const PIPELINE_CONFIG = {
   buyer:              { label: 'Acheteur',           cls: 'cl-pip-buyer' },
   active_reservation: { label: 'Réservation active', cls: 'cl-pip-reserved' },
-  past_reservation:   { label: 'Ancienne réserv.',   cls: 'cl-pip-past' },
+  past_reservation:   { label: 'Lot libéré',          cls: 'cl-pip-past' },
   prospect:           { label: 'Prospect',           cls: 'cl-pip-prospect' },
 };
 
@@ -249,7 +249,7 @@ export default function ClientsPage() {
                   <option value="buyer">Acheteurs</option>
                   <option value="active_reservation">Réservation active</option>
                   <option value="prospect">Prospects</option>
-                  <option value="past_reservation">Ancienne réserv.</option>
+                  <option value="past_reservation">Lot libéré</option>
                 </select>
                 <IconChevronDown />
               </div>
@@ -396,7 +396,7 @@ export default function ClientsPage() {
               { key: 'buyer',              label: 'Acheteurs',            cls: 'cl-pip-bar-buyer' },
               { key: 'active_reservation', label: 'Réservations actives', cls: 'cl-pip-bar-reserved' },
               { key: 'prospect',           label: 'Prospects',            cls: 'cl-pip-bar-prospect' },
-              { key: 'past_reservation',   label: 'Anciennes réserv.',    cls: 'cl-pip-bar-past' },
+              { key: 'past_reservation',   label: 'Lots libérés',         cls: 'cl-pip-bar-past' },
             ].map(({ key, label, cls }) => {
               const count = pipeline[key] || 0;
               const pct = clients.length > 0 ? (count / clients.length) * 100 : 0;

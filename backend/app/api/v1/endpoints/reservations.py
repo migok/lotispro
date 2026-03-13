@@ -136,6 +136,21 @@ async def convert_reservation_to_sale(
 
 
 @router.post(
+    "/{reservation_id}/validate-deposit",
+    response_model=ReservationResponse,
+    summary="Validate initial deposit",
+    description="Confirm reception of the initial deposit — sets reservation status to 'validated'. Independent of the payment schedule.",
+)
+async def validate_deposit(
+    reservation_id: int,
+    current_user: CurrentUser,
+    reservation_service: ReservationServiceDep,
+) -> ReservationResponse:
+    """Confirm the initial deposit was received (independent of installment schedule)."""
+    return await reservation_service.validate_deposit(reservation_id)
+
+
+@router.post(
     "/check-expirations",
     summary="Check expirations",
     description="Process expired reservations",

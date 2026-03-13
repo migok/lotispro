@@ -216,7 +216,7 @@ class DashboardService:
                 blocked=round(counts.blocked / total * 100, 2),
             )
 
-        # CA realized (from sales)
+        # CA realized (sales + deposits from validated reservations)
         ca_query = select(func.sum(SaleModel.price))
         if project_id:
             ca_query = ca_query.where(SaleModel.project_id == project_id)
@@ -224,6 +224,21 @@ class DashboardService:
             ca_query = ca_query.where(SaleModel.sold_by_user_id == user_id)
         ca_result = await self.session.execute(ca_query)
         ca_realise = float(ca_result.scalar() or 0)
+
+        # Add deposits from validated reservations only (confirmed by commercial, lot not yet sold)
+        deposits_validated_query = select(
+            func.coalesce(func.sum(ReservationModel.deposit), 0)
+        ).where(ReservationModel.status == "validated")
+        if project_id:
+            deposits_validated_query = deposits_validated_query.where(
+                ReservationModel.project_id == project_id
+            )
+        if user_id:
+            deposits_validated_query = deposits_validated_query.where(
+                ReservationModel.reserved_by_user_id == user_id
+            )
+        deposits_validated_result = await self.session.execute(deposits_validated_query)
+        ca_realise += float(deposits_validated_result.scalar() or 0)
 
         # CA total (sum of all lot prices - project value)
         ca_total_query = select(func.coalesce(func.sum(LotModel.price), 0))
@@ -339,6 +354,17 @@ class DashboardService:
                 elif status == "available":
                     by_type_maison[type_maison].available += 1
 
+        # Lots libérés (released or expired reservations)
+        liberes_query = select(func.count()).where(
+            ReservationModel.status.in_(("released", "expired"))
+        )
+        if project_id:
+            liberes_query = liberes_query.where(ReservationModel.project_id == project_id)
+        if user_id:
+            liberes_query = liberes_query.where(ReservationModel.reserved_by_user_id == user_id)
+        liberes_result = await self.session.execute(liberes_query)
+        lots_liberes = liberes_result.scalar() or 0
+
         return DashboardStats(
             counts=counts,
             percentages=percentages,
@@ -348,6 +374,7 @@ class DashboardService:
             ca_total=ca_total,
             taux_vente=taux_vente,
             taux_transformation=taux_transformation,
+            lots_liberes=lots_liberes,
             by_type_lot=by_type_lot,
             by_emplacement=by_emplacement,
             by_type_maison=by_type_maison,
@@ -775,11 +802,29 @@ class DashboardService:
             deposit_result = await self.session.execute(deposit_query)
             total_deposit = float(deposit_result.scalar() or 0)
 
+            # Count released/expired reservations (lots libérés)
+            released_query = select(func.count()).where(
+                ReservationModel.client_id == client.id,
+                ReservationModel.status.in_(("released", "expired")),
+            )
+            if project_id:
+                released_query = released_query.where(
+                    ReservationModel.project_id == project_id
+                )
+            if user_id:
+                released_query = released_query.where(
+                    ReservationModel.reserved_by_user_id == user_id
+                )
+            released_result = await self.session.execute(released_query)
+            released_reservations = released_result.scalar() or 0
+
             # Determine pipeline status
             if total_sales > 0:
                 pipeline_status = "buyer"
             elif active_reservations > 0:
                 pipeline_status = "active_reservation"
+            elif released_reservations > 0:
+                pipeline_status = "past_reservation"
             else:
                 pipeline_status = "prospect"
 
@@ -808,8 +853,8 @@ class DashboardService:
             )
 
         # Sort by pipeline status priority
-        status_order = {"buyer": 0, "active_reservation": 1, "prospect": 2}
-        pipeline_data.sort(key=lambda x: status_order.get(x["pipeline_status"], 3))
+        status_order = {"buyer": 0, "active_reservation": 1, "past_reservation": 2, "prospect": 3}
+        pipeline_data.sort(key=lambda x: status_order.get(x["pipeline_status"], 4))
 
         return pipeline_data
 

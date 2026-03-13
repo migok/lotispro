@@ -18,7 +18,13 @@ from app.infrastructure.database.models import (
     PaymentInstallmentModel,
     PaymentScheduleModel,
 )
-from app.infrastructure.database.repositories import PaymentRepository, ReservationRepository
+from app.infrastructure.database.repositories import (
+    LotRepository,
+    PaymentRepository,
+    ProjectRepository,
+    ReservationRepository,
+    SaleRepository,
+)
 from app.services.email_service import EmailService
 
 logger = get_logger(__name__)
@@ -292,6 +298,10 @@ class PaymentService:
         ):
             await self._validate_reservation_for_installment(inst.id)
 
+        # When all installments are paid → auto-convert reservation to sale
+        if data.status == "paid":
+            await self._auto_convert_to_sale(inst.id)
+
         # Send email confirmation for every paid installment
         if data.status == "paid":
             await self._send_payment_confirmation(inst.id, inst.amount, inst.paid_date, inst.payment_type)
@@ -310,6 +320,60 @@ class PaymentService:
                 "Reservation validated after first deposit",
                 reservation_id=reservation.id,
             )
+
+    async def _auto_convert_to_sale(self, installment_id: int) -> None:
+        """Convert reservation to sale automatically when all installments are paid."""
+        ctx = await self.payment_repo.get_installment_full_context(installment_id)
+        if not ctx:
+            return
+
+        all_insts = ctx.schedule.installments
+        if not all(i.status == "paid" for i in all_insts):
+            return
+
+        reservation = ctx.schedule.reservation
+        if reservation.status not in ("active", "validated"):
+            return
+
+        lot = reservation.lot
+        project = reservation.project
+
+        # Mark reservation as converted
+        await self.reservation_repo.update(reservation.id, status="converted")
+
+        # Full sale price = initial deposit + payment schedule amount
+        full_price = round(reservation.deposit + ctx.schedule.lot_price, 2)
+
+        # Create sale record
+        sale_repo = SaleRepository(self.session)
+        await sale_repo.create(
+            project_id=lot.project_id,
+            lot_id=lot.id,
+            client_id=reservation.client_id,
+            price=full_price,
+            sold_by_user_id=reservation.reserved_by_user_id,
+            reservation_id=reservation.id,
+            notes="Vente automatique — toutes les échéances réglées",
+        )
+
+        # Update lot status to sold
+        lot_repo = LotRepository(self.session)
+        await lot_repo.release_lot(lot.id, "sold")
+
+        # Update project sold count
+        if project:
+            project_repo = ProjectRepository(self.session)
+            await project_repo.update_lot_counts(
+                project.id,
+                sold_lots=project.sold_lots + 1,
+            )
+
+        logger.info(
+            "Lot auto-converted to sold — all installments paid",
+            reservation_id=reservation.id,
+            lot_id=lot.id,
+            lot_numero=lot.numero,
+        )
 
     async def _send_payment_confirmation(
         self,

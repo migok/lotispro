@@ -93,12 +93,13 @@ const STYLES = `
 /* KPI Strip */
 .gdb-strip {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-xl);
 }
-@media (max-width: 900px) { .gdb-strip { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 540px) { .gdb-strip { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .gdb-strip { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 700px) { .gdb-strip { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 420px) { .gdb-strip { grid-template-columns: 1fr; } }
 
 .gdb-tile {
   background: var(--bg-secondary);
@@ -452,6 +453,7 @@ const STYLES = `
 .gdb-tile:nth-child(2) { animation-delay: 0.10s; }
 .gdb-tile:nth-child(3) { animation-delay: 0.15s; }
 .gdb-tile:nth-child(4) { animation-delay: 0.20s; }
+.gdb-tile:nth-child(5) { animation-delay: 0.25s; }
 .gdb-proj-card { animation: gdb-fadein 0.35s ease both; }
 `;
 
@@ -594,10 +596,14 @@ export default function GlobalDashboard() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // Pour les commerciaux : filtrer sur leur propre activité
+      const uid = !isManager && user?.id ? user.id : null;
+      const statsUrl = uid ? `/api/dashboard/stats?user_id=${uid}` : "/api/dashboard/stats";
+      const alertsUrl = uid ? `/api/dashboard/alerts?days=7&user_id=${uid}` : "/api/dashboard/alerts?days=7";
       const [projRes, statsRes, alertRes, payRes] = await Promise.allSettled([
         apiGet("/api/projects"),
-        apiGet("/api/dashboard/stats"),
-        apiGet("/api/dashboard/alerts?days=7"),
+        apiGet(statsUrl),
+        apiGet(alertsUrl),
         apiGet("/api/dashboard/late-payments"),
       ]);
 
@@ -619,7 +625,7 @@ export default function GlobalDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, isManager, user?.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -629,6 +635,7 @@ export default function GlobalDashboard() {
   const caRealise = stats?.ca_realise ?? 0;
   const alertCount = alerts.length;
   const lateCount = latePayments.length;
+  const lotsLiberes = stats?.lots_liberes ?? 0;
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -637,7 +644,7 @@ export default function GlobalDashboard() {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="gdb-header">
         <div className="gdb-header-left">
-          <div className="gdb-eyebrow">Vue d'ensemble</div>
+          <div className="gdb-eyebrow">{isManager ? "Vue globale" : "Mon activité"}</div>
           <h1 className="gdb-title">Tableau de Bord</h1>
           <div className="gdb-subtitle">
             <strong>{todayLabel()}</strong>
@@ -655,12 +662,12 @@ export default function GlobalDashboard() {
               Nouveau projet
             </button>
           )}
-          <button className="gdb-btn gdb-btn-ghost" onClick={() => navigate("/app/clients")}>
+          <button className="gdb-btn gdb-btn-primary" onClick={() => navigate("/app/clients")}>
             <IconUsers />
             Clients
           </button>
           {isManager && (
-            <button className="gdb-btn gdb-btn-ghost" onClick={() => navigate("/app/commerciaux")}>
+            <button className="gdb-btn gdb-btn-primary" onClick={() => navigate("/app/commerciaux")}>
               <IconBriefcase />
               Commerciaux
             </button>
@@ -672,32 +679,55 @@ export default function GlobalDashboard() {
       <div className="gdb-strip">
         {loading ? (
           <>
-            <TileSkeleton /> <TileSkeleton /> <TileSkeleton /> <TileSkeleton />
+            <TileSkeleton /> <TileSkeleton /> <TileSkeleton /> <TileSkeleton /> <TileSkeleton />
           </>
         ) : (
           <>
             <div className="gdb-tile" style={{ "--tile-accent": "var(--color-primary)", "--tile-icon-bg": "var(--color-primary-subtle)" }}>
               <div className="gdb-tile-icon"><IconGrid /></div>
               <div className="gdb-tile-value num">{totalProjects}</div>
-              <div className="gdb-tile-label">Projets actifs</div>
-              <div className="gdb-tile-sub">{totalProjects === 1 ? "1 projet en cours" : `${totalProjects} projets en cours`}</div>
+              <div className="gdb-tile-label">
+                {isManager ? "Projets actifs" : "Mes projets"}
+                <span className="kpis-info-icon" title={isManager ? "Nombre de projets immobiliers actifs sur la plateforme" : "Projets immobiliers qui vous sont assignés"}>ⓘ</span>
+              </div>
+              <div className="gdb-tile-sub">{totalProjects === 1 ? "1 projet assigné" : `${totalProjects} projets assignés`}</div>
             </div>
 
-            <div className="gdb-tile" style={{ "--tile-accent": "var(--color-success)", "--tile-icon-bg": "rgba(46,204,113,0.1)" }}>
-              <div className="gdb-tile-icon" style={{ color: "var(--color-success)" }}><IconLot /></div>
-              <div className="gdb-tile-value num">{availableCount}</div>
-              <div className="gdb-tile-label">Lots disponibles</div>
-              <div className="gdb-tile-sub">
-                {stats ? `${stats.counts?.total ?? 0} lots au total` : "—"}
+            {isManager ? (
+              <div className="gdb-tile" style={{ "--tile-accent": "var(--color-success)", "--tile-icon-bg": "rgba(46,204,113,0.1)" }}>
+                <div className="gdb-tile-icon" style={{ color: "var(--color-success)" }}><IconLot /></div>
+                <div className="gdb-tile-value num">{availableCount}</div>
+                <div className="gdb-tile-label">
+                  Lots disponibles
+                  <span className="kpis-info-icon" title="Lots libres, prêts à la vente sur l'ensemble des projets">ⓘ</span>
+                </div>
+                <div className="gdb-tile-sub">
+                  {stats ? `${stats.counts?.total ?? 0} lots au total` : "—"}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="gdb-tile" style={{ "--tile-accent": "var(--color-warning)", "--tile-icon-bg": "rgba(245,158,11,0.1)" }}>
+                <div className="gdb-tile-icon" style={{ color: "var(--color-warning)" }}><IconLot /></div>
+                <div className="gdb-tile-value num">{stats?.counts?.reserved ?? 0}</div>
+                <div className="gdb-tile-label">
+                  Mes réservations
+                  <span className="kpis-info-icon" title="Lots que vous avez réservés pour vos clients — statut actif ou validé">ⓘ</span>
+                </div>
+                <div className="gdb-tile-sub">
+                  {(stats?.counts?.sold ?? 0) > 0 ? `${stats.counts.sold} vente${stats.counts.sold > 1 ? "s" : ""} confirmée${stats.counts.sold > 1 ? "s" : ""}` : "Réservations en cours"}
+                </div>
+              </div>
+            )}
 
             <div className="gdb-tile" style={{ "--tile-accent": "var(--color-primary)", "--tile-icon-bg": "var(--color-primary-subtle)" }}>
               <div className="gdb-tile-icon"><IconCash /></div>
               <div className="gdb-tile-value num" style={{ fontSize: caRealise >= 1_000_000 ? "1.45rem" : "1.75rem" }}>
                 {fmtCurrency(caRealise)}
               </div>
-              <div className="gdb-tile-label">CA Réalisé</div>
+              <div className="gdb-tile-label">
+                {isManager ? "CA Réalisé" : "Mon CA"}
+                <span className="kpis-info-icon" title="Chiffre d'affaires confirmé : ventes finalisées + acomptes des réservations validées">ⓘ</span>
+              </div>
               <div className="gdb-tile-sub">
                 {stats?.ca_potentiel ? `+ ${fmtCurrency(stats.ca_potentiel)} potentiel` : "Ventes confirmées"}
               </div>
@@ -716,11 +746,34 @@ export default function GlobalDashboard() {
               <div className="gdb-tile-value num" style={{ color: alertCount > 0 ? "var(--color-danger)" : undefined }}>
                 {alertCount}
               </div>
-              <div className="gdb-tile-label">Alertes actives</div>
+              <div className="gdb-tile-label">
+                Alertes actives
+                <span className="kpis-info-icon" title="Réservations dont la date d'expiration approche dans les 7 jours — à relancer ou convertir en vente">ⓘ</span>
+              </div>
               <div className="gdb-tile-sub">
                 {alertCount === 0
                   ? "Aucune réservation à risque"
                   : `${alertCount} réservation${alertCount > 1 ? "s" : ""} à risque`}
+              </div>
+            </div>
+
+            <div className="gdb-tile" style={{ "--tile-accent": "#a78bfa", "--tile-icon-bg": "rgba(167,139,250,0.1)" }}>
+              <div className="gdb-tile-icon" style={{ color: "#a78bfa" }}>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+                  <rect x="3" y="9" width="14" height="10" rx="2"/>
+                  <path d="M7 9V6a3 3 0 0 1 6 0"/>
+                  <circle cx="10" cy="14" r="1.2" fill="currentColor" stroke="none"/>
+                </svg>
+              </div>
+              <div className="gdb-tile-value num" style={{ color: "#a78bfa" }}>{lotsLiberes}</div>
+              <div className="gdb-tile-label">
+                Lots libérés
+                <span className="kpis-info-icon" title="Réservations annulées ou expirées — ces lots sont redevenus disponibles à la vente">ⓘ</span>
+              </div>
+              <div className="gdb-tile-sub">
+                {lotsLiberes === 0
+                  ? "Aucune réservation libérée"
+                  : `${lotsLiberes} réservation${lotsLiberes > 1 ? "s" : ""} annulée${lotsLiberes > 1 ? "s" : ""} / expirée${lotsLiberes > 1 ? "s" : ""}`}
               </div>
             </div>
           </>

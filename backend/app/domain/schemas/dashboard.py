@@ -58,6 +58,7 @@ class DashboardStats(BaseSchema):
     ca_total: float = Field(default=0, description="Total project value (sum of all lot prices)")
     taux_vente: float = Field(description="Sales rate percentage")
     taux_transformation: float = Field(description="Reservation to sale conversion rate")
+    lots_liberes: int = Field(default=0, description="Count of released/expired reservations (lots freed up)")
     by_type_lot: dict[str, CategoryStats] = Field(
         default_factory=dict,
         description="Statistics grouped by lot type",
