@@ -8,8 +8,26 @@ from pydantic import EmailStr, Field
 from app.domain.schemas.common import BaseSchema
 
 
+class UserInvite(BaseSchema):
+    """Schema for inviting a new user (manager or commercial) via email."""
+
+    email: EmailStr = Field(description="User email address")
+    first_name: str = Field(min_length=1, max_length=100, description="First name")
+    last_name: str = Field(min_length=1, max_length=100, description="Last name")
+    address: str | None = Field(default=None, max_length=255, description="Address")
+    company: str | None = Field(default=None, max_length=150, description="Company")
+    role: Literal["manager", "commercial"] = Field(description="User role")
+
+
+class SetPasswordRequest(BaseSchema):
+    """Schema for setting password via invitation token."""
+
+    token: str = Field(description="Invitation token from email")
+    password: str = Field(min_length=6, max_length=128, description="New password")
+
+
 class UserCreate(BaseSchema):
-    """Schema for user registration."""
+    """Schema for user registration (legacy / seed scripts)."""
 
     email: EmailStr = Field(description="User email address")
     password: str = Field(
@@ -18,6 +36,10 @@ class UserCreate(BaseSchema):
         description="User password (min 6 characters)",
     )
     name: str = Field(min_length=1, max_length=100, description="User display name")
+    first_name: str | None = Field(default=None, max_length=100, description="First name")
+    last_name: str | None = Field(default=None, max_length=100, description="Last name")
+    address: str | None = Field(default=None, max_length=255, description="Address")
+    company: str | None = Field(default=None, max_length=150, description="Company")
     role: Literal["manager", "commercial", "client"] = Field(
         default="client",
         description="User role in the system",
@@ -37,17 +59,15 @@ class UserResponse(BaseSchema):
     id: int
     email: str
     name: str
+    first_name: str | None = None
+    last_name: str | None = None
+    address: str | None = None
+    company: str | None = None
     role: str
+    is_pending: bool = False
+    invitation_token: str | None = None
     created_at: datetime
     updated_at: datetime
-
-
-class UserBrief(BaseSchema):
-    """Minimal user info for embedding in other responses."""
-
-    id: int
-    name: str
-    email: str
 
 
 class TokenResponse(BaseSchema):

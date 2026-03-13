@@ -1,26 +1,11 @@
 """Authentication endpoints."""
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter
 
 from app.api.dependencies import AuthServiceDep, CurrentUser
-from app.domain.schemas.user import TokenResponse, UserCreate, UserLogin, UserResponse
+from app.domain.schemas.user import TokenResponse, UserLogin, UserResponse
 
 router = APIRouter()
-
-
-@router.post(
-    "/register",
-    response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Register new user",
-    description="Create a new user account",
-)
-async def register(
-    user_data: UserCreate,
-    auth_service: AuthServiceDep,
-) -> UserResponse:
-    """Register a new user."""
-    return await auth_service.register(user_data)
 
 
 @router.post(

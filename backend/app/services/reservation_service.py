@@ -9,12 +9,14 @@ from app.core.logging import get_logger
 from app.domain.schemas.reservation import (
     ReservationCreate,
     ReservationFilter,
+    ReservationRelease,
     ReservationResponse,
 )
 from app.domain.schemas.sale import SaleFromReservation, SaleResponse
 from app.infrastructure.database.repositories import (
     ClientRepository,
     LotRepository,
+    PaymentRepository,
     ProjectRepository,
     ReservationRepository,
     SaleRepository,
@@ -34,6 +36,7 @@ class ReservationService:
         self.client_repo = ClientRepository(session)
         self.project_repo = ProjectRepository(session)
         self.sale_repo = SaleRepository(session)
+        self.payment_repo = PaymentRepository(session)
 
     async def get_reservations(
         self,
@@ -63,6 +66,10 @@ class ReservationService:
                 reservation_date=r.reservation_date,
                 expiration_date=r.expiration_date,
                 deposit=r.deposit,
+                deposit_date=r.deposit_date,
+                deposit_refund_amount=r.deposit_refund_amount,
+                deposit_refund_date=r.deposit_refund_date,
+                release_reason=r.release_reason,
                 notes=r.notes,
                 status=r.status,
                 created_at=r.created_at,
@@ -97,6 +104,10 @@ class ReservationService:
             reservation_date=reservation.reservation_date,
             expiration_date=reservation.expiration_date,
             deposit=reservation.deposit,
+            deposit_date=reservation.deposit_date,
+            deposit_refund_amount=reservation.deposit_refund_amount,
+            deposit_refund_date=reservation.deposit_refund_date,
+            release_reason=reservation.release_reason,
             notes=reservation.notes,
             status=reservation.status,
             created_at=reservation.created_at,
@@ -137,6 +148,13 @@ class ReservationService:
         if not client:
             raise NotFoundError("Client", data.client_id)
 
+        # Validate deposit amount
+        if lot.price is not None and data.deposit >= lot.price:
+            raise BusinessRuleError(
+                message=f"Deposit ({data.deposit}) must be less than lot price ({lot.price})",
+                rule="deposit_exceeds_price",
+            )
+
         # Set expiration date (use reservation_days or explicit expiration_date)
         expiration_date = data.expiration_date or (
             datetime.now(timezone.utc) + timedelta(days=data.reservation_days)
@@ -150,6 +168,7 @@ class ReservationService:
             reserved_by_user_id=user_id,
             expiration_date=expiration_date,
             deposit=data.deposit,
+            deposit_date=data.deposit_date,
             notes=data.notes,
         )
 
@@ -177,47 +196,72 @@ class ReservationService:
             reservation_date=reservation.reservation_date,
             expiration_date=reservation.expiration_date,
             deposit=reservation.deposit,
+            deposit_date=reservation.deposit_date,
+            deposit_refund_amount=reservation.deposit_refund_amount,
+            deposit_refund_date=reservation.deposit_refund_date,
+            release_reason=reservation.release_reason,
             notes=reservation.notes,
             status=reservation.status,
             created_at=reservation.created_at,
             updated_at=reservation.updated_at,
         )
 
-    async def release_reservation(self, reservation_id: int) -> ReservationResponse:
+    async def release_reservation(
+        self,
+        reservation_id: int,
+        user_id: int,
+        user_role: str,
+        data: ReservationRelease | None = None,
+    ) -> ReservationResponse:
         """Release (cancel) an active reservation.
 
         Args:
             reservation_id: Reservation ID
+            user_id: User requesting the release
+            user_role: Role of the user (manager or commercial)
+            data: Optional refund information
 
         Returns:
             Updated reservation response
 
         Raises:
             NotFoundError: If reservation not found
-            BusinessRuleError: If reservation is not active
+            BusinessRuleError: If reservation is not active or user doesn't have permission
         """
         reservation = await self.reservation_repo.get_by_id(reservation_id)
         if not reservation:
             raise NotFoundError("Reservation", reservation_id)
 
-        if reservation.status != "active":
+        if reservation.status not in ("active", "validated"):
             raise BusinessRuleError(
                 message=f"Cannot release reservation with status '{reservation.status}'",
                 rule="reservation_not_active",
             )
 
-        # Update reservation status
-        updated = await self.reservation_repo.update(
-            reservation_id,
-            status="released",
-        )
+        # Check permissions: only manager or the commercial who reserved can release
+        if user_role != "manager" and reservation.reserved_by_user_id != user_id:
+            raise BusinessRuleError(
+                message="You don't have permission to release this reservation",
+                rule="insufficient_permissions",
+            )
 
-        # Update lot status
-        await self.lot_repo.update(
-            reservation.lot_id,
-            status="available",
-            current_reservation_id=None,
-        )
+        # Update reservation status with optional refund info
+        update_kwargs: dict = {"status": "released"}
+        if data:
+            if data.deposit_refund_amount is not None:
+                update_kwargs["deposit_refund_amount"] = data.deposit_refund_amount
+            if data.deposit_refund_date is not None:
+                update_kwargs["deposit_refund_date"] = data.deposit_refund_date
+            if data.release_reason is not None:
+                update_kwargs["release_reason"] = data.release_reason
+
+        updated = await self.reservation_repo.update(reservation_id, **update_kwargs)
+
+        # Update lot status and clear current_reservation_id
+        await self.lot_repo.release_lot(reservation.lot_id, status="available")
+
+        # Delete associated payment schedule if any
+        await self.payment_repo.delete_by_reservation(reservation_id)
 
         logger.info(
             "Reservation released",
@@ -234,6 +278,10 @@ class ReservationService:
             reservation_date=updated.reservation_date,
             expiration_date=updated.expiration_date,
             deposit=updated.deposit,
+            deposit_date=updated.deposit_date,
+            deposit_refund_amount=updated.deposit_refund_amount,
+            deposit_refund_date=updated.deposit_refund_date,
+            release_reason=updated.release_reason,
             notes=updated.notes,
             status=updated.status,
             created_at=updated.created_at,
@@ -262,7 +310,7 @@ class ReservationService:
         if not reservation:
             raise NotFoundError("Reservation", reservation_id)
 
-        if reservation.status != "active":
+        if reservation.status not in ("active", "validated"):
             raise BusinessRuleError(
                 message=f"Cannot extend reservation with status '{reservation.status}'",
                 rule="reservation_not_active",
@@ -297,6 +345,10 @@ class ReservationService:
             reservation_date=updated.reservation_date,
             expiration_date=updated.expiration_date,
             deposit=updated.deposit,
+            deposit_date=updated.deposit_date,
+            deposit_refund_amount=updated.deposit_refund_amount,
+            deposit_refund_date=updated.deposit_refund_date,
+            release_reason=updated.release_reason,
             notes=updated.notes,
             status=updated.status,
             created_at=updated.created_at,
@@ -308,6 +360,7 @@ class ReservationService:
         reservation_id: int,
         sale_data: SaleFromReservation,
         user_id: int | None = None,
+        user_role: str | None = None,
     ) -> SaleResponse:
         """Convert reservation to sale.
 
@@ -315,22 +368,30 @@ class ReservationService:
             reservation_id: Reservation ID
             sale_data: Sale data
             user_id: User performing conversion
+            user_role: Role of the user (manager or commercial)
 
         Returns:
             Created sale response
 
         Raises:
             NotFoundError: If reservation not found
-            BusinessRuleError: If reservation cannot be converted
+            BusinessRuleError: If reservation cannot be converted or user doesn't have permission
         """
         reservation = await self.reservation_repo.get_by_id(reservation_id)
         if not reservation:
             raise NotFoundError("Reservation", reservation_id)
 
-        if reservation.status != "active":
+        if reservation.status not in ("active", "validated"):
             raise BusinessRuleError(
                 message=f"Cannot convert reservation with status '{reservation.status}'",
                 rule="reservation_not_active",
+            )
+
+        # Check permissions: only manager or the commercial who reserved can finalize
+        if user_role and user_role != "manager" and reservation.reserved_by_user_id != user_id:
+            raise BusinessRuleError(
+                message="You don't have permission to finalize this reservation",
+                rule="insufficient_permissions",
             )
 
         # Create sale
@@ -350,12 +411,8 @@ class ReservationService:
             status="converted",
         )
 
-        # Update lot status
-        await self.lot_repo.update(
-            reservation.lot_id,
-            status="sold",
-            current_reservation_id=None,
-        )
+        # Update lot status and clear current_reservation_id
+        await self.lot_repo.release_lot(reservation.lot_id, status="sold")
 
         # Update project sold count
         project = await self.project_repo.get_by_id(reservation.project_id)
@@ -386,6 +443,17 @@ class ReservationService:
             created_at=sale.created_at,
         )
 
+    async def get_reservation_details(self, reservation_id: int) -> dict | None:
+        """Get reservation with all details needed for certificate generation.
+
+        Args:
+            reservation_id: Reservation ID
+
+        Returns:
+            Reservation details dict or None
+        """
+        return await self.reservation_repo.get_with_details(reservation_id)
+
     async def check_expirations(self) -> int:
         """Process expired reservations.
 
@@ -401,11 +469,8 @@ class ReservationService:
                 status="expired",
             )
 
-            await self.lot_repo.update(
-                reservation.lot_id,
-                status="available",
-                current_reservation_id=None,
-            )
+            await self.lot_repo.release_lot(reservation.lot_id, status="available")
+            await self.payment_repo.delete_by_reservation(reservation.id)
 
             count += 1
 

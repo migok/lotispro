@@ -21,11 +21,6 @@ class ProjectCreate(BaseSchema):
         default="private",
         description="Project visibility",
     )
-    ca_objectif: float | None = Field(
-        default=None,
-        ge=0,
-        description="Revenue target (CA objectif)",
-    )
 
 
 class ProjectUpdate(BaseSchema):
@@ -46,11 +41,6 @@ class ProjectUpdate(BaseSchema):
         default=None,
         description="Project visibility",
     )
-    ca_objectif: float | None = Field(
-        default=None,
-        ge=0,
-        description="Revenue target",
-    )
 
 
 class ProjectResponse(BaseSchema):
@@ -62,7 +52,16 @@ class ProjectResponse(BaseSchema):
     visibility: str
     total_lots: int
     sold_lots: int
+    reserved_lots: int = Field(default=0, description="Number of reserved lots")
     ca_objectif: float | None
+    geojson_file_url: str | None = Field(
+        default=None,
+        description="URL of the uploaded GeoJSON file in Supabase Storage",
+    )
+    image_url: str | None = Field(
+        default=None,
+        description="URL of the project cover image",
+    )
     created_by: int
     created_at: datetime
     updated_at: datetime

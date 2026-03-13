@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, update
 
 from app.domain.schemas.lot import LotFilter
 from app.infrastructure.database.models import LotModel
@@ -164,6 +164,7 @@ class LotRepository(BaseRepository[LotModel]):
         from app.infrastructure.database.models import (
             ClientModel,
             ReservationModel,
+            UserModel,
         )
 
         now = datetime.now(timezone.utc)
@@ -173,23 +174,29 @@ class LotRepository(BaseRepository[LotModel]):
                 LotModel,
                 ReservationModel,
                 ClientModel,
+                UserModel,
             )
             .outerjoin(
                 ReservationModel,
                 and_(
                     ReservationModel.lot_id == LotModel.id,
-                    ReservationModel.status == "active",
+                    ReservationModel.status.in_(["active", "validated"]),
                 ),
             )
             .outerjoin(ClientModel, ClientModel.id == ReservationModel.client_id)
+            .outerjoin(UserModel, UserModel.id == ReservationModel.reserved_by_user_id)
             .where(LotModel.project_id == project_id)
             .order_by(LotModel.numero)
         )
 
         result = await self.session.execute(query)
         lots_data = []
+        seen_lot_ids: set[int] = set()
 
-        for lot, reservation, client in result.all():
+        for lot, reservation, client, reserved_by_user in result.all():
+            if lot.id in seen_lot_ids:
+                continue
+            seen_lot_ids.add(lot.id)
             # Calculate days_in_status based on the lot's updated_at timestamp
             if lot.updated_at:
                 lot_updated = lot.updated_at
@@ -227,6 +234,7 @@ class LotRepository(BaseRepository[LotModel]):
                         "deposit": reservation.deposit,
                         "reservation_status": reservation.status,
                         "reserved_by_user_id": reservation.reserved_by_user_id,
+                        "reserved_by": reserved_by_user.name if reserved_by_user else None,
                     }
                 )
 
@@ -242,3 +250,49 @@ class LotRepository(BaseRepository[LotModel]):
             lots_data.append(lot_dict)
 
         return lots_data
+
+    async def bulk_update_metadata(
+        self,
+        project_id: int,
+        lot_ids: list[int],
+        updates: dict,
+    ) -> int:
+        """Bulk update metadata fields on a set of lots within a project.
+
+        Args:
+            project_id: Project ID (scope guard — only updates lots in this project)
+            lot_ids: List of lot IDs to update
+            updates: Dict of fields/values to set (None values already excluded by caller)
+
+        Returns:
+            Number of rows updated
+        """
+        if not updates:
+            return 0
+
+        result = await self.session.execute(
+            update(LotModel)
+            .where(
+                and_(
+                    LotModel.project_id == project_id,
+                    LotModel.id.in_(lot_ids),
+                )
+            )
+            .values(**updates)
+        )
+        await self.session.flush()
+        return result.rowcount
+
+    async def release_lot(self, lot_id: int, status: str) -> None:
+        """Update lot status and explicitly clear current_reservation_id to NULL.
+
+        Used when a reservation is released, expired, or converted to sale.
+        The base update() method filters None values, so this method handles
+        the explicit NULL assignment directly.
+        """
+        await self.session.execute(
+            update(LotModel)
+            .where(LotModel.id == lot_id)
+            .values(status=status, current_reservation_id=None)
+        )
+        await self.session.flush()

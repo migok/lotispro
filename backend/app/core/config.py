@@ -37,7 +37,7 @@ class Settings(BaseSettings):
         description="Secret key for JWT encoding. Must be at least 32 characters.",
     )
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour
 
     # Database
     DATABASE_URL: str = Field(
@@ -48,18 +48,16 @@ class Settings(BaseSettings):
     DATABASE_MAX_OVERFLOW: int = 10
     DATABASE_POOL_TIMEOUT: int = 30
 
-    # SQLite fallback for development/testing
-    SQLITE_URL: str | None = None
-    USE_SQLITE: bool = False
-
     # CORS
     CORS_ORIGINS: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ]
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: list[str] = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
-    CORS_ALLOW_HEADERS: list[str] = ["*"]
+    CORS_ALLOW_HEADERS: list[str] = ["Authorization", "Content-Type", "X-Request-ID"]
 
     # Rate Limiting
     RATE_LIMIT_ENABLED: bool = True
@@ -69,6 +67,33 @@ class Settings(BaseSettings):
     # File Storage
     DATA_DIR: Path = Path(__file__).resolve().parent.parent.parent / "data"
     MAX_UPLOAD_SIZE_MB: int = 10
+
+    # Supabase Configuration
+    SUPABASE_URL: str | None = None
+    SUPABASE_PUBLIC_URL: str | None = None  # External URL for public file links (browser-accessible)
+    SUPABASE_PUBLISHABLE_KEY: str | None = None
+    SUPABASE_SECRET_KEY: str | None = None
+    SUPABASE_STORAGE_URL: str | None = None
+    SUPABASE_STORAGE_BUCKET: str = "geojson-files"
+    SUPABASE_IMAGES_BUCKET: str = "project-images"
+
+    @property
+    def supabase_public_base_url(self) -> str | None:
+        """URL accessible by the browser for public storage links.
+
+        Defaults to SUPABASE_URL. Override with SUPABASE_PUBLIC_URL when
+        the backend connects via an internal Docker hostname but the browser
+        needs to access files via the host-mapped port (e.g. 127.0.0.1:54321).
+        """
+        return (self.SUPABASE_PUBLIC_URL or self.SUPABASE_URL or "").rstrip("/")
+
+    # Frontend
+    FRONTEND_URL: str = "http://localhost:5173"
+
+    # Email (Resend)
+    RESEND_API_KEY: str | None = None
+    EMAIL_FROM: str = "LotisPro <noreply@resend.dev>"
+    INVITATION_EXPIRE_HOURS: int = 48
 
     # Logging
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
@@ -92,13 +117,6 @@ class Settings(BaseSettings):
         path = Path(v)
         path.mkdir(parents=True, exist_ok=True)
         return path
-
-    @property
-    def database_url_sync(self) -> str:
-        """Return synchronous database URL for Alembic migrations."""
-        if self.USE_SQLITE and self.SQLITE_URL:
-            return self.SQLITE_URL.replace("+aiosqlite", "")
-        return str(self.DATABASE_URL).replace("+asyncpg", "+psycopg2")
 
     @property
     def is_production(self) -> bool:

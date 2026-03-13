@@ -8,6 +8,9 @@ from app.domain.schemas.reservation import ReservationFilter
 from app.infrastructure.database.models import (
     ClientModel,
     LotModel,
+    PaymentInstallmentModel,
+    PaymentScheduleModel,
+    ProjectModel,
     ReservationModel,
     UserModel,
 )
@@ -71,7 +74,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
         result = await self.session.execute(
             select(ReservationModel).where(
                 and_(
-                    ReservationModel.status == "active",
+                    ReservationModel.status.in_(("active", "validated")),
                     ReservationModel.expiration_date < now,
                 )
             )
@@ -90,6 +93,17 @@ class ReservationRepository(BaseRepository[ReservationModel]):
         now = datetime.now(timezone.utc)
         threshold_date = now + timedelta(days=days_threshold)
 
+        # Subquery: reservation IDs that have at least one paid installment
+        paid_reservation_ids = (
+            select(PaymentScheduleModel.reservation_id)
+            .join(
+                PaymentInstallmentModel,
+                PaymentInstallmentModel.schedule_id == PaymentScheduleModel.id,
+            )
+            .where(PaymentInstallmentModel.status == "paid")
+            .scalar_subquery()
+        )
+
         query = (
             select(ReservationModel, LotModel, ClientModel, UserModel)
             .join(LotModel, LotModel.id == ReservationModel.lot_id)
@@ -99,6 +113,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
                 and_(
                     ReservationModel.status == "active",
                     ReservationModel.expiration_date <= threshold_date,
+                    ReservationModel.id.not_in(paid_reservation_ids),
                 )
             )
             .order_by(ReservationModel.expiration_date)
@@ -147,10 +162,11 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             Reservation details dict or None
         """
         query = (
-            select(ReservationModel, LotModel, ClientModel, UserModel)
+            select(ReservationModel, LotModel, ClientModel, UserModel, ProjectModel)
             .join(LotModel, LotModel.id == ReservationModel.lot_id)
             .join(ClientModel, ClientModel.id == ReservationModel.client_id)
             .outerjoin(UserModel, UserModel.id == ReservationModel.reserved_by_user_id)
+            .join(ProjectModel, ProjectModel.id == ReservationModel.project_id)
             .where(ReservationModel.id == reservation_id)
         )
 
@@ -160,7 +176,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
         if not row:
             return None
 
-        reservation, lot, client, reserver = row
+        reservation, lot, client, reserver, project = row
 
         return {
             "id": reservation.id,
@@ -171,6 +187,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             "reservation_date": reservation.reservation_date,
             "expiration_date": reservation.expiration_date,
             "deposit": reservation.deposit,
+            "deposit_date": reservation.deposit_date,
             "notes": reservation.notes,
             "status": reservation.status,
             "created_at": reservation.created_at,
@@ -181,7 +198,10 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             "client_name": client.name,
             "client_phone": client.phone,
             "client_email": client.email,
+            "client_cin": client.cin,
+            "client_address": client.address,
             "reserved_by_name": reserver.name if reserver else None,
+            "project_name": project.name,
         }
 
     async def get_active_for_lot(self, lot_id: int) -> ReservationModel | None:

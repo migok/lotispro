@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     dashboard,
     health,
     lots,
+    payments,
     projects,
     reservations,
     sales,
@@ -75,4 +76,10 @@ api_router.include_router(
     audit.router,
     prefix="/audit-logs",
     tags=["Audit"],
+)
+
+api_router.include_router(
+    payments.router,
+    prefix="/payments",
+    tags=["Payments"],
 )

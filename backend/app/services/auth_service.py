@@ -1,12 +1,12 @@
-"""Authentication service - Login, registration, and token management."""
+"""Authentication service - Login and token management."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import AlreadyExistsError, AuthenticationError
+from app.core.exceptions import AuthenticationError
 from app.core.logging import get_logger
-from app.core.security import create_access_token, hash_password, verify_password
-from app.domain.schemas.user import TokenResponse, UserCreate, UserLogin, UserResponse
+from app.core.security import create_access_token, verify_password
+from app.domain.schemas.user import TokenResponse, UserLogin, UserResponse
 from app.infrastructure.database.repositories import UserRepository
 
 logger = get_logger(__name__)
@@ -23,57 +23,6 @@ class AuthService:
         """
         self.session = session
         self.user_repo = UserRepository(session)
-
-    async def register(self, user_data: UserCreate) -> UserResponse:
-        """Register a new user.
-
-        Args:
-            user_data: User registration data
-
-        Returns:
-            Created user response
-
-        Raises:
-            AlreadyExistsError: If email already in use
-        """
-        # Check if email exists
-        if await self.user_repo.email_exists(user_data.email):
-            logger.warning(
-                "Registration failed - email exists",
-                email=user_data.email,
-            )
-            raise AlreadyExistsError(
-                resource="User",
-                field="email",
-                value=user_data.email,
-            )
-
-        # Hash password
-        password_hash = hash_password(user_data.password)
-
-        # Create user
-        user = await self.user_repo.create_user(
-            email=user_data.email,
-            password_hash=password_hash,
-            name=user_data.name,
-            role=user_data.role,
-        )
-
-        logger.info(
-            "User registered successfully",
-            user_id=user.id,
-            email=user.email,
-            role=user.role,
-        )
-
-        return UserResponse(
-            id=user.id,
-            email=user.email,
-            name=user.name,
-            role=user.role,
-            created_at=user.created_at,
-            updated_at=user.updated_at,
-        )
 
     async def login(self, credentials: UserLogin) -> TokenResponse:
         """Authenticate user and generate token.

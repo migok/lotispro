@@ -3,10 +3,11 @@
 These models map to database tables and provide the persistence layer.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     CheckConstraint,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -39,11 +40,17 @@ class UserModel(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    company: Mapped[str | None] = mapped_column(String(150), nullable=True)
     role: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
         default="client",
     )
+    invitation_token: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
+    invitation_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -92,6 +99,8 @@ class ProjectModel(Base):
     total_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     sold_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ca_objectif: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geojson_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id"),
@@ -254,6 +263,7 @@ class ClientModel(Base):
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     client_type: Mapped[str] = mapped_column(String(20), nullable=False, default="autre")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(
@@ -334,6 +344,10 @@ class ReservationModel(Base):
         nullable=False,
     )
     deposit: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    deposit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    deposit_refund_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    deposit_refund_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    release_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(
@@ -367,10 +381,15 @@ class ReservationModel(Base):
         back_populates="reservation",
         uselist=False,
     )
+    payment_schedule: Mapped["PaymentScheduleModel | None"] = relationship(
+        "PaymentScheduleModel",
+        back_populates="reservation",
+        uselist=False,
+    )
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('active', 'expired', 'released', 'converted')",
+            "status IN ('active', 'validated', 'expired', 'released', 'converted')",
             name="valid_reservation_status",
         ),
         Index("ix_reservations_status", "status"),
@@ -465,4 +484,99 @@ class AuditLogModel(Base):
     __table_args__ = (
         Index("ix_audit_entity", "entity_type", "entity_id"),
         Index("ix_audit_created", "created_at"),
+    )
+
+
+class PaymentScheduleModel(Base):
+    """Payment schedule for a reservation — defines deposit/balance split and installments."""
+
+    __tablename__ = "payment_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reservation_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("reservations.id"),
+        nullable=False,
+        unique=True,
+    )
+    lot_price: Mapped[float] = mapped_column(Float, nullable=False)
+    deposit_pct: Mapped[float] = mapped_column(Float, nullable=False, default=50.0)
+    balance_pct: Mapped[float] = mapped_column(Float, nullable=False, default=50.0)
+    deposit_total: Mapped[float] = mapped_column(Float, nullable=False)
+    balance_total: Mapped[float] = mapped_column(Float, nullable=False)
+    balance_delay_months: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    # Relationships
+    reservation: Mapped["ReservationModel"] = relationship(
+        "ReservationModel",
+        back_populates="payment_schedule",
+    )
+    installments: Mapped[list["PaymentInstallmentModel"]] = relationship(
+        "PaymentInstallmentModel",
+        back_populates="schedule",
+        cascade="all, delete-orphan",
+        order_by="PaymentInstallmentModel.due_date",
+    )
+
+    __table_args__ = (Index("ix_payment_schedules_reservation", "reservation_id"),)
+
+
+class PaymentInstallmentModel(Base):
+    """Individual payment installment within a payment schedule."""
+
+    __tablename__ = "payment_installments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    schedule_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("payment_schedules.id"),
+        nullable=False,
+    )
+    payment_type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'deposit' | 'balance'
+    installment_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    paid_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    # Relationships
+    schedule: Mapped["PaymentScheduleModel"] = relationship(
+        "PaymentScheduleModel",
+        back_populates="installments",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "payment_type IN ('deposit', 'balance')",
+            name="valid_payment_type",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'paid')",
+            name="valid_installment_status",
+        ),
+        Index("ix_installments_schedule", "schedule_id"),
+        Index("ix_installments_due_date", "due_date"),
     )

@@ -11,7 +11,7 @@ from app.core.exceptions import (
     NotFoundError,
 )
 from app.core.logging import get_logger
-from app.domain.schemas.lot import LotCreate, LotFilter, LotResponse, LotUpdate
+from app.domain.schemas.lot import LotBulkMetadataUpdate, LotCreate, LotFilter, LotResponse, LotUpdate
 from app.infrastructure.database.repositories import LotRepository, ProjectRepository
 
 logger = get_logger(__name__)
@@ -234,6 +234,59 @@ class LotService:
             created_at=updated.created_at,
             updated_at=updated.updated_at,
         )
+
+    async def bulk_update_lot_metadata(
+        self,
+        project_id: int,
+        data: LotBulkMetadataUpdate,
+    ) -> int:
+        """Bulk update metadata on multiple lots (manager only).
+
+        Args:
+            project_id: Project ID — lots must belong to this project
+            data: Bulk update payload with lot_ids and optional metadata fields
+
+        Returns:
+            Number of lots updated
+        """
+        # Check project exists
+        project = await self.project_repo.get_by_id(project_id)
+        if not project:
+            raise NotFoundError("Project", project_id)
+
+        # Build update dict — only include explicitly provided (non-None) fields
+        updates = {}
+        if data.type_lot is not None:
+            updates["type_lot"] = data.type_lot
+        if data.emplacement is not None:
+            updates["emplacement"] = data.emplacement
+        if data.type_maison is not None:
+            updates["type_maison"] = data.type_maison
+        if data.price is not None:
+            updates["price"] = data.price
+        if data.surface is not None:
+            updates["surface"] = data.surface
+        if data.zone is not None:
+            updates["zone"] = data.zone
+
+        if not updates:
+            return 0
+
+        count = await self.lot_repo.bulk_update_metadata(
+            project_id=project_id,
+            lot_ids=data.lot_ids,
+            updates=updates,
+        )
+
+        logger.info(
+            "Bulk lot metadata updated",
+            project_id=project_id,
+            lot_ids=data.lot_ids,
+            fields=list(updates.keys()),
+            count=count,
+        )
+
+        return count
 
     async def delete_lot(self, lot_id: int) -> None:
         """Delete a lot.

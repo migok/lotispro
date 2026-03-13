@@ -106,19 +106,21 @@ class SaleService:
         self,
         data: SaleCreate,
         user_id: int | None = None,
+        user_role: str | None = None,
     ) -> SaleResponse:
         """Create a direct sale (without prior reservation).
 
         Args:
             data: Sale creation data
             user_id: User creating the sale
+            user_role: Role of the user (manager or commercial)
 
         Returns:
             Created sale response
 
         Raises:
             NotFoundError: If lot or client not found
-            BusinessRuleError: If lot cannot be sold
+            BusinessRuleError: If lot cannot be sold or user doesn't have permission
         """
         # Check lot exists
         lot = await self.lot_repo.get_by_id(data.lot_id)
@@ -142,18 +144,27 @@ class SaleService:
         if not client:
             raise NotFoundError("Client", data.client_id)
 
-        # If lot has active reservation, release it first
+        # If lot has active reservation, check permissions and release it
+        reservation_id_to_use = data.reservation_id
         if lot.current_reservation_id:
             active_reservation = await self.reservation_repo.get_active_for_lot(
                 data.lot_id
             )
             if active_reservation:
+                # Check permissions: only manager or the commercial who reserved can finalize
+                if user_role and user_role != "manager" and active_reservation.reserved_by_user_id != user_id:
+                    raise BusinessRuleError(
+                        message="You don't have permission to finalize this reservation. Only the commercial who reserved the lot can finalize the sale.",
+                        rule="insufficient_permissions",
+                    )
+
                 await self.reservation_repo.update(
                     active_reservation.id,
-                    status="released",
+                    status="converted",
                 )
+                reservation_id_to_use = active_reservation.id
                 logger.info(
-                    "Active reservation released for direct sale",
+                    "Active reservation converted to sale",
                     reservation_id=active_reservation.id,
                     lot_id=data.lot_id,
                 )
@@ -165,6 +176,7 @@ class SaleService:
             client_id=data.client_id,
             price=data.price,
             sold_by_user_id=user_id,
+            reservation_id=reservation_id_to_use,
             notes=data.notes,
         )
 

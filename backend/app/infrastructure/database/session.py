@@ -6,39 +6,29 @@ Provides async session factory and dependency injection for FastAPI.
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import NullPool
-
 from app.core.config import settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+database_url = str(settings.DATABASE_URL)
+
 # Engine configuration
 engine_kwargs = {
     "echo": settings.DEBUG,
     "future": True,
+    "pool_size": settings.DATABASE_POOL_SIZE,
+    "max_overflow": settings.DATABASE_MAX_OVERFLOW,
+    "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
+    "pool_pre_ping": True,
 }
-
-# Use NullPool for SQLite (doesn't support connection pooling well)
-if settings.USE_SQLITE:
-    engine_kwargs["poolclass"] = NullPool
-    database_url = settings.SQLITE_URL or "sqlite+aiosqlite:///./lots.db"
-else:
-    engine_kwargs.update(
-        {
-            "pool_size": settings.DATABASE_POOL_SIZE,
-            "max_overflow": settings.DATABASE_MAX_OVERFLOW,
-            "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
-            "pool_pre_ping": True,
-        }
-    )
-    database_url = str(settings.DATABASE_URL)
 
 # Create async engine
 engine: AsyncEngine = create_async_engine(database_url, **engine_kwargs)
@@ -100,14 +90,16 @@ async def init_db() -> None:
     Should be called on application startup.
     In production, use Alembic migrations instead.
     """
-    from app.infrastructure.database.models import Base
-
     logger.info("Initializing database", database_url=database_url[:50] + "...")
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    if settings.is_development:
+        from app.infrastructure.database.models import Base
 
-    logger.info("Database initialized successfully")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables created (development mode)")
+    else:
+        logger.info("Production mode: skipping create_all — run 'alembic upgrade head'")
 
 
 async def close_db() -> None:
@@ -128,7 +120,7 @@ async def check_db_connection() -> bool:
     """
     try:
         async with async_session_factory() as session:
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
             return True
     except Exception as e:
         logger.error("Database connection check failed", error=str(e))

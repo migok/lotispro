@@ -3,6 +3,7 @@
 Provides secure authentication primitives for the application.
 """
 
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -242,3 +243,8 @@ class RoleChecker:
                 detail=f"Access denied. Required roles: {', '.join(self.allowed_roles)}",
             )
         return True
+
+
+def generate_invitation_token() -> str:
+    """Generate a secure random invitation token (URL-safe, 48 bytes → 64 chars)."""
+    return secrets.token_urlsafe(48)

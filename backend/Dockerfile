@@ -3,7 +3,7 @@
 # ============================================
 
 # Stage 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.13-slim as builder
 
 WORKDIR /build
 
@@ -19,10 +19,10 @@ RUN pip install --no-cache-dir build && \
     pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels \
     fastapi uvicorn gunicorn pydantic pydantic-settings \
     sqlalchemy asyncpg alembic pyjwt passlib bcrypt \
-    structlog python-multipart httpx email-validator
+    structlog python-multipart httpx email-validator supabase fpdf2 resend
 
 # Stage 2: Production
-FROM python:3.11-slim as production
+FROM python:3.13-slim as production
 
 # Labels
 LABEL maintainer="your-email@example.com"
@@ -67,23 +67,23 @@ USER appuser
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8000}/api/health || exit 1
 
-# Default command
-CMD ["gunicorn", "app.main:app", \
-     "--bind", "0.0.0.0:8000", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--workers", "4", \
-     "--threads", "2", \
-     "--timeout", "120", \
-     "--keep-alive", "5", \
-     "--max-requests", "1000", \
-     "--max-requests-jitter", "50", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "--capture-output", \
-     "--enable-stdio-inheritance"]
+# Default command (shell form to expand $PORT set by Railway)
+CMD gunicorn app.main:app \
+    --bind 0.0.0.0:${PORT:-8000} \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --workers 2 \
+    --threads 2 \
+    --timeout 120 \
+    --keep-alive 5 \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    --access-logfile - \
+    --error-logfile - \
+    --capture-output \
+    --enable-stdio-inheritance
 
 # ============================================
 # Development stage
@@ -101,7 +101,4 @@ RUN pip install --no-cache-dir \
 USER appuser
 
 # Override command for development
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--reload"]
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --reload

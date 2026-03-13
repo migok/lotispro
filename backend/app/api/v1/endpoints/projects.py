@@ -3,9 +3,9 @@
 import csv
 import io
 
-from fastapi import APIRouter, File, Query, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 
-from app.api.dependencies import CurrentUser, ManagerUser, ProjectServiceDep
+from app.api.dependencies import CurrentUser, LotServiceDep, ManagerUser, ProjectServiceDep
 from app.domain.schemas.common import MessageResponse
 from app.domain.schemas.project import (
     AssignUserRequest,
@@ -15,6 +15,7 @@ from app.domain.schemas.project import (
     ProjectResponse,
     ProjectUpdate,
 )
+from app.domain.schemas.lot import LotBulkMetadataUpdate
 from app.domain.schemas.user import UserResponse
 
 router = APIRouter()
@@ -166,12 +167,18 @@ async def get_project_kpis(
     project_id: int,
     current_user: CurrentUser,
     project_service: ProjectServiceDep,
+    user_id: int | None = None,
 ) -> ProjectKPIs:
-    """Get project KPIs including sales rates, revenue, and lot statistics."""
+    """Get project KPIs including sales rates, revenue, and lot statistics.
+
+    Args:
+        user_id: Optional filter by commercial user ID (managers only)
+    """
     return await project_service.get_project_kpis(
         project_id=project_id,
         user_id=current_user.id,
         user_role=current_user.role,
+        filter_user_id=user_id if current_user.role == "manager" else None,
     )
 
 
@@ -220,6 +227,60 @@ async def get_project_history(
     )
 
 
+# Image upload endpoint
+_ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+_MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post(
+    "/{project_id}/upload-image",
+    response_model=ProjectResponse,
+    summary="Upload project image",
+    description="Upload a cover image for the project to Supabase Storage (manager only)",
+)
+async def upload_project_image(
+    project_id: int,
+    current_user: ManagerUser,
+    project_service: ProjectServiceDep,
+    file: UploadFile = File(..., description="Image file (jpg, png, webp, gif)"),
+) -> ProjectResponse:
+    """Upload a cover image for a project to Supabase Storage."""
+    if file.content_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Format non supporté '{file.content_type}'. Acceptés : jpg, png, webp, gif",
+        )
+
+    content = await file.read()
+    if len(content) > _MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Fichier trop grand. Maximum 5 Mo.",
+        )
+
+    return await project_service.upload_project_image(
+        project_id=project_id,
+        file_content=content,
+        filename=file.filename or f"cover.{file.content_type.split('/')[-1]}",
+        content_type=file.content_type,
+    )
+
+
+@router.delete(
+    "/{project_id}/image",
+    response_model=ProjectResponse,
+    summary="Delete project image",
+    description="Remove the cover image of a project from Supabase Storage (manager only)",
+)
+async def delete_project_image(
+    project_id: int,
+    current_user: ManagerUser,
+    project_service: ProjectServiceDep,
+) -> ProjectResponse:
+    """Remove a project's cover image from Supabase Storage."""
+    return await project_service.remove_project_image(project_id)
+
+
 # GeoJSON endpoints
 @router.post(
     "/{project_id}/upload-geojson",
@@ -246,6 +307,40 @@ async def upload_geojson(
         user_id=current_user.id,
         user_role=current_user.role,
         geojson_data=geojson_data,
+    )
+
+
+@router.post(
+    "/{project_id}/upload-geojson-file",
+    summary="Upload GeoJSON File",
+    description="Upload a GeoJSON file to Supabase Storage and create/update lots (manager only)",
+)
+async def upload_geojson_file(
+    project_id: int,
+    current_user: ManagerUser,
+    project_service: ProjectServiceDep,
+    file: UploadFile = File(..., description="GeoJSON file"),
+) -> dict:
+    """Upload a GeoJSON file to Supabase Storage and create/update lots.
+
+    The file will be stored in Supabase Storage and the lots will be created/updated
+    from the GeoJSON FeatureCollection.
+
+    The GeoJSON must be a FeatureCollection where each Feature has:
+    - properties.numero (required): Lot identifier
+    - properties.zone (optional): Zone name
+    - properties.surface (optional): Surface area
+    - properties.price (optional): Lot price
+    - geometry (optional): GeoJSON geometry object
+
+    Returns:
+        Upload result with created/updated/skipped counts and file URL
+    """
+    return await project_service.upload_geojson_file(
+        project_id=project_id,
+        user_id=current_user.id,
+        user_role=current_user.role,
+        file=file,
     )
 
 
@@ -320,3 +415,26 @@ async def import_csv_metadata(
         user_role=current_user.role,
         csv_rows=rows,
     )
+
+
+@router.patch(
+    "/{project_id}/lots/bulk-metadata",
+    summary="Bulk update lot metadata",
+    description="Update metadata on multiple lots at once (manager only)",
+)
+async def bulk_update_lot_metadata(
+    project_id: int,
+    data: LotBulkMetadataUpdate,
+    current_user: ManagerUser,
+    lot_service: LotServiceDep,
+) -> dict:
+    """Bulk update metadata fields on a set of lots.
+
+    Only non-null fields in the request body are applied.
+    Lots not belonging to the project are silently skipped.
+    """
+    count = await lot_service.bulk_update_lot_metadata(
+        project_id=project_id,
+        data=data,
+    )
+    return {"updated": count, "message": f"{count} lot(s) mis à jour"}

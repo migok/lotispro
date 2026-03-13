@@ -1,15 +1,19 @@
 """Reservation management endpoints."""
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from app.api.dependencies import CurrentUser, ReservationServiceDep
+from app.api.dependencies import CertificateServiceDep, CurrentUser, PaymentServiceDep, ReservationServiceDep
 from app.domain.schemas.reservation import (
     ReservationCreate,
     ReservationExtend,
     ReservationFilter,
+    ReservationRelease,
     ReservationResponse,
 )
 from app.domain.schemas.sale import SaleFromReservation, SaleResponse
+from app.services.email_service import EmailService
+
+_email_service = EmailService()
 
 router = APIRouter()
 
@@ -74,15 +78,21 @@ async def create_reservation(
     "/{reservation_id}/release",
     response_model=ReservationResponse,
     summary="Release reservation",
-    description="Cancel/release an active reservation",
+    description="Cancel/release an active reservation (manager or reservation owner only)",
 )
 async def release_reservation(
     reservation_id: int,
+    data: ReservationRelease,
     current_user: CurrentUser,
     reservation_service: ReservationServiceDep,
 ) -> ReservationResponse:
-    """Release (cancel) an active reservation."""
-    return await reservation_service.release_reservation(reservation_id)
+    """Release (cancel) an active reservation. Only managers or the commercial who created the reservation can release it."""
+    return await reservation_service.release_reservation(
+        reservation_id=reservation_id,
+        user_id=current_user.id,
+        user_role=current_user.role,
+        data=data,
+    )
 
 
 @router.post(
@@ -108,7 +118,7 @@ async def extend_reservation(
     "/{reservation_id}/convert-to-sale",
     response_model=SaleResponse,
     summary="Convert to sale",
-    description="Convert active reservation to a sale",
+    description="Convert active reservation to a sale (manager or reservation owner only)",
 )
 async def convert_reservation_to_sale(
     reservation_id: int,
@@ -116,11 +126,12 @@ async def convert_reservation_to_sale(
     current_user: CurrentUser,
     reservation_service: ReservationServiceDep,
 ) -> SaleResponse:
-    """Convert reservation to sale."""
+    """Convert reservation to sale. Only managers or the commercial who created the reservation can finalize it."""
     return await reservation_service.convert_to_sale(
         reservation_id,
         data,
         user_id=current_user.id,
+        user_role=current_user.role,
     )
 
 
@@ -135,3 +146,164 @@ async def check_expirations(
     """Process expired reservations and mark them."""
     count = await reservation_service.check_expirations()
     return {"processed": count, "message": f"Processed {count} expired reservations"}
+
+
+@router.get(
+    "/{reservation_id}/certificate",
+    summary="Download reservation certificate",
+    description="Generate and download a PDF Acte de Réservation",
+    response_class=Response,
+)
+async def download_reservation_certificate(
+    reservation_id: int,
+    current_user: CurrentUser,
+    reservation_service: ReservationServiceDep,
+    certificate_service: CertificateServiceDep,
+    payment_service: PaymentServiceDep,
+) -> Response:
+    """Generate PDF certificate for a reservation."""
+    details = await reservation_service.get_reservation_details(reservation_id)
+    if not details:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reservation {reservation_id} not found",
+        )
+
+    # Require the first deposit installment to be paid before generating the certificate.
+    # Use schedule.lot_price (= remaining balance after initial payment) so that the
+    # certificate balance = schedule.lot_price - first_installment.amount.
+    deposit_for_cert = details["deposit"]
+    lot_price_for_cert = details.get("lot_price")
+    try:
+        schedule = await payment_service.get_schedule_for_reservation(reservation_id)
+        deposit_installments = sorted(
+            [i for i in schedule.installments if i.payment_type == "deposit"],
+            key=lambda i: i.installment_number,
+        )
+        if deposit_installments:
+            first = deposit_installments[0]
+            if first.status != "paid":
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "Le premier versement d'acompte doit être effectué "
+                        "avant de générer l'acte de réservation."
+                    ),
+                )
+            deposit_for_cert = first.amount
+            # The schedule's lot_price is the remaining balance after the initial
+            # payment — use it so balance = schedule.lot_price - first_installment
+            lot_price_for_cert = schedule.lot_price
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # no schedule — fall back to reservation values
+
+    pdf_bytes = certificate_service.generate_reservation_certificate(
+        reservation_id=details["id"],
+        reservation_date=details["reservation_date"],
+        deposit=deposit_for_cert,
+        deposit_date=details.get("deposit_date"),
+        lot_numero=details["lot_numero"],
+        lot_surface=details.get("lot_surface"),
+        lot_price=lot_price_for_cert,
+        project_name=details["project_name"],
+        client_name=details["client_name"],
+        client_cin=details.get("client_cin"),
+        client_address=details.get("client_address"),
+    )
+
+    safe_lot = details["lot_numero"].replace("/", "-").replace(" ", "_")
+    filename = f"acte_reservation_{reservation_id}_lot{safe_lot}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post(
+    "/{reservation_id}/certificate/email",
+    summary="Send reservation certificate by email",
+    description="Generate the PDF certificate and send it to the client's email address",
+)
+async def send_reservation_certificate_email(
+    reservation_id: int,
+    current_user: CurrentUser,
+    reservation_service: ReservationServiceDep,
+    certificate_service: CertificateServiceDep,
+    payment_service: PaymentServiceDep,
+) -> dict:
+    """Generate PDF certificate and email it to the client."""
+    details = await reservation_service.get_reservation_details(reservation_id)
+    if not details:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reservation {reservation_id} not found",
+        )
+
+    client_email = details.get("client_email")
+    if not client_email:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Le client n'a pas d'adresse email enregistrée.",
+        )
+
+    deposit_for_cert = details["deposit"]
+    lot_price_for_cert = details.get("lot_price")
+    try:
+        schedule = await payment_service.get_schedule_for_reservation(reservation_id)
+        deposit_installments = sorted(
+            [i for i in schedule.installments if i.payment_type == "deposit"],
+            key=lambda i: i.installment_number,
+        )
+        if deposit_installments:
+            first = deposit_installments[0]
+            if first.status != "paid":
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "Le premier versement d'acompte doit être effectué "
+                        "avant d'envoyer l'acte de réservation."
+                    ),
+                )
+            deposit_for_cert = first.amount
+            lot_price_for_cert = schedule.lot_price
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # no schedule — fall back to reservation values
+
+    pdf_bytes = certificate_service.generate_reservation_certificate(
+        reservation_id=details["id"],
+        reservation_date=details["reservation_date"],
+        deposit=deposit_for_cert,
+        deposit_date=details.get("deposit_date"),
+        lot_numero=details["lot_numero"],
+        lot_surface=details.get("lot_surface"),
+        lot_price=lot_price_for_cert,
+        project_name=details["project_name"],
+        client_name=details["client_name"],
+        client_cin=details.get("client_cin"),
+        client_address=details.get("client_address"),
+    )
+
+    safe_lot = details["lot_numero"].replace("/", "-").replace(" ", "_")
+    filename = f"acte_reservation_{reservation_id}_lot{safe_lot}.pdf"
+
+    sent = await _email_service.send_certificate_email(
+        client_name=details["client_name"],
+        client_email=client_email,
+        lot_numero=details["lot_numero"],
+        project_name=details["project_name"],
+        pdf_bytes=pdf_bytes,
+        filename=filename,
+    )
+
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Impossible d'envoyer l'email. Vérifiez la configuration RESEND_API_KEY.",
+        )
+
+    return {"message": f"Acte de réservation envoyé à {client_email}", "email": client_email}

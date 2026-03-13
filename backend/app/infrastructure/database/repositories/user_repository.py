@@ -1,8 +1,10 @@
 """User repository implementation."""
 
-from sqlalchemy import select
+from datetime import datetime
 
-from app.infrastructure.database.models import UserModel
+from sqlalchemy import select, update
+
+from app.infrastructure.database.models import AssignmentModel, ReservationModel, SaleModel, UserModel
 from app.infrastructure.database.repositories.base import BaseRepository
 
 
@@ -62,12 +64,47 @@ class UserRepository(BaseRepository[UserModel]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none() is not None
 
+    async def detach_user(self, user_id: int) -> None:
+        """Nullify FK references to user and delete their assignments.
+
+        Call this before deleting a user to avoid FK constraint violations.
+        Sales and reservations are preserved (historical data).
+        """
+        await self.session.execute(
+            update(ReservationModel)
+            .where(ReservationModel.reserved_by_user_id == user_id)
+            .values(reserved_by_user_id=None)
+        )
+        await self.session.execute(
+            update(SaleModel)
+            .where(SaleModel.sold_by_user_id == user_id)
+            .values(sold_by_user_id=None)
+        )
+        from sqlalchemy import delete as _delete
+        await self.session.execute(
+            _delete(AssignmentModel).where(AssignmentModel.user_id == user_id)
+        )
+        await self.session.flush()
+
+    async def get_by_invitation_token(self, token: str) -> UserModel | None:
+        """Get user by invitation token."""
+        result = await self.session.execute(
+            select(UserModel).where(UserModel.invitation_token == token)
+        )
+        return result.scalar_one_or_none()
+
     async def create_user(
         self,
         email: str,
         password_hash: str,
         name: str,
         role: str,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        address: str | None = None,
+        company: str | None = None,
+        invitation_token: str | None = None,
+        invitation_expires_at: datetime | None = None,
     ) -> UserModel:
         """Create a new user.
 
@@ -76,6 +113,12 @@ class UserRepository(BaseRepository[UserModel]):
             password_hash: Hashed password
             name: User display name
             role: User role
+            first_name: Optional first name
+            last_name: Optional last name
+            address: Optional address
+            company: Optional company
+            invitation_token: Optional invitation token
+            invitation_expires_at: Optional invitation expiration
 
         Returns:
             Created user model
@@ -85,4 +128,10 @@ class UserRepository(BaseRepository[UserModel]):
             password_hash=password_hash,
             name=name,
             role=role,
+            first_name=first_name,
+            last_name=last_name,
+            address=address,
+            company=company,
+            invitation_token=invitation_token,
+            invitation_expires_at=invitation_expires_at,
         )

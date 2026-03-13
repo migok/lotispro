@@ -2,27 +2,83 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { apiFetch, apiGet, apiPut, apiDelete, apiUploadFile } from '../utils/api';
+import { apiFetch, apiGet, apiPut, apiDelete, apiUploadFile, apiPatch } from '../utils/api';
 import LotDetailModal from './LotDetailModal';
 import Dashboard from './Dashboard';
 import { useAuth } from '../contexts/AuthContext';
 
-const API_BASE = 'http://127.0.0.1:8000';
-
 const STATUS_COLORS = {
   available: '#10b981',
   reserved: '#f59e0b',
+  validated: '#8b5cf6',
   sold: '#ef4444',
   blocked: '#6b7280',
 };
 
-const TABS = [
-  { id: 'carte', label: 'Carte', icon: '🗺️' },
-  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-  { id: 'kpis', label: 'KPIs', icon: '📈' },
-  { id: 'performance', label: 'Performance', icon: '👔' },
-  { id: 'historique', label: 'Historique', icon: '📋' },
-  { id: 'parametres', label: 'Paramètres', icon: '⚙️' },
+// Détermine la couleur effective selon statut + reservation_status
+const getLotColor = (status, reservationStatus) => {
+  if (status === 'reserved' && reservationStatus === 'validated') return STATUS_COLORS.validated;
+  return STATUS_COLORS[status] || '#999';
+};
+
+const SELECTION_STYLE = {
+  color: '#3b82f6',
+  weight: 3,
+  fillColor: '#3b82f6',
+  fillOpacity: 0.7,
+};
+
+// SVG icons for tabs — no emojis (design system rule)
+const TAB_ICONS = {
+  carte: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+      <line x1="8" y1="2" x2="8" y2="18"/>
+      <line x1="16" y1="6" x2="16" y2="22"/>
+    </svg>
+  ),
+  dashboard: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1"/>
+      <rect x="14" y="3" width="7" height="7" rx="1"/>
+      <rect x="3" y="14" width="7" height="7" rx="1"/>
+      <rect x="14" y="14" width="7" height="7" rx="1"/>
+    </svg>
+  ),
+  kpis: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+  ),
+  performance: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10"/>
+      <line x1="12" y1="20" x2="12" y2="4"/>
+      <line x1="6" y1="20" x2="6" y2="14"/>
+    </svg>
+  ),
+  historique: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <polyline points="12 6 12 12 16 14"/>
+    </svg>
+  ),
+  parametres: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/>
+    </svg>
+  ),
+};
+
+// Fonction pour générer les onglets dynamiquement selon le rôle
+const getTabs = (isManager) => [
+  { id: 'carte', label: 'Carte' },
+  { id: 'dashboard', label: isManager ? 'Tableau de Bord' : 'Dashboard' },
+  { id: 'kpis', label: 'KPIs' },
+  { id: 'performance', label: 'Performance' },
+  { id: 'historique', label: 'Historique' },
+  { id: 'parametres', label: 'Paramètres' },
 ];
 
 export default function ProjectDetailPage() {
@@ -38,8 +94,9 @@ export default function ProjectDetailPage() {
   // Map state
   const mapRef = useRef(null);
   const geoRef = useRef(null);
+  const labelsLayerRef = useRef(null);
   const mapContainerRef = useRef(null);
-  const [stats, setStats] = useState({ available: 0, reserved: 0, sold: 0, blocked: 0 });
+  const [stats, setStats] = useState({ available: 0, reserved: 0, validated: 0, sold: 0, blocked: 0 });
   const [filterStatus, setFilterStatus] = useState(null);
   const [surfaceMin, setSurfaceMin] = useState('');
   const [surfaceMax, setSurfaceMax] = useState('');
@@ -54,6 +111,16 @@ export default function ProjectDetailPage() {
   // Modal state
   const [selectedLot, setSelectedLot] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
+  const [modalInitialMode, setModalInitialMode] = useState(null);
+
+  // Selection mode for bulk metadata edit (manager only)
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedLotIds, setSelectedLotIds] = useState(new Set());
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const selectionModeRef = useRef(false);
+  const selectedLotIdsRef = useRef(new Set());
+  const selectedLotLayersRef = useRef(new Map()); // db_id -> { lyr, normalStyle }
 
   // Load project data
   useEffect(() => {
@@ -62,7 +129,15 @@ export default function ProjectDetailPage() {
 
   // Initialize map when carte tab is active
   useEffect(() => {
-    if (activeTab === 'carte' && mapContainerRef.current && project) {
+    if (activeTab !== 'carte' || !project) return;
+
+    const initializeMap = () => {
+      if (!mapContainerRef.current) {
+        // Le conteneur n'est pas encore prêt, réessayer
+        setTimeout(initializeMap, 50);
+        return;
+      }
+
       if (!mapRef.current) {
         // Première initialisation de la carte
         const map = L.map(mapContainerRef.current, { minZoom: 2, maxZoom: 22 });
@@ -73,15 +148,33 @@ export default function ProjectDetailPage() {
           attribution: '&copy; OpenStreetMap contributors',
         }).addTo(map);
 
+        // Pane dédié aux labels de numéros de lots
+        map.createPane('labelsPane');
+        map.getPane('labelsPane').style.zIndex = 450;
+        map.getPane('labelsPane').style.pointerEvents = 'none';
+        map.getPane('labelsPane').style.display = 'none'; // caché par défaut
+
+        map.on('zoomend', () => {
+          const pane = map.getPane('labelsPane');
+          if (pane) pane.style.display = map.getZoom() >= 19 ? '' : 'none';
+        });
+
         loadLots();
       } else {
         // La carte existe déjà, on force le recalcul des dimensions
         setTimeout(() => {
-          mapRef.current.invalidateSize();
+          mapRef.current?.invalidateSize();
         }, 100);
       }
-    }
+    };
+
+    // Petit délai pour laisser le DOM se mettre à jour
+    setTimeout(initializeMap, 0);
   }, [activeTab, project]);
+
+  // Sync selection refs (so Leaflet click closures always see current state)
+  useEffect(() => { selectionModeRef.current = selectionMode; }, [selectionMode]);
+  useEffect(() => { selectedLotIdsRef.current = selectedLotIds; }, [selectedLotIds]);
 
   // Reload when filters change
   useEffect(() => {
@@ -100,8 +193,8 @@ export default function ProjectDetailPage() {
     };
   }, []);
 
-  const loadProject = async () => {
-    setLoading(true);
+  const loadProject = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       const data = await apiGet(`/api/projects/${projectId}`);
@@ -110,7 +203,7 @@ export default function ProjectDetailPage() {
       setError('Erreur lors du chargement du projet');
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -123,14 +216,17 @@ export default function ProjectDetailPage() {
 
       // Calculate stats and extract metadata options
       const features = geojson.features || [];
-      const newStats = { available: 0, reserved: 0, sold: 0, blocked: 0 };
+      const newStats = { available: 0, reserved: 0, validated: 0, sold: 0, blocked: 0 };
       const typeLotSet = new Set();
       const emplacementSet = new Set();
       const typeMaisonSet = new Set();
 
       features.forEach((f) => {
         const status = f.properties?.status || 'available';
-        if (newStats.hasOwnProperty(status)) {
+        const resStatus = f.properties?.reservation_status;
+        if (status === 'reserved' && resStatus === 'validated') {
+          newStats.validated++;
+        } else if (newStats.hasOwnProperty(status)) {
           newStats[status]++;
         }
         // Collect unique metadata values
@@ -148,53 +244,70 @@ export default function ProjectDetailPage() {
       // Update map
       if (geoRef.current) geoRef.current.remove();
 
+      // Clear layer refs; will be repopulated below
+      selectedLotLayersRef.current.clear();
+      const styleMap = new Map(); // db_id -> computed normal style (for deselection restore)
+
       const layer = L.geoJSON(geojson, {
         style: (feature) => {
-          const status = feature.properties?.status ?? 'available';
-          const area = feature.properties?.Shape_Area;
           const props = feature.properties || {};
-
-          // Apply filters
-          if (filterStatus && status !== filterStatus) {
-            return { opacity: 0, fillOpacity: 0 };
-          }
-          if (surfaceMin && area && area < parseFloat(surfaceMin)) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          if (surfaceMax && area && area > parseFloat(surfaceMax)) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          // Price filters
+          const dbId = props.db_id;
+          const status = props.status ?? 'available';
+          const reservationStatus = props.reservation_status ?? null;
+          const area = props.Shape_Area;
           const lotPrice = props.price;
-          if (priceMin && lotPrice && lotPrice < parseFloat(priceMin)) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          if (priceMax && lotPrice && lotPrice > parseFloat(priceMax)) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          // Metadata filters
-          if (filterTypeLot && props.type_lot !== filterTypeLot) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          if (filterEmplacement && props.emplacement !== filterEmplacement) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
-          }
-          if (filterTypeMaison && props.type_maison !== filterTypeMaison) {
-            return { opacity: 0.2, fillOpacity: 0.1 };
+          const lotColor = getLotColor(status, reservationStatus);
+
+          // Compute normal style (based on filters)
+          // For "validated" filter: show lots where status=reserved AND reservation_status=validated
+          const effectiveStatus = (status === 'reserved' && reservationStatus === 'validated') ? 'validated' : status;
+          let normalStyle;
+          if (filterStatus && effectiveStatus !== filterStatus) {
+            normalStyle = { opacity: 0, fillOpacity: 0 };
+          } else if (surfaceMin && area && area < parseFloat(surfaceMin)) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (surfaceMax && area && area > parseFloat(surfaceMax)) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (priceMin && lotPrice && lotPrice < parseFloat(priceMin)) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (priceMax && lotPrice && lotPrice > parseFloat(priceMax)) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (filterTypeLot && props.type_lot !== filterTypeLot) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (filterEmplacement && props.emplacement !== filterEmplacement) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else if (filterTypeMaison && props.type_maison !== filterTypeMaison) {
+            normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
+          } else {
+            normalStyle = {
+              color: lotColor,
+              weight: 2,
+              fillColor: lotColor,
+              fillOpacity: 0.5,
+            };
           }
 
-          return {
-            color: STATUS_COLORS[status] || '#999',
-            weight: 2,
-            fillColor: STATUS_COLORS[status] || '#999',
-            fillOpacity: 0.5,
-          };
+          // Store normal style for restore on deselect
+          if (dbId != null) styleMap.set(dbId, normalStyle);
+
+          // If lot is already selected, show selection highlight
+          if (selectedLotIdsRef.current.has(dbId)) {
+            return SELECTION_STYLE;
+          }
+
+          return normalStyle;
         },
         onEachFeature: (feature, lyr) => {
           const props = feature.properties || {};
           const lotId = props.lot_id ?? props.parcelid ?? 'N/A';
           const area = props.Shape_Area ? props.Shape_Area.toFixed(2) : null;
           const status = props.status ?? 'available';
+          const dbId = props.db_id;
+
+          // Store layer + normal style ref for selection mode interactions
+          if (dbId != null) {
+            selectedLotLayersRef.current.set(dbId, { lyr, normalStyle: styleMap.get(dbId) });
+          }
 
           // Créer le contenu du tooltip
           const formatPrice = (price) => {
@@ -206,17 +319,20 @@ export default function ProjectDetailPage() {
             const labels = {
               available: 'Disponible',
               reserved: 'Réservé',
+              validated: 'Validé',
               sold: 'Vendu',
               blocked: 'Bloqué'
             };
             return labels[s] || s;
           };
 
+          const tooltipStatus = (status === 'reserved' && props.reservation_status === 'validated') ? 'validated' : status;
+
           let tooltipContent = `
             <div class="lot-tooltip">
               <div class="lot-tooltip-header">
                 <strong>Lot ${lotId}</strong>
-                <span class="lot-tooltip-status ${status}">${getStatusLabel(status)}</span>
+                <span class="lot-tooltip-status ${tooltipStatus}">${getStatusLabel(tooltipStatus)}</span>
               </div>
               <div class="lot-tooltip-row">
                 <span class="lot-tooltip-label">Prix:</span>
@@ -303,36 +419,81 @@ export default function ProjectDetailPage() {
 
           // Gestionnaire de clic
           lyr.on('click', () => {
-            setSelectedLot({
-              id: props.db_id || null,
-              lot_id: String(lotId),
-              numero: String(lotId),
-              status: status,
-              reserved_by: props.reserved_by ?? null,
-              reserved_until: props.reserved_until ?? null,
-              surface: area ? parseFloat(area) : null,
-              price: props.price || null,
-              zone: props.zone || null,
-              client_name: props.client_name || null,
-              client_phone: props.client_phone || null,
-              reservation_id: props.reservation_id || null,
-              reservation_date: props.reservation_date || null,
-              expiration_date: props.expiration_date || null,
-              deposit: props.deposit || 0,
-              days_in_status: props.days_in_status || 0,
-              sold_by_name: props.sold_by_name || null,
-              sale_date: props.sale_date || null,
-              // Metadata fields
-              type_lot: props.type_lot || null,
-              emplacement: props.emplacement || null,
-              type_maison: props.type_maison || null,
-            });
-            setShowModal(true);
+            if (selectionModeRef.current) {
+              // Selection mode: toggle lot selection
+              if (dbId == null) return;
+              const newSelected = new Set(selectedLotIdsRef.current);
+              const entry = selectedLotLayersRef.current.get(dbId);
+              if (newSelected.has(dbId)) {
+                newSelected.delete(dbId);
+                lyr.setStyle(entry?.normalStyle || { color: getLotColor(status, props.reservation_status), weight: 2, fillColor: getLotColor(status, props.reservation_status), fillOpacity: 0.5 });
+              } else {
+                newSelected.add(dbId);
+                lyr.setStyle(SELECTION_STYLE);
+              }
+              selectedLotIdsRef.current = newSelected;
+              setSelectedLotIds(new Set(newSelected));
+            } else {
+              // Normal mode: open detail modal
+              setSelectedLot({
+                id: props.db_id || null,
+                lot_id: String(lotId),
+                numero: String(lotId),
+                status: status,
+                reservation_status: props.reservation_status ?? null,
+                reserved_by: props.reserved_by ?? null,
+                reserved_by_user_id: props.reserved_by_user_id ?? null,
+                reserved_until: props.reserved_until ?? null,
+                surface: area ? parseFloat(area) : null,
+                price: props.price || null,
+                zone: props.zone || null,
+                client_id: props.client_id || null,
+                client_name: props.client_name || null,
+                client_phone: props.client_phone || null,
+                reservation_id: props.reservation_id || null,
+                reservation_date: props.reservation_date || null,
+                expiration_date: props.expiration_date || null,
+                deposit: props.deposit || 0,
+                days_in_status: props.days_in_status || 0,
+                sold_by_name: props.sold_by_name || null,
+                sale_date: props.sale_date || null,
+                type_lot: props.type_lot || null,
+                emplacement: props.emplacement || null,
+                type_maison: props.type_maison || null,
+                deposit_paid_pct: props.deposit_paid_pct ?? null,
+                balance_paid_pct: props.balance_paid_pct ?? null,
+                first_deposit_days: props.first_deposit_days ?? null,
+              });
+              setShowPopup(true);
+            }
           });
         },
       }).addTo(mapRef.current);
 
       geoRef.current = layer;
+
+      // Labels numéros de lots — dans le pane dédié (visibilité gérée par zoomend)
+      if (labelsLayerRef.current) labelsLayerRef.current.remove();
+      const labelsLayer = L.layerGroup();
+      labelsLayerRef.current = labelsLayer;
+      layer.eachLayer((lyr) => {
+        const props = lyr.feature?.properties || {};
+        const lotId = props.lot_id ?? props.parcelid ?? null;
+        if (lotId == null) return;
+        const center = lyr.getBounds().getCenter();
+        const marker = L.marker(center, {
+          pane: 'labelsPane',
+          icon: L.divIcon({
+            className: 'lot-label-icon',
+            html: `<span class="lot-label-text">${lotId}</span>`,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          }),
+          interactive: false,
+        });
+        labelsLayer.addLayer(marker);
+      });
+      labelsLayer.addTo(mapRef.current); // toujours sur la carte, visibilité via le pane
 
       try {
         mapRef.current.fitBounds(layer.getBounds());
@@ -347,19 +508,56 @@ export default function ProjectDetailPage() {
   const handleRefresh = async () => {
     if (activeTab === 'carte') {
       await loadLots();
-      // Force le recalcul des dimensions de la carte après le rechargement
       setTimeout(() => {
         if (mapRef.current) {
           mapRef.current.invalidateSize();
         }
       }, 150);
     }
-    loadProject();
+    loadProject(true); // silent: pas de spinner, la carte reste affichée
   };
 
   const closeModal = () => {
     setShowModal(false);
     setSelectedLot(null);
+    setModalInitialMode(null);
+  };
+
+  const closePopup = () => {
+    setShowPopup(false);
+    setSelectedLot(null);
+  };
+
+  const openFullModal = (mode = null) => {
+    setModalInitialMode(mode);
+    setShowPopup(false);
+    setShowModal(true);
+  };
+
+  const toggleSelectionMode = () => {
+    if (selectionMode) {
+      // Exit: clear selections and reload to restore styles
+      setSelectionMode(false);
+      setSelectedLotIds(new Set());
+      selectedLotIdsRef.current = new Set();
+      loadLots();
+    } else {
+      // Enter: close any open modal
+      setShowModal(false);
+      setShowPopup(false);
+      setSelectedLot(null);
+      setSelectionMode(true);
+    }
+  };
+
+  const clearSelection = () => {
+    for (const [dbId, { lyr, normalStyle }] of selectedLotLayersRef.current) {
+      if (selectedLotIdsRef.current.has(dbId)) {
+        lyr.setStyle(normalStyle || { color: '#999', weight: 2, fillColor: '#999', fillOpacity: 0.5 });
+      }
+    }
+    setSelectedLotIds(new Set());
+    selectedLotIdsRef.current = new Set();
   };
 
   if (loading) {
@@ -378,7 +576,7 @@ export default function ProjectDetailPage() {
         <div className="alert alert-error">
           {error || 'Projet introuvable'}
         </div>
-        <button className="btn btn-ghost" onClick={() => navigate('/projects')}>
+        <button className="btn btn-ghost" onClick={() => navigate('/app/projects')}>
           ← Retour aux projets
         </button>
       </div>
@@ -389,11 +587,15 @@ export default function ProjectDetailPage() {
     <div className="project-detail-page">
       {/* Header */}
       <div className="project-detail-header">
-        <button className="btn btn-ghost" onClick={() => navigate('/projects')}>
-          ← Retour
+        <button className="pdp-back-btn" onClick={() => navigate('/app/projects')}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 5l-7 7 7 7"/>
+          </svg>
+          Retour
         </button>
-        <div>
-          <h1 className="page-title">{project.name}</h1>
+        <div className="pdp-title-block">
+          <div className="page-eyebrow">Projet</div>
+          <h1 className="pdp-project-title">{project.name}</h1>
           {project.description && (
             <p className="page-subtitle">{project.description}</p>
           )}
@@ -402,7 +604,9 @@ export default function ProjectDetailPage() {
 
       {/* Tabs */}
       <div className="tabs">
-        {TABS.filter((tab) => {
+        {getTabs(isManager()).filter((tab) => {
+          // Masquer l'onglet KPIs pour les managers (intégré dans Tableau de Bord) et commerciaux
+          if (tab.id === 'kpis' && (isManager() || isCommercial())) return false;
           // Masquer l'onglet Performance pour les non-managers
           if (tab.id === 'performance' && !isManager()) return false;
           // Masquer l'onglet Paramètres pour les commerciaux
@@ -414,7 +618,7 @@ export default function ProjectDetailPage() {
             className={`tab ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
-            <span>{tab.icon}</span>
+            {TAB_ICONS[tab.id]}
             <span>{tab.label}</span>
           </button>
         ))}
@@ -425,14 +629,15 @@ export default function ProjectDetailPage() {
         {activeTab === 'dashboard' && (
           <Dashboard
             projectId={parseInt(projectId)}
-            onNavigate={(page) => {
+            onNavigate={(page, clientId) => {
               if (page === 'map') setActiveTab('carte');
-              if (page === 'clients') navigate('/clients');
+              if (page === 'clients' && clientId) navigate(`/app/clients/${clientId}`);
+              else if (page === 'clients') navigate('/app/clients');
             }}
           />
         )}
 
-        {activeTab === 'carte' && (
+        <div style={{ display: activeTab === 'carte' ? 'block' : 'none' }}>
           <CarteTab
             mapContainerRef={mapContainerRef}
             mapRef={mapRef}
@@ -455,11 +660,21 @@ export default function ProjectDetailPage() {
             setFilterTypeMaison={setFilterTypeMaison}
             metadataOptions={metadataOptions}
             showModal={showModal}
+            showPopup={showPopup}
             selectedLot={selectedLot}
+            modalInitialMode={modalInitialMode}
             onCloseModal={closeModal}
+            onClosePopup={closePopup}
+            onOpenFullModal={openFullModal}
             onRefresh={handleRefresh}
+            isManager={isManager()}
+            selectionMode={selectionMode}
+            selectedCount={selectedLotIds.size}
+            onToggleSelectionMode={toggleSelectionMode}
+            onClearSelection={clearSelection}
+            onOpenBulkModal={() => setShowBulkModal(true)}
           />
-        )}
+        </div>
 
         {activeTab === 'kpis' && <KPIsTab project={project} />}
 
@@ -478,6 +693,24 @@ export default function ProjectDetailPage() {
           lot={selectedLot}
           onClose={closeModal}
           onRefresh={handleRefresh}
+          initialMode={modalInitialMode}
+        />
+      )}
+
+      {/* Bulk Metadata Modal */}
+      {showBulkModal && (
+        <BulkMetadataModal
+          projectId={projectId}
+          selectedCount={selectedLotIds.size}
+          selectedLotIds={Array.from(selectedLotIds)}
+          onClose={() => setShowBulkModal(false)}
+          onSuccess={() => {
+            setShowBulkModal(false);
+            setSelectionMode(false);
+            setSelectedLotIds(new Set());
+            selectedLotIdsRef.current = new Set();
+            loadLots();
+          }}
         />
       )}
     </div>
@@ -507,12 +740,45 @@ function CarteTab({
   setFilterTypeMaison,
   metadataOptions,
   showModal,
+  showPopup,
   selectedLot,
+  modalInitialMode,
   onCloseModal,
+  onClosePopup,
+  onOpenFullModal,
   onRefresh,
+  isManager,
+  selectionMode,
+  selectedCount,
+  onToggleSelectionMode,
+  onClearSelection,
+  onOpenBulkModal,
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const carteTabRef = useRef(null);
+
+  // Force la carte à se redimensionner au montage du composant
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapRef?.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Redimensionner la carte quand on toggle les filtres
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapRef?.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [showFilters]);
 
   // Gestion du plein écran natif du navigateur
   const toggleFullscreen = async () => {
@@ -545,22 +811,28 @@ function CarteTab({
     }
 
     // Redimensionner la carte après le changement
-    setTimeout(() => {
-      if (mapRef?.current) {
-        mapRef.current.invalidateSize();
-      }
-    }, 100);
+    [150, 400, 700].forEach((delay) => {
+      setTimeout(() => {
+        if (mapRef?.current) {
+          mapRef.current.invalidateSize();
+        }
+      }, delay);
+    });
   };
 
   // Écouter les changements de fullscreen (ex: touche Échap)
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
-      setTimeout(() => {
-        if (mapRef?.current) {
-          mapRef.current.invalidateSize();
-        }
-      }, 100);
+      // Call invalidateSize at multiple intervals to ensure the map renders
+      // after the fullscreen transition (which can take 200-400ms)
+      [150, 350, 600].forEach((delay) => {
+        setTimeout(() => {
+          if (mapRef?.current) {
+            mapRef.current.invalidateSize();
+          }
+        }, delay);
+      });
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -622,6 +894,21 @@ function CarteTab({
             )}
           </div>
           <div className="filters-actions">
+            {isManager && (
+              <button
+                className={`btn-selection-mode ${selectionMode ? 'active' : ''}`}
+                onClick={onToggleSelectionMode}
+                title={selectionMode ? 'Quitter la sélection multiple' : 'Activer la sélection multiple (manager)'}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/>
+                  <rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/>
+                  <path d="M17 17l2 2 4-4" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {selectionMode ? `Sélection (${selectedCount})` : 'Sélection'}
+              </button>
+            )}
             {hasActiveFilters && (
               <button className="btn-clear-filters" onClick={clearAllFilters}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -631,6 +918,21 @@ function CarteTab({
                 Tout effacer
               </button>
             )}
+            <button
+              className="btn-fullscreen"
+              onClick={() => setShowFilters(!showFilters)}
+              title={showFilters ? 'Masquer les filtres' : 'Afficher les filtres'}
+            >
+              {showFilters ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 15l-6-6-6 6"/>
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              )}
+            </button>
             <button
               className={`btn-fullscreen ${isFullscreen ? 'active' : ''}`}
               onClick={toggleFullscreen}
@@ -649,8 +951,34 @@ function CarteTab({
           </div>
         </div>
 
-        {/* All Filters in One Row */}
-        <div className="filters-unified-row">
+        {/* Status Filter Buttons */}
+        {showFilters && (
+          <>
+            <div className="filters-status-row">
+              {[
+                { key: 'available', label: 'Disponible' },
+                { key: 'reserved',  label: 'Réservé' },
+                { key: 'validated', label: 'Validé' },
+                { key: 'sold',      label: 'Vendu' },
+                { key: 'blocked',   label: 'Bloqué' },
+              ].map(({ key, label }) => (
+                <button
+                  key={key}
+                  className={`btn-status-filter ${filterStatus === key ? 'active' : ''} ${key}`}
+                  onClick={() => setFilterStatus(filterStatus === key ? null : key)}
+                  style={key === 'validated' ? { '--status-filter-color': '#8b5cf6' } : undefined}
+                >
+                  <span className="status-dot" style={{ background: STATUS_COLORS[key] || '#8b5cf6' }}></span>
+                  {label}
+                  {stats[key] > 0 && (
+                    <span className="status-filter-count">{stats[key]}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* All Filters in One Row */}
+            <div className="filters-unified-row">
           <div className="filter-inline-group">
             <label className="filter-inline-label">Surface</label>
             <div className="filter-inline-inputs">
@@ -743,19 +1071,64 @@ function CarteTab({
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
 
+      {/* Selection Mode Action Bar */}
+      {selectionMode && (
+        <div className="selection-action-bar">
+          <div className="selection-info">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            {selectedCount === 0
+              ? 'Cliquez sur des lots pour les sélectionner'
+              : `${selectedCount} lot${selectedCount > 1 ? 's' : ''} sélectionné${selectedCount > 1 ? 's' : ''}`}
+          </div>
+          <div className="selection-actions">
+            {selectedCount > 0 && (
+              <>
+                <button className="btn-selection-clear" onClick={onClearSelection}>
+                  Désélectionner tout
+                </button>
+                <button className="btn-selection-edit" onClick={onOpenBulkModal}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  Modifier les métadonnées
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Map Container */}
-      <div
-        className="section-card carte-map-container"
-        style={{
-          padding: 0,
-          overflow: 'hidden',
-          height: isFullscreen ? 'calc(100vh - 120px)' : 'calc(100vh - 300px)',
-          minHeight: 500
-        }}
-      >
-        <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+      <div style={{ position: 'relative' }}>
+        <div
+          className="section-card carte-map-container"
+          style={{
+            padding: 0,
+            overflow: 'hidden',
+            height: isFullscreen ? 'calc(100vh - 120px)' : 'calc(100vh - 300px)',
+            minHeight: 500
+          }}
+        >
+          <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
+        </div>
+
+        {/* Compact popup card on lot click */}
+        {showPopup && selectedLot && (
+          <LotMapPopup
+            lot={selectedLot}
+            onClose={onClosePopup}
+            onViewDetails={onOpenFullModal}
+            isManager={isManager}
+          />
+        )}
       </div>
 
       {/* Modal inside CarteTab for fullscreen support */}
@@ -764,8 +1137,216 @@ function CarteTab({
           lot={selectedLot}
           onClose={onCloseModal}
           onRefresh={onRefresh}
+          initialMode={modalInitialMode}
         />
       )}
+
+    </div>
+  );
+}
+
+// ============================================================
+// Lot Map Popup — compact card overlay on map click
+// ============================================================
+function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
+  const STATUS_CONFIG = {
+    available: { label: 'Disponible', color: '#2ecc71', bg: 'rgba(46,204,113,0.12)' },
+    reserved:  { label: 'Réservé',    color: '#e8a93a', bg: 'rgba(232,169,58,0.12)' },
+    validated: { label: 'Validé',     color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)' },
+    sold:      { label: 'Vendu',      color: '#8896ae', bg: 'rgba(136,150,174,0.12)' },
+    blocked:   { label: 'Bloqué',     color: '#e05555', bg: 'rgba(224,85,85,0.12)'  },
+  };
+  // Determine display status: validated reservation → show as validated
+  const displayStatus = (lot.status === 'reserved' && lot.reservation_status === 'validated')
+    ? 'validated' : lot.status;
+  const conf = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.available;
+  const priceM2 = lot.price && lot.surface && lot.surface > 0
+    ? Math.round(lot.price / lot.surface)
+    : null;
+  // Payment data
+  const depositPct = lot.deposit_paid_pct ?? null;
+  const balancePct = lot.balance_paid_pct ?? null;
+  const firstDepositDays = lot.first_deposit_days ?? null;
+  const hasPaymentData = depositPct !== null || balancePct !== null;
+
+  return (
+    <div className="lot-map-popup">
+      {/* Header */}
+      <div className="lot-map-popup-header">
+        <div className="lot-map-popup-id">
+          <span className="lot-map-popup-eyebrow">Lot</span>
+          <span className="lot-map-popup-number">{lot.numero}</span>
+        </div>
+        <button className="lot-map-popup-close" onClick={onClose} aria-label="Fermer">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Status pill */}
+      <div className="lot-map-popup-status-wrap">
+        <span className="lot-map-popup-status" style={{ color: conf.color, background: conf.bg }}>
+          <span className="lot-map-popup-status-dot" style={{ background: conf.color }} />
+          {conf.label}
+        </span>
+        {lot.days_in_status > 0 && (
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted, #6e7e9e)', marginLeft: '0.4rem' }}>
+            {Math.round(lot.days_in_status)}j
+          </span>
+        )}
+      </div>
+
+      {/* Stats row */}
+      <div className="lot-map-popup-stats">
+        {lot.surface && (
+          <div className="lot-map-popup-stat">
+            <span className="lot-map-popup-stat-value">{lot.surface}</span>
+            <span className="lot-map-popup-stat-unit">m²</span>
+            <span className="lot-map-popup-stat-label">Surface</span>
+          </div>
+        )}
+        {lot.price && (
+          <div className="lot-map-popup-stat lot-map-popup-stat--accent">
+            <span className="lot-map-popup-stat-value">{lot.price.toLocaleString('fr-FR')}</span>
+            <span className="lot-map-popup-stat-unit">MAD</span>
+            <span className="lot-map-popup-stat-label">Prix</span>
+          </div>
+        )}
+        {priceM2 && (
+          <div className="lot-map-popup-stat">
+            <span className="lot-map-popup-stat-value">{priceM2.toLocaleString('fr-FR')}</span>
+            <span className="lot-map-popup-stat-unit">MAD/m²</span>
+            <span className="lot-map-popup-stat-label">Prix/m²</span>
+          </div>
+        )}
+      </div>
+
+      {/* Payment progress — shown for reserved/validated lots with schedule */}
+      {hasPaymentData && (
+        <div className="lot-map-popup-payment">
+          <div className="lot-map-popup-payment-title">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+            </svg>
+            Avancement paiements
+          </div>
+          {depositPct !== null && (
+            <div className="lot-map-popup-pay-row">
+              <span className="lot-map-popup-pay-label">Acompte</span>
+              <div className="lot-map-popup-pay-bar">
+                <div
+                  className="lot-map-popup-pay-fill"
+                  style={{
+                    width: `${Math.min(depositPct, 100)}%`,
+                    background: depositPct >= 100 ? '#2ecc71' : depositPct > 0 ? '#d4973a' : '#3e4e68',
+                  }}
+                />
+              </div>
+              <span className="lot-map-popup-pay-pct">{depositPct}%</span>
+            </div>
+          )}
+          {balancePct !== null && (
+            <div className="lot-map-popup-pay-row">
+              <span className="lot-map-popup-pay-label">Solde</span>
+              <div className="lot-map-popup-pay-bar">
+                <div
+                  className="lot-map-popup-pay-fill"
+                  style={{
+                    width: `${Math.min(balancePct, 100)}%`,
+                    background: balancePct >= 100 ? '#2ecc71' : balancePct > 0 ? '#8b5cf6' : '#3e4e68',
+                  }}
+                />
+              </div>
+              <span className="lot-map-popup-pay-pct">{balancePct}%</span>
+            </div>
+          )}
+          {firstDepositDays !== null && (
+            <div className="lot-map-popup-pay-next">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              {firstDepositDays < 0
+                ? <span style={{ color: '#e05555' }}>1er versement : en retard de {Math.abs(firstDepositDays)}j</span>
+                : firstDepositDays === 0
+                  ? <span style={{ color: '#e8a93a' }}>1er versement : aujourd&apos;hui</span>
+                  : <span style={{ color: firstDepositDays <= 7 ? '#e8a93a' : 'inherit' }}>1er versement dans {firstDepositDays}j</span>
+              }
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Meta info */}
+      {lot.zone && (
+        <div className="lot-map-popup-meta">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+          </svg>
+          Zone {lot.zone}
+        </div>
+      )}
+
+      {lot.status === 'reserved' && lot.client_name && (
+        <div className="lot-map-popup-meta">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          {lot.client_name}
+          {lot.expiration_date && (
+            <span className="lot-map-popup-expire">
+              exp. {new Date(lot.expiration_date).toLocaleDateString('fr-FR')}
+            </span>
+          )}
+        </div>
+      )}
+
+      {lot.status === 'sold' && lot.sold_by_name && (
+        <div className="lot-map-popup-meta">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Vendu par {lot.sold_by_name}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="lot-map-popup-actions">
+        {lot.status === 'available' && (
+          <button className="lot-map-popup-btn lot-map-popup-btn--primary" onClick={() => onViewDetails('reserve')}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+            </svg>
+            Réserver
+          </button>
+        )}
+        {lot.status === 'reserved' && (
+          <button className="lot-map-popup-btn lot-map-popup-btn--primary" onClick={() => onViewDetails('sell')}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Finaliser
+          </button>
+        )}
+        <button className="lot-map-popup-btn lot-map-popup-btn--outline" onClick={() => onViewDetails(null)}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+          Voir détails
+        </button>
+        {isManager && (
+          <button
+            className="lot-map-popup-btn lot-map-popup-btn--icon"
+            onClick={() => onViewDetails(null)}
+            title="Modifier"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -872,7 +1453,7 @@ function KPIsTab({ project }) {
             <div className="kpis-hero-content">
               <div className="kpis-hero-value">{formatMoney(kpis?.ca_potentiel)}</div>
               <div className="kpis-hero-label">CA Potentiel</div>
-              <div className="kpis-hero-subtitle">Lots disponibles</div>
+              <div className="kpis-hero-subtitle">Lots réservés</div>
             </div>
           </div>
 
@@ -1282,9 +1863,18 @@ function PerformanceTab({ project }) {
   const summary = {
     total_ventes: commercials.reduce((sum, c) => sum + (c.total_sales || 0), 0),
     total_ca: commercials.reduce((sum, c) => sum + (c.ca_total || 0), 0),
-    taux_moyen: commercials.length > 0
-      ? Math.round(commercials.reduce((sum, c) => sum + (c.taux_transformation || 0), 0) / commercials.length)
+    ca_moyen: commercials.length > 0
+      ? Math.round(commercials.reduce((sum, c) => sum + (c.ca_total || 0), 0) / commercials.length)
       : 0,
+  };
+
+  // Calculer le CA moyen pour le score de performance
+  const caAverage = commercials.length > 0 ? summary.total_ca / commercials.length : 0;
+
+  // Fonction pour calculer le score de performance bas&eacute; sur le CA
+  const getPerformanceScore = (commercial) => {
+    if (caAverage === 0) return 0;
+    return Math.round((commercial.ca_total / caAverage) * 100);
   };
 
   // Trier les commerciaux par CA pour le classement
@@ -1306,10 +1896,10 @@ function PerformanceTab({ project }) {
     return { icon: null, color: 'var(--text-muted)', label: `${index + 1}e` };
   };
 
-  const getTransformationColor = (rate) => {
-    if (rate >= 60) return 'var(--color-success)';
-    if (rate >= 30) return 'var(--color-warning)';
-    return 'var(--color-danger)';
+  const getPerformanceColor = (score) => {
+    if (score >= 100) return 'var(--color-success)'; // Au-dessus ou &eacute;gal &agrave; la moyenne
+    if (score >= 70) return 'var(--color-warning)'; // En dessous mais acceptable
+    return 'var(--color-danger)'; // Bien en dessous de la moyenne
   };
 
   if (loading) {
@@ -1359,8 +1949,8 @@ function PerformanceTab({ project }) {
                 </svg>
               </div>
               <div className="perf-summary-content">
-                <div className="perf-summary-value">{summary.taux_moyen}%</div>
-                <div className="perf-summary-label">Taux Conversion</div>
+                <div className="perf-summary-value">{formatNumberPerf(summary.ca_moyen, '')}</div>
+                <div className="perf-summary-label">CA Moyen / Commercial</div>
               </div>
             </div>
 
@@ -1453,17 +2043,17 @@ function PerformanceTab({ project }) {
                     </div>
                   </div>
 
-                  {/* Transformation Rate Circle */}
+                  {/* Performance Score Circle */}
                   <div className="perf-transformation">
                     <div className="perf-circle-container">
                       <CircularProgress
-                        value={commercial.taux_transformation || 0}
+                        value={Math.min(getPerformanceScore(commercial), 100)}
                         size={56}
                         strokeWidth={5}
-                        color={getTransformationColor(commercial.taux_transformation || 0)}
+                        color={getPerformanceColor(getPerformanceScore(commercial))}
                       />
                       <div className="perf-circle-value">
-                        {commercial.taux_transformation || 0}%
+                        {getPerformanceScore(commercial)}%
                       </div>
                     </div>
                   </div>
@@ -1534,17 +2124,20 @@ function PerformanceTab({ project }) {
                       {/* Performance Progress */}
                       <div className="perf-progress-section">
                         <div className="perf-progress-header">
-                          <span>Performance globale</span>
-                          <span className="perf-progress-value" style={{ color: getTransformationColor(commercial.taux_transformation || 0) }}>
-                            {commercial.taux_transformation || 0}%
+                          <span>
+                            Score de Performance (vs moyenne)
+                            <span className="kpis-info-icon kpis-info-icon-dark" title="Score calculé par rapport à la moyenne des commerciaux (100% = moyenne). Au-dessus de 100% : performance supérieure à la moyenne">ⓘ</span>
+                          </span>
+                          <span className="perf-progress-value" style={{ color: getPerformanceColor(getPerformanceScore(commercial)) }}>
+                            {getPerformanceScore(commercial)}%
                           </span>
                         </div>
                         <div className="perf-progress-bar">
                           <div
                             className="perf-progress-fill"
                             style={{
-                              width: `${Math.min(commercial.taux_transformation || 0, 100)}%`,
-                              background: `linear-gradient(90deg, ${getTransformationColor(commercial.taux_transformation || 0)}, ${getTransformationColor(commercial.taux_transformation || 0)}88)`
+                              width: `${Math.min(getPerformanceScore(commercial), 100)}%`,
+                              background: `linear-gradient(90deg, ${getPerformanceColor(getPerformanceScore(commercial))}, ${getPerformanceColor(getPerformanceScore(commercial))}88)`
                             }}
                           />
                         </div>
@@ -1863,7 +2456,6 @@ function ParametresTab({ project, onUpdate }) {
     name: project.name || '',
     description: project.description || '',
     visibility: project.visibility || 'private',
-    ca_objectif: project.ca_objectif || '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -1894,7 +2486,6 @@ function ParametresTab({ project, onUpdate }) {
         name: formData.name.trim(),
         description: formData.description.trim() || null,
         visibility: formData.visibility,
-        ca_objectif: formData.ca_objectif ? parseFloat(formData.ca_objectif) : null,
       };
 
       await apiPut(`/api/projects/${project.id}`, payload);
@@ -2007,19 +2598,6 @@ function ParametresTab({ project, onUpdate }) {
             </select>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Objectif de CA (MAD)</label>
-            <input
-              type="number"
-              name="ca_objectif"
-              className="form-input"
-              value={formData.ca_objectif}
-              onChange={handleChange}
-              min="0"
-              step="1000"
-            />
-          </div>
-
           <button
             type="submit"
             className="btn btn-primary"
@@ -2119,6 +2697,262 @@ function ParametresTab({ project, onUpdate }) {
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Bulk Metadata Modal ────────────────────────────────────────────────────
+function BulkMetadataModal({ projectId, selectedCount, selectedLotIds, onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    type_lot: '',
+    emplacement: '',
+    type_maison: '',
+    price: '',
+    surface: '',
+    zone: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleChange = (field) => (e) => {
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    // Build payload with only non-empty fields
+    const payload = { lot_ids: selectedLotIds };
+    if (form.type_lot.trim()) payload.type_lot = form.type_lot.trim();
+    if (form.emplacement.trim()) payload.emplacement = form.emplacement.trim();
+    if (form.type_maison.trim()) payload.type_maison = form.type_maison.trim();
+    if (form.price !== '') payload.price = parseFloat(form.price);
+    if (form.surface !== '') payload.surface = parseFloat(form.surface);
+    if (form.zone.trim()) payload.zone = form.zone.trim();
+
+    if (Object.keys(payload).length === 1) {
+      setError('Veuillez renseigner au moins un champ à modifier.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await apiPatch(`/api/projects/${projectId}/lots/bulk-metadata`, payload);
+      onSuccess(result);
+    } catch (err) {
+      setError(err.message || 'Erreur lors de la mise à jour');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filledCount = Object.values(form).filter(v => v !== '').length;
+
+  return (
+    <div className="bm-overlay" onClick={onClose}>
+      <div className="bm-panel" onClick={(e) => e.stopPropagation()}>
+
+        {/* ── Header ── */}
+        <div className="bm-header">
+          <div className="bm-header-left">
+            <div className="bm-header-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </div>
+            <div>
+              <div className="bm-title">Modifier les métadonnées</div>
+              <div className="bm-subtitle">Modification en lot · champs vides ignorés</div>
+            </div>
+          </div>
+          <div className="bm-header-right">
+            <span className="bm-count-badge">
+              {selectedCount} lot{selectedCount > 1 ? 's' : ''}
+            </span>
+            <button className="bm-close" onClick={onClose} aria-label="Fermer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="bm-body">
+
+            {/* ── Section: Descriptif ── */}
+            <div className="bm-section-label">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              Descriptif
+            </div>
+            <div className="bm-grid">
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                  </svg>
+                  Type de lot
+                </label>
+                <input
+                  type="text"
+                  className={`bm-input${form.type_lot ? ' bm-input--filled' : ''}`}
+                  placeholder="Résidentiel, Commercial…"
+                  value={form.type_lot}
+                  onChange={handleChange('type_lot')}
+                />
+              </div>
+
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  Emplacement
+                </label>
+                <input
+                  type="text"
+                  className={`bm-input${form.emplacement ? ' bm-input--filled' : ''}`}
+                  placeholder="2 façade, 3 façade…"
+                  value={form.emplacement}
+                  onChange={handleChange('emplacement')}
+                />
+              </div>
+
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                    <polyline points="9 22 9 12 15 12 15 22"/>
+                  </svg>
+                  Type de maison
+                </label>
+                <input
+                  type="text"
+                  className={`bm-input${form.type_maison ? ' bm-input--filled' : ''}`}
+                  placeholder="Villa, Appartement…"
+                  value={form.type_maison}
+                  onChange={handleChange('type_maison')}
+                />
+              </div>
+
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                    <polyline points="2 17 12 22 22 17"/>
+                    <polyline points="2 12 12 17 22 12"/>
+                  </svg>
+                  Zone
+                </label>
+                <input
+                  type="text"
+                  className={`bm-input${form.zone ? ' bm-input--filled' : ''}`}
+                  placeholder="A, B, Zone Nord…"
+                  value={form.zone}
+                  onChange={handleChange('zone')}
+                />
+              </div>
+            </div>
+
+            {/* ── Section: Valeurs ── */}
+            <div className="bm-section-label" style={{ marginTop: 20 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+              Valeurs numériques
+            </div>
+            <div className="bm-grid">
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                  </svg>
+                  Prix (MAD)
+                </label>
+                <div className="bm-input-wrap">
+                  <input
+                    type="number"
+                    className={`bm-input bm-input--num${form.price ? ' bm-input--filled' : ''}`}
+                    placeholder="450 000"
+                    min="0"
+                    step="1"
+                    value={form.price}
+                    onChange={handleChange('price')}
+                  />
+                  <span className="bm-input-unit">MAD</span>
+                </div>
+              </div>
+
+              <div className="bm-field">
+                <label className="bm-label">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                  </svg>
+                  Surface (m²)
+                </label>
+                <div className="bm-input-wrap">
+                  <input
+                    type="number"
+                    className={`bm-input bm-input--num${form.surface ? ' bm-input--filled' : ''}`}
+                    placeholder="120"
+                    min="0"
+                    step="0.01"
+                    value={form.surface}
+                    onChange={handleChange('surface')}
+                  />
+                  <span className="bm-input-unit">m²</span>
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <div className="bm-error">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                {error}
+              </div>
+            )}
+          </div>
+
+          {/* ── Footer ── */}
+          <div className="bm-footer">
+            {filledCount > 0 && (
+              <span className="bm-filled-hint">
+                {filledCount} champ{filledCount > 1 ? 's' : ''} renseigné{filledCount > 1 ? 's' : ''}
+              </span>
+            )}
+            <div className="bm-footer-actions">
+              <button type="button" className="bm-btn-cancel" onClick={onClose} disabled={saving}>
+                Annuler
+              </button>
+              <button type="submit" className="bm-btn-submit" disabled={saving}>
+                {saving ? (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="bm-spin">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                    </svg>
+                    Mise à jour…
+                  </>
+                ) : (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Appliquer aux {selectedCount} lot{selectedCount > 1 ? 's' : ''}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   );
