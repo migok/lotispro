@@ -56,6 +56,7 @@ RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 COPY --chown=appuser:appgroup app/ ./app/
 COPY --chown=appuser:appgroup alembic/ ./alembic/
 COPY --chown=appuser:appgroup alembic.ini ./
+COPY --chown=appuser:appgroup scripts/ ./scripts/
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R appuser:appgroup /app/data

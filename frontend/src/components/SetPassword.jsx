@@ -71,7 +71,7 @@ export default function SetPassword() {
         {/* Header */}
         <div style={{ background: 'var(--bg-tertiary)', padding: '28px 36px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
           <p style={{ margin: '0 0 6px', fontSize: '0.68rem', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
-            Pyramide Promotion
+            LotisPro
           </p>
           <h1 style={{ margin: 0, fontSize: '1.5rem', fontFamily: 'var(--font-display)', fontWeight: 400, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
             Créer mon mot de passe
