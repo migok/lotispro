@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.exceptions import AlreadyExistsError, BusinessRuleError, NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.core.security import generate_invitation_token, hash_password
-from app.domain.schemas.user import SetPasswordRequest, UserCreate, UserInvite, UserResponse
+from app.domain.schemas.user import ForgotPasswordRequest, SetPasswordRequest, UserCreate, UserInvite, UserResponse
 from app.infrastructure.database.repositories import UserRepository
 from app.services.email_service import EmailService
 
@@ -139,6 +139,30 @@ class UserService:
 
         logger.info("Password set via invitation", user_id=user.id, email=user.email)
         return _to_response(user)
+
+    async def request_password_reset(self, data: ForgotPasswordRequest) -> None:
+        """Generate a password reset token and send a reset email.
+
+        Raises NotFoundError if no account exists with the given email.
+        """
+        user = await self.user_repo.get_by_email(data.email)
+        if not user:
+            raise NotFoundError("User", data.email)
+
+        token = generate_invitation_token()
+        expires_at = dt.now(timezone.utc) + timedelta(hours=1)
+
+        user.invitation_token = token
+        user.invitation_expires_at = expires_at
+        await self.session.commit()
+
+        await self.email_service.send_password_reset_email(
+            email=data.email,
+            reset_token=token,
+            frontend_url=settings.FRONTEND_URL,
+        )
+
+        logger.info("Password reset requested", email=data.email)
 
     async def create_user(self, user_data: UserCreate, created_by_id: int) -> UserResponse:
         """Create a user with a password (legacy — used by seed scripts).

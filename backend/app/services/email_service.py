@@ -101,6 +101,91 @@ def _build_invitation_html(first_name: str, last_name: str, role: str, set_passw
 </html>"""
 
 
+def _build_password_reset_html(reset_url: str) -> str:
+    """Build the HTML body for a password reset email."""
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Réinitialisation de mot de passe</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f5f0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f0;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0"
+               style="background:#ffffff;border-radius:8px;overflow:hidden;
+                      box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:#090d16;padding:32px 40px;text-align:center;">
+              <p style="margin:0;font-size:11px;letter-spacing:3px;text-transform:uppercase;
+                        color:#d4973a;font-weight:600;">LotisPro</p>
+              <h1 style="margin:8px 0 0;font-size:24px;color:#ecf0fa;font-weight:300;
+                         letter-spacing:0.5px;">Réinitialisation du mot de passe</h1>
+            </td>
+          </tr>
+
+          <!-- Gold banner -->
+          <tr>
+            <td style="background:#2d1f05;padding:16px 40px;text-align:center;">
+              <p style="margin:0;color:#d4973a;font-size:14px;font-weight:600;">
+                Demande de réinitialisation — LotisPro
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:36px 40px;">
+              <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
+                Vous avez demandé la réinitialisation de votre mot de passe LotisPro.
+                Cliquez sur le bouton ci-dessous pour en définir un nouveau.
+              </p>
+
+              <!-- CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                <tr>
+                  <td align="center">
+                    <a href="{reset_url}"
+                       style="display:inline-block;padding:14px 36px;background:#d4973a;
+                              color:#111827;font-size:15px;font-weight:600;text-decoration:none;
+                              border-radius:4px;letter-spacing:0.3px;">
+                      Réinitialiser mon mot de passe
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 8px;color:#6b7280;font-size:13px;line-height:1.6;">
+                Ce lien est valable <strong>1 heure</strong>.
+                Si vous n'êtes pas à l'origine de cette demande, ignorez cet email — votre mot de passe restera inchangé.
+              </p>
+              <p style="margin:0;color:#9ca3af;font-size:12px;word-break:break-all;">
+                {reset_url}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#090d16;padding:24px 40px;text-align:center;">
+              <p style="margin:0;color:#6e7e9e;font-size:12px;">
+                LOTISPRO
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
 def _format_amount(amount: float) -> str:
     """Format a float as a Moroccan Dirham amount."""
     return f"{amount:,.2f} DH".replace(",", " ")
@@ -395,6 +480,41 @@ class EmailService:
             return True
         except Exception:
             logger.exception("Failed to send invitation email", email=email)
+            return False
+
+    async def send_password_reset_email(
+        self,
+        email: str,
+        reset_token: str,
+        frontend_url: str,
+    ) -> bool:
+        """Send a password reset email with a one-time link.
+
+        Returns True if sent successfully, False otherwise.
+        """
+        if not self._enabled:
+            logger.warning(
+                "Password reset email skipped — RESEND_API_KEY not configured",
+                email=email,
+            )
+            return False
+
+        reset_url = f"{frontend_url.rstrip('/')}/set-password?token={reset_token}&mode=reset"
+        html = _build_password_reset_html(reset_url=reset_url)
+
+        params: resend.Emails.SendParams = {
+            "from": settings.EMAIL_FROM,
+            "to": [email],
+            "subject": "Réinitialisation de votre mot de passe LotisPro",
+            "html": html,
+        }
+
+        try:
+            await asyncio.to_thread(resend.Emails.send, params)
+            logger.info("Password reset email sent", email=email)
+            return True
+        except Exception:
+            logger.exception("Failed to send password reset email", email=email)
             return False
 
     async def send_payment_confirmation(
