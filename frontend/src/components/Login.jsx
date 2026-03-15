@@ -191,28 +191,6 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="login-separator">
-            <div className="login-sep-line" />
-            <span className="login-sep-text">comptes de test</span>
-            <div className="login-sep-line" />
-          </div>
-
-          <div className="login-test-accounts">
-            {[
-              { role: "Manager", email: "manager@test.com" },
-              { role: "Commercial", email: "commercial@test.com" },
-            ].map(({ role, email: e }) => (
-              <button
-                key={role}
-                type="button"
-                className="login-test-btn"
-                onClick={() => { setEmail(e); setPassword("password123"); }}
-              >
-                <span className="login-test-role">{role}</span>
-                <span className="login-test-email">{e}</span>
-              </button>
-            ))}
-          </div>
         </div>
       </div>
     </div>
