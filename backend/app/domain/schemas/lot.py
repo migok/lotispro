@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.domain.schemas.common import BaseSchema
 
@@ -26,6 +26,11 @@ class LotCreate(BaseSchema):
     emplacement: str | None = Field(default=None, max_length=50, description="Emplacement (ex: 2 façade, 3 façade)")
     type_maison: str | None = Field(default=None, max_length=50, description="Type de maison (ex: villa, appartement)")
 
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v: str | None) -> str | None:
+        return v.strip().lower() if isinstance(v, str) else v
+
 
 class LotUpdate(BaseSchema):
     """Schema for updating a lot."""
@@ -47,6 +52,11 @@ class LotUpdate(BaseSchema):
     type_lot: str | None = Field(default=None, max_length=50, description="Type de lot")
     emplacement: str | None = Field(default=None, max_length=50, description="Emplacement")
     type_maison: str | None = Field(default=None, max_length=50, description="Type de maison")
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v: str | None) -> str | None:
+        return v.strip().lower() if isinstance(v, str) else v
 
 
 class LotResponse(BaseSchema):
@@ -103,6 +113,11 @@ class LotFilter(BaseSchema):
     type_lot: str | None = None
     emplacement: str | None = None
     type_maison: str | None = None
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v: str | None) -> str | None:
+        return v.strip().lower() if isinstance(v, str) else v
 
 
 class LotBulkMetadataUpdate(BaseSchema):

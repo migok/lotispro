@@ -13,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -579,4 +580,38 @@ class PaymentInstallmentModel(Base):
         ),
         Index("ix_installments_schedule", "schedule_id"),
         Index("ix_installments_due_date", "due_date"),
+    )
+
+
+
+class AIConversationModel(Base):
+    """AI Assistant conversation history."""
+
+    __tablename__ = "ai_conversations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    messages: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    language: Mapped[str] = mapped_column(String(10), nullable=False, default="fr")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    __table_args__ = (
+        Index("ix_ai_conversations_user_updated", "user_id", "updated_at"),
     )

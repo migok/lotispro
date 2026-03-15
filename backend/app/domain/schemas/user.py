@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import EmailStr, Field
+from pydantic import EmailStr, Field, field_validator
 
 from app.domain.schemas.common import BaseSchema
 
@@ -17,6 +17,11 @@ class UserInvite(BaseSchema):
     address: str | None = Field(default=None, max_length=255, description="Address")
     company: str | None = Field(default=None, max_length=150, description="Company")
     role: Literal["manager", "commercial"] = Field(description="User role")
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, v: str) -> str:
+        return v.strip().lower() if isinstance(v, str) else v
 
 
 class SetPasswordRequest(BaseSchema):
@@ -44,6 +49,11 @@ class UserCreate(BaseSchema):
         default="client",
         description="User role in the system",
     )
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, v: str) -> str:
+        return v.strip().lower() if isinstance(v, str) else v
 
 
 class ForgotPasswordRequest(BaseSchema):
