@@ -197,17 +197,71 @@ const STYLES = `
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
   transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
   cursor: pointer;
+  overflow: hidden;
 }
 .gdb-proj-card:hover {
   border-color: var(--border-gold);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
+}
+
+/* Thumbnail header */
+.gdb-proj-thumb {
+  position: relative;
+  height: 68px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+.gdb-proj-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.4s ease;
+}
+.gdb-proj-card:hover .gdb-proj-thumb-img {
+  transform: scale(1.04);
+}
+.gdb-proj-thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-surface) 100%);
+}
+.gdb-proj-thumb-placeholder svg {
+  opacity: 0.15;
+}
+.gdb-proj-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 30%,
+    rgba(9, 13, 22, 0.55) 100%
+  );
+}
+[data-theme="light"] .gdb-proj-thumb-overlay {
+  background: linear-gradient(
+    to bottom,
+    transparent 30%,
+    rgba(244, 245, 240, 0.45) 100%
+  );
+}
+
+/* Card body */
+.gdb-proj-body {
+  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  flex: 1;
 }
 .gdb-proj-name {
   font-family: var(--font-display);
@@ -567,12 +621,15 @@ const TileSkeleton = () => (
   </div>
 );
 const CardSkeleton = () => (
-  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", padding: "var(--spacing-lg)", display: "flex", flexDirection: "column", gap: 12 }}>
-    <div className="gdb-shimmer gdb-skel" style={{ width: "70%", height: 18 }} />
-    <div className="gdb-shimmer gdb-skel" style={{ width: "100%", height: 4 }} />
-    <div style={{ display: "flex", gap: 8 }}>
-      <div className="gdb-shimmer gdb-skel" style={{ width: 60, height: 18, borderRadius: "9999px" }} />
-      <div className="gdb-shimmer gdb-skel" style={{ width: 60, height: 18, borderRadius: "9999px" }} />
+  <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div className="gdb-shimmer gdb-skel" style={{ height: 68, borderRadius: 0 }} />
+    <div style={{ padding: "var(--spacing-md) var(--spacing-lg) var(--spacing-lg)", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="gdb-shimmer gdb-skel" style={{ width: "70%", height: 18 }} />
+      <div className="gdb-shimmer gdb-skel" style={{ width: "100%", height: 4 }} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <div className="gdb-shimmer gdb-skel" style={{ width: 60, height: 18, borderRadius: "9999px" }} />
+        <div className="gdb-shimmer gdb-skel" style={{ width: 60, height: 18, borderRadius: "9999px" }} />
+      </div>
     </div>
   </div>
 );
@@ -826,41 +883,59 @@ export default function GlobalDashboard() {
                     style={{ animationDelay: `${0.05 * i}s` }}
                     onClick={() => navigate(`/app/projects/${p.id}`)}
                   >
-                    <div>
-                      <div className="gdb-proj-name">{p.name}</div>
-                      <div className="gdb-proj-meta">{total} lots · créé le {fmtDate(p.created_at)}</div>
-                    </div>
-
-                    <div className="gdb-progress-wrap">
-                      <div className="gdb-progress-bar">
-                        <div className="gdb-progress-fill" style={{ width: `${pct}%` }} />
-                      </div>
-                      <div className="gdb-progress-labels">
-                        <span>{pct}% vendus</span>
-                        <span>{sold}/{total}</span>
-                      </div>
-                    </div>
-
-                    <div className="gdb-chips">
-                      <span className="gdb-chip gdb-chip-avail">
-                        <span className="gdb-chip-dot" /> {available} dispo.
-                      </span>
-                      {reserved > 0 && (
-                        <span className="gdb-chip gdb-chip-res">
-                          <span className="gdb-chip-dot" /> {reserved} rés.
-                        </span>
+                    {/* Thumbnail */}
+                    <div className="gdb-proj-thumb">
+                      {p.image_url ? (
+                        <img className="gdb-proj-thumb-img" src={p.image_url} alt={p.name} loading="lazy" />
+                      ) : (
+                        <div className="gdb-proj-thumb-placeholder">
+                          <svg width="48" height="48" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="2" y="2" width="7" height="7" rx="1"/><rect x="11" y="2" width="7" height="7" rx="1"/>
+                            <rect x="2" y="11" width="7" height="7" rx="1"/><rect x="11" y="11" width="7" height="7" rx="1"/>
+                          </svg>
+                        </div>
                       )}
-                      {sold > 0 && (
-                        <span className="gdb-chip gdb-chip-sold">
-                          <span className="gdb-chip-dot" /> {sold} vendus
-                        </span>
-                      )}
+                      <div className="gdb-proj-thumb-overlay" />
                     </div>
 
-                    <div className="gdb-proj-footer">
-                      <button className="gdb-voir-btn" onClick={(e) => { e.stopPropagation(); navigate(`/app/projects/${p.id}`); }}>
-                        Voir le projet <IconArrowRight />
-                      </button>
+                    {/* Body */}
+                    <div className="gdb-proj-body">
+                      <div>
+                        <div className="gdb-proj-name">{p.name}</div>
+                        <div className="gdb-proj-meta">{total} lots · créé le {fmtDate(p.created_at)}</div>
+                      </div>
+
+                      <div className="gdb-progress-wrap">
+                        <div className="gdb-progress-bar">
+                          <div className="gdb-progress-fill" style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="gdb-progress-labels">
+                          <span>{pct}% vendus</span>
+                          <span>{sold}/{total}</span>
+                        </div>
+                      </div>
+
+                      <div className="gdb-chips">
+                        <span className="gdb-chip gdb-chip-avail">
+                          <span className="gdb-chip-dot" /> {available} dispo.
+                        </span>
+                        {reserved > 0 && (
+                          <span className="gdb-chip gdb-chip-res">
+                            <span className="gdb-chip-dot" /> {reserved} rés.
+                          </span>
+                        )}
+                        {sold > 0 && (
+                          <span className="gdb-chip gdb-chip-sold">
+                            <span className="gdb-chip-dot" /> {sold} vendus
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="gdb-proj-footer">
+                        <button className="gdb-voir-btn" onClick={(e) => { e.stopPropagation(); navigate(`/app/projects/${p.id}`); }}>
+                          Voir le projet <IconArrowRight />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
