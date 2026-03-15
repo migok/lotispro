@@ -86,6 +86,16 @@ sqlite = [
     "aiosqlite>=0.20.0",
 ]
 
+# AI Assistant dependencies (optional)
+ai = [
+    "openai-agents>=0.1.0",
+    "matplotlib>=3.8.0",
+    "sqlparse>=0.4.4",
+    "tenacity>=8.2",
+    "tiktoken>=0.7",
+    "openpyxl>=3.1.0",
+]
+
 [project.scripts]
 lots-api = "app.main:app"
 
@@ -173,6 +183,11 @@ module = [
     "structlog.*",
     "supabase.*",
     "resend.*",
+    "agents.*",
+    "matplotlib.*",
+    "sqlparse.*",
+    "tenacity.*",
+    "tiktoken.*",
 ]
 ignore_missing_imports = true
 

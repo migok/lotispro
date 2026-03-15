@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import "./styles.css";
 import { useTheme } from "./hooks/useTheme";
+import { AIAssistant } from "./components/ai_assistant/AIAssistant";
 
 // Import contexts
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -319,6 +320,11 @@ function AppContent() {
           />
         </Routes>
       </main>
+      
+      {/* AI Assistant Widget - Only for manager/commercial roles */}
+      {user?.role && ['manager', 'commercial'].includes(user.role) && (
+        <AIAssistant />
+      )}
     </div>
   );
 }

@@ -56,6 +56,12 @@ services:
       - RESEND_API_KEY=${RESEND_API_KEY}
       - EMAIL_FROM=${EMAIL_FROM}
 
+      # AI Assistant (optionnel)
+      - AI_ASSISTANT_ENABLED=${AI_ASSISTANT_ENABLED:-false}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
+      - AI_ANALYST_MODEL=${AI_ANALYST_MODEL:-gpt-4o}
+
     volumes:
       # Hot-reload pour le développement
       - ./app:/app/app:ro

@@ -58,7 +58,7 @@ class LotRepository(BaseRepository[LotModel]):
             if filters.numero:
                 query = query.where(LotModel.numero.ilike(f"%{filters.numero}%"))
             if filters.zone:
-                query = query.where(LotModel.zone == filters.zone)
+                query = query.where(LotModel.zone.ilike(f"%{filters.zone}%"))
             if filters.status:
                 query = query.where(LotModel.status == filters.status)
             if filters.surface_min is not None:
@@ -71,11 +71,11 @@ class LotRepository(BaseRepository[LotModel]):
                 query = query.where(LotModel.price <= filters.price_max)
             # Metadata filters
             if filters.type_lot:
-                query = query.where(LotModel.type_lot == filters.type_lot)
+                query = query.where(LotModel.type_lot.ilike(f"%{filters.type_lot}%"))
             if filters.emplacement:
-                query = query.where(LotModel.emplacement == filters.emplacement)
+                query = query.where(LotModel.emplacement.ilike(f"%{filters.emplacement}%"))
             if filters.type_maison:
-                query = query.where(LotModel.type_maison == filters.type_maison)
+                query = query.where(LotModel.type_maison.ilike(f"%{filters.type_maison}%"))
 
         query = query.order_by(LotModel.numero).offset(offset).limit(limit)
 

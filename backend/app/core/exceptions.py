@@ -212,3 +212,39 @@ class StorageError(AppException):
             details={"storage_path": storage_path, **(details or {})},
         )
         self.storage_path = storage_path
+
+
+class AIAssistantError(AppException):
+    """Generic AI Assistant error."""
+
+    def __init__(
+        self,
+        message: str,
+        code: str = "AI_ERROR",
+        details: dict[str, Any] | None = None,
+    ):
+        super().__init__(message=message, code=code, details=details)
+
+
+class AIUnavailableError(AIAssistantError):
+    """AI Assistant is disabled or not configured."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="AI Assistant is not enabled. Set AI_ASSISTANT_ENABLED=true to enable.",
+            code="AI_DISABLED",
+        )
+
+
+class AIRateLimitError(RateLimitError):
+    """Per-user rate limit exceeded on AI endpoint.
+
+    Extends RateLimitError so the registered 429 handler is used automatically.
+    """
+
+    def __init__(self, limit: int = 20, window: int = 60) -> None:
+        super().__init__(
+            message=f"Limite de {limit} requêtes / {window}s atteinte. Réessayez dans un instant.",
+            details={"limit": limit, "window_seconds": window},
+        )
+        self.code = "AI_RATE_LIMIT"

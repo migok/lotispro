@@ -21,6 +21,36 @@ from app.infrastructure.database import close_db, init_db
 logger = get_logger(__name__)
 
 
+def _setup_ai_assistant_router(app: FastAPI) -> None:
+    """Register the AI Assistant router unconditionally.
+
+    Routes always exist so the frontend gets a proper 503 (not 404) when the
+    module is disabled.  The ``require_ai_assistant_enabled`` dependency on
+    every route handles the disabled state at request time.
+
+    Wrapped in try/except so a missing ``openai-agents`` package (not yet
+    installed) just disables the module instead of crashing the whole app.
+    """
+    try:
+        from app.ai_assistant.router import router as ai_assistant_router
+
+        app.include_router(
+            ai_assistant_router,
+            prefix=f"{settings.API_V1_PREFIX}/ai-assistant",
+        )
+        from app.ai_assistant.config import AI_ASSISTANT_ENABLED
+        if AI_ASSISTANT_ENABLED:
+            logger.info("AI Assistant module enabled and router registered")
+        else:
+            logger.info("AI Assistant router registered (module disabled — set AI_ASSISTANT_ENABLED=true to enable)")
+
+    except ImportError as e:
+        logger.warning(
+            "AI Assistant dependencies not installed, module disabled",
+            error=str(e),
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager.
@@ -125,6 +155,9 @@ Authorization: Bearer <your_token>
         api_router,
         prefix=settings.API_V1_PREFIX,
     )
+    
+    # Include AI Assistant router (conditionally)
+    _setup_ai_assistant_router(app)
 
     # Custom OpenAPI schema
     def custom_openapi():

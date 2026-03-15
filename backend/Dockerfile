@@ -19,7 +19,8 @@ RUN pip install --no-cache-dir build && \
     pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels \
     fastapi uvicorn gunicorn pydantic pydantic-settings \
     sqlalchemy asyncpg alembic pyjwt passlib bcrypt \
-    structlog python-multipart httpx email-validator supabase fpdf2 resend
+    structlog python-multipart httpx email-validator supabase fpdf2 resend \
+    openai-agents matplotlib sqlparse tiktoken tenacity openpyxl
 
 # Stage 2: Production
 FROM python:3.13-slim as production
@@ -42,9 +43,11 @@ RUN groupadd --gid 1000 appgroup && \
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies (libfreetype6 for matplotlib)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    libfreetype6 \
+    libpng16-16 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 

@@ -23,7 +23,7 @@ class UserRepository(BaseRepository[UserModel]):
             User model or None if not found
         """
         result = await self.session.execute(
-            select(UserModel).where(UserModel.email == email)
+            select(UserModel).where(UserModel.email == email.strip().lower())
         )
         return result.scalar_one_or_none()
 
@@ -56,7 +56,7 @@ class UserRepository(BaseRepository[UserModel]):
         Returns:
             True if email exists, False otherwise
         """
-        query = select(UserModel.id).where(UserModel.email == email)
+        query = select(UserModel.id).where(UserModel.email == email.strip().lower())
 
         if exclude_id:
             query = query.where(UserModel.id != exclude_id)
