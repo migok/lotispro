@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     audit,
     auth,
     clients,
+    contact,
     dashboard,
     health,
     lots,
@@ -82,4 +83,9 @@ api_router.include_router(
     payments.router,
     prefix="/payments",
     tags=["Payments"],
+)
+
+api_router.include_router(
+    contact.router,
+    tags=["Contact"],
 )

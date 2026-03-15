@@ -109,7 +109,8 @@ class Settings(BaseSettings):
 
     # Email (Resend)
     RESEND_API_KEY: str | None = None
-    EMAIL_FROM: str = "LotisPro <noreply@resend.dev>"
+    EMAIL_FROM: str = "LotisPro <contact@lotispro.com>"
+    CONTACT_EMAIL: str = "contact@lotispro.com"  # Boîte qui reçoit les formulaires de contact
     INVITATION_EXPIRE_HOURS: int = 48
 
     # Logging
