@@ -39,7 +39,7 @@ engine_kwargs = {
     "max_overflow": settings.DATABASE_MAX_OVERFLOW,
     "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
     "pool_pre_ping": True,
-    "prepared_statement_cache_size": 0,
+    "connect_args": {"statement_cache_size": 0},
 }
 
 # Create async engine
