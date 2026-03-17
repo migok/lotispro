@@ -1612,3 +1612,68 @@
   .lp-pdf-mockup { flex-direction: column; gap: 10px; }
   .lp-pdf-arrow svg { transform: rotate(90deg); }
 }
+
+/* ── SOCIAL PROOF ───────────────────────────────────────────────── */
+.lp-section-proof { padding: 64px 0 48px; }
+.lp-proof-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  max-width: 1100px;
+  margin: 0 auto 40px;
+  padding: 0 24px;
+}
+.lp-proof-card {
+  background: var(--lp-bg2);
+  border: 1px solid rgba(212,151,58,.12);
+  border-radius: var(--lp-r);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.lp-proof-stars { color: var(--lp-brass); font-size: 13px; letter-spacing: 2px; }
+.lp-proof-quote { font-size: 14px; line-height: 1.7; color: var(--lp-text1); font-style: italic; flex: 1; }
+.lp-proof-author { margin-top: auto; }
+.lp-proof-name { font-size: 13px; font-weight: 600; color: var(--lp-text0); }
+.lp-proof-company { font-size: 12px; color: var(--lp-text3); margin-top: 2px; }
+.lp-proof-cta { text-align: center; margin-top: 8px; }
+.landing-root[data-lp-theme="light"] .lp-proof-card { background: #ffffff; border-color: rgba(184,119,40,.12); }
+@media (max-width: 900px) { .lp-proof-grid { grid-template-columns: 1fr; max-width: 520px; } }
+
+/* ── CONTACT SUCCESS STEPS ──────────────────────────────────────── */
+.lp-contact-success-steps {
+  counter-reset: steps;
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  max-width: 340px;
+}
+.lp-contact-success-steps li {
+  counter-increment: steps;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--lp-text1);
+  padding-left: 22px;
+  position: relative;
+}
+.lp-contact-success-steps li::before {
+  content: counter(steps);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 15px;
+  height: 15px;
+  background: rgba(212,151,58,.15);
+  color: var(--lp-brass);
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

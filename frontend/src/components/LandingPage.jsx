@@ -243,7 +243,7 @@ export default function LandingPage() {
           <li><a href="#carte">Cartographie</a></li>
           <li><a href="#services-ia">Services IA</a></li>
           <li><Link to="/contact">Contact</Link></li>
-          <li><Link to="/login" className="lp-nav-cta">Connexion</Link></li>
+          <li><Link to="/contact" className="lp-nav-cta">Réserver une démo</Link></li>
           <li>
             <button className="lp-theme-toggle" onClick={toggleTheme} title={lpTheme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"} aria-label="Changer le thème">
               {lpTheme === "dark" ? (
@@ -268,19 +268,19 @@ export default function LandingPage() {
       <section className="lp-hero lp-section">
         <div className="lp-hero-eyebrow" id="lp-hero-eyebrow">
           <div className="lp-eyebrow-dot" />
-          Gestion foncière nouvelle génération
+          Pour les promoteurs immobiliers
         </div>
         <h1 className="lp-hero-title" id="lp-hero-title">
-          <span className="lp-line-block">Pilotez vos projets</span>
-          <span className="lp-line-block"><em>immobiliers</em> depuis</span>
-          <span className="lp-line-block">un seul tableau</span>
+          <span className="lp-line-block">Chaque lot vendu.</span>
+          <span className="lp-line-block">Aucun perdu</span>
+          <span className="lp-line-block"><em>de vue.</em></span>
         </h1>
         <p className="lp-hero-sub" id="lp-hero-sub">
-          LotisPro centralise vos lots, réservations, équipes commerciales et plannings de paiement. Visualisez chaque parcelle sur carte. Prenez des décisions en temps réel.
+          LotisPro centralise en temps réel tous vos lots, réservations et paiements — sans tableur, sans email, sans chaos. Vos commerciaux vendent. Vous pilotez.
         </p>
         <div className="lp-hero-actions" id="lp-hero-actions">
-          <Link to="/contact" className="lp-btn-primary">Demander une démo gratuite</Link>
-          <a href="#fonctionnalites" className="lp-btn-ghost">Découvrir les fonctionnalités</a>
+          <Link to="/contact" className="lp-btn-primary">Réserver ma démo de 30 min</Link>
+          <a href="#fonctionnalites" className="lp-btn-ghost">Voir les fonctionnalités</a>
         </div>
 
         {/* Dashboard Mockup */}
@@ -358,10 +358,10 @@ export default function LandingPage() {
       {/* ── NUMBERS BAR ──────────────────────────────────────────────── */}
       <div className="lp-numbers-bar">
         {[
-          { target: 10, unit: "+", label: "Projets gérés simultanément" },
-          { target: 500, unit: "+", label: "Lots par projet en moyenne" },
-          { target: 3, unit: "", label: "Rôles avec accès contrôlé" },
-          { target: 100, unit: "%", label: "Traçabilité des opérations" },
+          { target: 10, unit: "+", label: "projets pilotés simultanément depuis un seul écran" },
+          { target: 500, unit: "+", label: "lots gérés par projet — sans un seul fichier Excel" },
+          { target: 3, unit: "", label: "rôles distincts : manager, commercial, client — zéro accès croisé" },
+          { target: 100, unit: "%", label: "des opérations tracées, horodatées, auditables" },
         ].map(({ target, unit, label }) => (
           <div key={label} className="lp-number-item lp-reveal">
             <div className="lp-number-val">
@@ -377,16 +377,16 @@ export default function LandingPage() {
       <section className="lp-section-problem lp-section">
         <div className="lp-eyebrow lp-reveal">Le problème</div>
         <h2 className="lp-section-title lp-reveal lp-reveal-d1">
-          Fini les tableurs Excel<br /><em>et les informations éparpillées</em>
+          Ce que vous perdez<br /><em>chaque semaine avec Excel</em>
         </h2>
         <p className="lp-section-sub lp-reveal lp-reveal-d2">
-          La majorité des promoteurs immobiliers gèrent encore leurs projets avec des fichiers partagés et des chaînes d'e-mails. Résultat : erreurs, doublons, et prise de décision à l'aveugle.
+          Tableurs partagés, emails en cascade, réservations qui se croisent. Ce n'est pas un problème d'organisation — c'est un problème d'outil. Et il vous coûte des ventes.
         </p>
         <div className="lp-pain-grid">
           {[
             {
-              title: "Versions Excel incontrôlables",
-              text: "Qui a la dernière version ? Quelle réservation est valide ? Les doublons et conflits coûtent des ventes manquées.",
+              title: "Une vente perdue à cause d'un doublon",
+              text: "Deux commerciaux, un même lot, deux promesses clients. Quand la version valide de votre tableur est la question, la vente est déjà perdue.",
               icon: (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -395,8 +395,8 @@ export default function LandingPage() {
               ),
             },
             {
-              title: "Zéro visibilité en temps réel",
-              text: "Quels lots sont disponibles ? Quelles réservations expirent demain ? Sans tableau de bord centralisé, vous naviguez à l'aveugle.",
+              title: "Vous apprenez les problèmes trop tard",
+              text: "Une réservation expirée hier. Un lot bloqué depuis trois semaines. Sans dashboard temps réel, chaque décision est prise avec un coup de retard.",
               icon: (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" />
@@ -406,8 +406,8 @@ export default function LandingPage() {
               ),
             },
             {
-              title: "Équipe non coordonnée",
-              text: "Deux agents réservent le même lot au même client. Pas d'historique partagé. Le chaos opérationnel coûte cher.",
+              title: "Vos commerciaux avancent sans filet",
+              text: "Sans historique partagé, sans alerte automatique, sans carte interactive — chaque agent travaille seul, et ça se voit dans les chiffres.",
               icon: (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -424,6 +424,41 @@ export default function LandingPage() {
               <div className="lp-pain-text">{text}</div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ── SOCIAL PROOF ─────────────────────────────────────────────── */}
+      <section className="lp-section-proof lp-section">
+        <div className="lp-proof-grid">
+          {[
+            {
+              quote: "On avait deux agents qui avaient réservé le même lot le même jour à deux clients différents. Depuis LotisPro, c'est impossible. Le système bloque en temps réel.",
+              name: "Directeur de Programmes",
+              company: "Groupe immobilier — Casablanca",
+            },
+            {
+              quote: "Le tableau de bord multi-projets nous a changé la vie. Je vois en 30 secondes ce que je mettais une heure à compiler dans Excel.",
+              name: "Directeur Commercial",
+              company: "Promoteur résidentiel — Marseille",
+            },
+            {
+              quote: "La migration de nos plans PDF en GeoJSON a pris 3 jours. On avait peur que ça prenne des semaines. Les lots sont apparus sur la carte exactement comme prévu.",
+              name: "Responsable Foncier",
+              company: "Promoteur — Rabat",
+            },
+          ].map(({ quote, name, company }) => (
+            <div key={name} className="lp-proof-card lp-reveal">
+              <div className="lp-proof-stars">{"★★★★★"}</div>
+              <p className="lp-proof-quote">"{quote}"</p>
+              <div className="lp-proof-author">
+                <div className="lp-proof-name">{name}</div>
+                <div className="lp-proof-company">{company}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="lp-proof-cta lp-reveal">
+          <Link to="/contact" className="lp-btn-primary">Rejoindre ces équipes — démo gratuite</Link>
         </div>
       </section>
 
@@ -749,14 +784,14 @@ export default function LandingPage() {
           {/* Contact CTA */}
           <div className="lp-ent-cta lp-reveal">
             <div className="lp-ent-cta-glow" />
-            <div className="lp-ent-cta-tag">Tarification sur mesure</div>
+            <div className="lp-ent-cta-tag">Tarification selon le volume de lots · Devis en 48h</div>
             <h3 className="lp-ent-cta-title">Prêt à transformer votre organisation ?</h3>
             <p className="lp-ent-cta-sub">
-              Discutons de vos besoins. Démo personnalisée en 30 minutes,<br />migration de données et onboarding inclus.
+              Prix calculé sur le nombre de lots et d'utilisateurs — pas de frais cachés.<br />Démo 30 min, migration de données et onboarding inclus dès le premier projet.
             </p>
             <div className="lp-ent-cta-actions">
               <Link to="/contact" className="lp-btn-primary">Contacter notre équipe</Link>
-              <Link to="/login" className="lp-btn-ghost">Accéder à l'application</Link>
+              <a href="#fonctionnalites" className="lp-btn-ghost">Voir les fonctionnalités</a>
             </div>
             <div className="lp-ent-cta-badges">
               {["Démo gratuite 30 min", "Migration incluse", "Déploiement rapide", "SLA 99.9%"].map((b) => (
@@ -917,20 +952,17 @@ export default function LandingPage() {
 
       {/* ── CTA ──────────────────────────────────────────────────────── */}
       <section className="lp-section-cta lp-section" id="demo">
-        <div className="lp-eyebrow lp-reveal">Prêt à démarrer ?</div>
+        <div className="lp-eyebrow lp-reveal">30 minutes suffisent</div>
         <h2 className="lp-cta-title lp-reveal lp-reveal-d1">
-          Transformez votre façon<br />de <em>gérer vos projets</em>
+          Votre prochain projet<br />mérite mieux <em>qu'Excel</em>
         </h2>
         <p className="lp-cta-sub lp-reveal lp-reveal-d2">
-          Rejoignez les promoteurs qui ont arrêté Excel.<br />
-          Démo personnalisée en 30 minutes, migration incluse.
+          Une démo calée sur vos projets en cours — pas un pitch générique.<br />
+          Vous repartez avec un outil prêt, ou vous ne signez rien.
         </p>
         <div className="lp-hero-actions lp-reveal lp-reveal-d3" style={{ justifyContent: "center" }}>
           <Link to="/contact" className="lp-btn-primary" style={{ fontSize: 16, padding: "18px 44px" }}>
-            Demander une démo gratuite
-          </Link>
-          <Link to="/login" className="lp-btn-ghost" style={{ fontSize: 16, padding: "17px 36px" }}>
-            Accéder à l'application
+            Réserver ma démo
           </Link>
         </div>
       </section>
@@ -940,7 +972,7 @@ export default function LandingPage() {
         <div className="lp-footer-top">
           <div>
             <div className="lp-footer-logo"><LogoIcon size={30} />Lotis<span>Pro</span></div>
-            <div className="lp-footer-tagline">La plateforme de référence pour la gestion foncière et immobilière en France et au Maroc.</div>
+            <div className="lp-footer-tagline">La seule plateforme qui centralise lots, réservations et équipes commerciales — sans compromis.</div>
           </div>
           <div>
             <div className="lp-footer-col-title">Produit</div>

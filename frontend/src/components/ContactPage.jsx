@@ -233,30 +233,30 @@ export default function ContactPage() {
 
           {/* Left — info panel */}
           <div className="lp-contact-info">
-            <div className="lp-eyebrow" style={{ marginBottom: 20 }}>Nous contacter</div>
+            <div className="lp-eyebrow" style={{ marginBottom: 20 }}>Démo sur mesure</div>
             <h1 className="lp-contact-title">
-              Parlons de<br /><em>votre projet</em>
+              30 minutes pour piloter<br /><em>vos lots autrement</em>
             </h1>
             <p className="lp-contact-desc">
-              Chaque organisation a ses particularités. Décrivez votre activité et nous vous proposerons une démonstration adaptée à vos projets, votre équipe et votre contexte.
+              Dites-nous où vous en êtes. On vous montre exactement ce que LotisPro change dans votre quotidien — pas un template générique, vos projets réels.
             </p>
 
             <div className="lp-contact-promises">
               {[
                 {
                   icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-                  label: "Réponse sous 24h",
-                  sub: "Jours ouvrés",
+                  label: "Un interlocuteur en 24h",
+                  sub: "Pas un bot. Un expert qui connaît votre métier.",
                 },
                 {
                   icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
-                  label: "Démo personnalisée",
-                  sub: "30 minutes, adaptée à votre contexte",
+                  label: "Une démo calée sur vos vrais projets",
+                  sub: "On ne vous présente pas un cas générique.",
                 },
                 {
                   icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 14a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 3.28h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8 10a16 16 0 0 0 6 6l.85-.85a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>,
-                  label: "Aucun engagement",
-                  sub: "Échangeons librement",
+                  label: "Vous repartez avec une décision claire",
+                  sub: "Signer ou ne pas signer — les deux sont bons.",
                 },
               ].map(({ icon, label, sub }) => (
                 <div key={label} className="lp-contact-promise">
@@ -288,10 +288,15 @@ export default function ContactPage() {
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
-                <h3 className="lp-contact-success-title">Message envoyé</h3>
+                <h3 className="lp-contact-success-title">C'est dans la boîte.</h3>
                 <p className="lp-contact-success-sub">
-                  Merci pour votre message. Notre équipe vous contactera dans les 24h ouvrées pour organiser une démonstration personnalisée.
+                  Voici ce qui se passe maintenant :
                 </p>
+                <ol className="lp-contact-success-steps">
+                  <li><strong>Sous 24h ouvrées</strong> — un expert vous envoie un créneau de démo par email.</li>
+                  <li><strong>J-1</strong> — vous recevez un lien de réunion et une courte liste de questions pour préparer la session à vos projets.</li>
+                  <li><strong>Démo 30 min</strong> — on vous montre LotisPro sur vos données, pas sur un template générique.</li>
+                </ol>
                 <Link to="/" className="lp-btn-ghost" style={{ marginTop: 8 }}>
                   Retour à l'accueil
                 </Link>
@@ -300,7 +305,7 @@ export default function ContactPage() {
               <form className="lp-contact-form" onSubmit={handleSubmit} noValidate>
                 <div className="lp-contact-form-header">
                   <div className="lp-contact-form-title">Demande de démonstration</div>
-                  <div className="lp-contact-form-sub">Tous les champs sont requis</div>
+                  <div className="lp-contact-form-sub">3 minutes à remplir. 30 minutes qui changent tout.</div>
                 </div>
 
                 <div className="lp-cf-row">
@@ -341,14 +346,13 @@ export default function ContactPage() {
                     />
                   </div>
                   <div className="lp-cf-field">
-                    <label className="lp-cf-label" htmlFor="phone">Téléphone</label>
+                    <label className="lp-cf-label" htmlFor="phone">Téléphone <span style={{ fontWeight: 400, opacity: 0.55 }}>(optionnel)</span></label>
                     <input
                       id="phone" name="phone" type="tel"
                       className="lp-cf-input"
                       placeholder="+212 6 00 00 00 00"
                       value={form.phone}
                       onChange={handleChange}
-                      required
                     />
                   </div>
                 </div>
@@ -374,7 +378,7 @@ export default function ContactPage() {
                   <textarea
                     id="message" name="message"
                     className="lp-cf-input lp-cf-textarea"
-                    placeholder="Décrivez votre activité, vos projets en cours, vos besoins spécifiques…"
+                    placeholder="Ex : nous gérons 3 programmes résidentiels de 80 à 200 lots chacun. Notre problème principal est la coordination des réservations entre commerciaux…"
                     rows={5}
                     value={form.message}
                     onChange={handleChange}
@@ -392,7 +396,7 @@ export default function ContactPage() {
                   ) : (
                     <>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                      Envoyer ma demande
+                      Réserver ma démo de 30 min
                     </>
                   )}
                 </button>
