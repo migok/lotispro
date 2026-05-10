@@ -2,24 +2,25 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { apiFetch, apiGet, apiPut, apiDelete, apiUploadFile, apiPatch } from '../utils/api';
+import { apiFetch, apiGet, apiPost, apiPut, apiDelete, apiUploadFile, apiPatch } from '../utils/api';
 import LotDetailModal from './LotDetailModal';
 import Dashboard from './Dashboard';
+import LotPricingConfigPanel from './LotPricingConfigPanel';
 import { useAuth } from '../contexts/AuthContext';
 
 const STATUS_COLORS = {
-  available: '#10b981',
-  reserved: '#f59e0b',
-  validated: '#8b5cf6',
-  sold: '#ef4444',
-  blocked: '#6b7280',
+  creation:               '#6b7280',
+  available:              '#10b981',
+  option:                 '#f59e0b',
+  reservation_a_finaliser:'#ef6c00',
+  reservation_engagee:    '#7c3aed',
+  reservation_soldee:     '#2563eb',
+  chez_notaire:           '#0891b2',
+  chez_proprietaire:      '#16a34a',
+  blocked:                '#e05555',
 };
 
-// Détermine la couleur effective selon statut + reservation_status
-const getLotColor = (status, reservationStatus) => {
-  if (status === 'reserved' && reservationStatus === 'validated') return STATUS_COLORS.validated;
-  return STATUS_COLORS[status] || '#999';
-};
+const getLotColor = (status) => STATUS_COLORS[status] || '#999';
 
 const SELECTION_STYLE = {
   color: '#3b82f6',
@@ -96,7 +97,7 @@ export default function ProjectDetailPage() {
   const geoRef = useRef(null);
   const labelsLayerRef = useRef(null);
   const mapContainerRef = useRef(null);
-  const [stats, setStats] = useState({ available: 0, reserved: 0, validated: 0, sold: 0, blocked: 0 });
+  const [stats, setStats] = useState({ creation: 0, available: 0, option: 0, reservation_a_finaliser: 0, reservation_engagee: 0, reservation_soldee: 0, chez_notaire: 0, chez_proprietaire: 0, blocked: 0 });
   const [filterStatus, setFilterStatus] = useState(null);
   const [surfaceMin, setSurfaceMin] = useState('');
   const [surfaceMax, setSurfaceMax] = useState('');
@@ -117,7 +118,6 @@ export default function ProjectDetailPage() {
   // Selection mode for bulk metadata edit (manager only)
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedLotIds, setSelectedLotIds] = useState(new Set());
-  const [showBulkModal, setShowBulkModal] = useState(false);
   const selectionModeRef = useRef(false);
   const selectedLotIdsRef = useRef(new Set());
   const selectedLotLayersRef = useRef(new Map()); // db_id -> { lyr, normalStyle }
@@ -216,17 +216,14 @@ export default function ProjectDetailPage() {
 
       // Calculate stats and extract metadata options
       const features = geojson.features || [];
-      const newStats = { available: 0, reserved: 0, validated: 0, sold: 0, blocked: 0 };
+      const newStats = { creation: 0, available: 0, option: 0, reservation_a_finaliser: 0, reservation_engagee: 0, reservation_soldee: 0, chez_notaire: 0, chez_proprietaire: 0, blocked: 0 };
       const typeLotSet = new Set();
       const emplacementSet = new Set();
       const typeMaisonSet = new Set();
 
       features.forEach((f) => {
         const status = f.properties?.status || 'available';
-        const resStatus = f.properties?.reservation_status;
-        if (status === 'reserved' && resStatus === 'validated') {
-          newStats.validated++;
-        } else if (newStats.hasOwnProperty(status)) {
+        if (newStats.hasOwnProperty(status)) {
           newStats[status]++;
         }
         // Collect unique metadata values
@@ -253,16 +250,13 @@ export default function ProjectDetailPage() {
           const props = feature.properties || {};
           const dbId = props.db_id;
           const status = props.status ?? 'available';
-          const reservationStatus = props.reservation_status ?? null;
           const area = props.Shape_Area;
           const lotPrice = props.price;
-          const lotColor = getLotColor(status, reservationStatus);
+          const lotColor = getLotColor(status);
 
           // Compute normal style (based on filters)
-          // For "validated" filter: show lots where status=reserved AND reservation_status=validated
-          const effectiveStatus = (status === 'reserved' && reservationStatus === 'validated') ? 'validated' : status;
           let normalStyle;
-          if (filterStatus && effectiveStatus !== filterStatus) {
+          if (filterStatus && status !== filterStatus) {
             normalStyle = { opacity: 0, fillOpacity: 0 };
           } else if (surfaceMin && area && area < parseFloat(surfaceMin)) {
             normalStyle = { opacity: 0.2, fillOpacity: 0.1 };
@@ -317,22 +311,19 @@ export default function ProjectDetailPage() {
 
           const getStatusLabel = (s) => {
             const labels = {
-              available: 'Disponible',
-              reserved: 'Réservé',
-              validated: 'Validé',
-              sold: 'Vendu',
-              blocked: 'Bloqué'
+              creation: 'En création', available: 'Disponible', option: 'Option',
+              reservation_a_finaliser: 'Résa. à finaliser', reservation_engagee: 'Résa. engagée',
+              reservation_soldee: 'Résa. soldée', chez_notaire: 'Chez notaire',
+              chez_proprietaire: 'Chez propriétaire', blocked: 'Bloqué',
             };
             return labels[s] || s;
           };
-
-          const tooltipStatus = (status === 'reserved' && props.reservation_status === 'validated') ? 'validated' : status;
 
           let tooltipContent = `
             <div class="lot-tooltip">
               <div class="lot-tooltip-header">
                 <strong>Lot ${lotId}</strong>
-                <span class="lot-tooltip-status ${tooltipStatus}">${getStatusLabel(tooltipStatus)}</span>
+                <span class="lot-tooltip-status ${status}">${getStatusLabel(status)}</span>
               </div>
               <div class="lot-tooltip-row">
                 <span class="lot-tooltip-label">Prix:</span>
@@ -386,18 +377,8 @@ export default function ProjectDetailPage() {
             `;
           }
 
-          // Si vendu, afficher le commercial qui a vendu
-          if (status === 'sold' && props.sold_by_name) {
-            tooltipContent += `
-              <div class="lot-tooltip-row lot-tooltip-commercial">
-                <span class="lot-tooltip-label">Vendu par:</span>
-                <span class="lot-tooltip-value">${props.sold_by_name}</span>
-              </div>
-            `;
-          }
-
-          // Si réservé, afficher le client
-          if (status === 'reserved' && props.client_name) {
+          // Afficher le client si statut actif
+          if (['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire'].includes(status) && props.client_name) {
             tooltipContent += `
               <div class="lot-tooltip-row">
                 <span class="lot-tooltip-label">Client:</span>
@@ -426,7 +407,7 @@ export default function ProjectDetailPage() {
               const entry = selectedLotLayersRef.current.get(dbId);
               if (newSelected.has(dbId)) {
                 newSelected.delete(dbId);
-                lyr.setStyle(entry?.normalStyle || { color: getLotColor(status, props.reservation_status), weight: 2, fillColor: getLotColor(status, props.reservation_status), fillOpacity: 0.5 });
+                lyr.setStyle(entry?.normalStyle || { color: getLotColor(status), weight: 2, fillColor: getLotColor(status), fillOpacity: 0.5 });
               } else {
                 newSelected.add(dbId);
                 lyr.setStyle(SELECTION_STYLE);
@@ -437,15 +418,17 @@ export default function ProjectDetailPage() {
               // Normal mode: open detail modal
               setSelectedLot({
                 id: props.db_id || null,
+                project_id: parseInt(projectId) || null,
                 lot_id: String(lotId),
                 numero: String(lotId),
                 status: status,
-                reservation_status: props.reservation_status ?? null,
-                reserved_by: props.reserved_by ?? null,
+                reserved_by_name: props.reserved_by ?? null,
                 reserved_by_user_id: props.reserved_by_user_id ?? null,
                 reserved_until: props.reserved_until ?? null,
                 surface: area ? parseFloat(area) : null,
                 price: props.price || null,
+                price_per_sqm: props.price_per_sqm || null,
+                price_per_sqm_acte: props.price_per_sqm_acte || null,
                 zone: props.zone || null,
                 client_id: props.client_id || null,
                 client_name: props.client_name || null,
@@ -670,9 +653,16 @@ export default function ProjectDetailPage() {
             isManager={isManager()}
             selectionMode={selectionMode}
             selectedCount={selectedLotIds.size}
+            selectedLotIds={Array.from(selectedLotIds)}
             onToggleSelectionMode={toggleSelectionMode}
             onClearSelection={clearSelection}
-            onOpenBulkModal={() => setShowBulkModal(true)}
+            projectId={projectId}
+            onBulkSuccess={() => {
+              setSelectionMode(false);
+              setSelectedLotIds(new Set());
+              selectedLotIdsRef.current = new Set();
+              loadLots();
+            }}
           />
         </div>
 
@@ -697,22 +687,6 @@ export default function ProjectDetailPage() {
         />
       )}
 
-      {/* Bulk Metadata Modal */}
-      {showBulkModal && (
-        <BulkMetadataModal
-          projectId={projectId}
-          selectedCount={selectedLotIds.size}
-          selectedLotIds={Array.from(selectedLotIds)}
-          onClose={() => setShowBulkModal(false)}
-          onSuccess={() => {
-            setShowBulkModal(false);
-            setSelectionMode(false);
-            setSelectedLotIds(new Set());
-            selectedLotIdsRef.current = new Set();
-            loadLots();
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -750,12 +724,15 @@ function CarteTab({
   isManager,
   selectionMode,
   selectedCount,
+  selectedLotIds,
   onToggleSelectionMode,
   onClearSelection,
-  onOpenBulkModal,
+  projectId,
+  onBulkSuccess,
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
   const carteTabRef = useRef(null);
 
   // Force la carte à se redimensionner au montage du composant
@@ -779,6 +756,11 @@ function CarteTab({
 
     return () => clearTimeout(timer);
   }, [showFilters]);
+
+  // Fermer le bulk edit quand on quitte le mode sélection
+  useEffect(() => {
+    if (!selectionMode) setShowBulkEdit(false);
+  }, [selectionMode]);
 
   // Gestion du plein écran natif du navigateur
   const toggleFullscreen = async () => {
@@ -956,19 +938,22 @@ function CarteTab({
           <>
             <div className="filters-status-row">
               {[
-                { key: 'available', label: 'Disponible' },
-                { key: 'reserved',  label: 'Réservé' },
-                { key: 'validated', label: 'Validé' },
-                { key: 'sold',      label: 'Vendu' },
-                { key: 'blocked',   label: 'Bloqué' },
+                { key: 'creation',               label: 'En création' },
+                { key: 'available',              label: 'Disponible' },
+                { key: 'option',                 label: 'Option' },
+                { key: 'reservation_a_finaliser',label: 'Résa. à finaliser' },
+                { key: 'reservation_engagee',    label: 'Résa. engagée' },
+                { key: 'reservation_soldee',     label: 'Résa. soldée' },
+                { key: 'chez_notaire',           label: 'Chez notaire' },
+                { key: 'chez_proprietaire',      label: 'Chez propriétaire' },
+                { key: 'blocked',                label: 'Bloqué' },
               ].map(({ key, label }) => (
                 <button
                   key={key}
                   className={`btn-status-filter ${filterStatus === key ? 'active' : ''} ${key}`}
                   onClick={() => setFilterStatus(filterStatus === key ? null : key)}
-                  style={key === 'validated' ? { '--status-filter-color': '#8b5cf6' } : undefined}
                 >
-                  <span className="status-dot" style={{ background: STATUS_COLORS[key] || '#8b5cf6' }}></span>
+                  <span className="status-dot" style={{ background: STATUS_COLORS[key] }}></span>
                   {label}
                   {stats[key] > 0 && (
                     <span className="status-filter-count">{stats[key]}</span>
@@ -1088,12 +1073,12 @@ function CarteTab({
               : `${selectedCount} lot${selectedCount > 1 ? 's' : ''} sélectionné${selectedCount > 1 ? 's' : ''}`}
           </div>
           <div className="selection-actions">
-            {selectedCount > 0 && (
+            {selectedCount > 0 && !showBulkEdit && (
               <>
                 <button className="btn-selection-clear" onClick={onClearSelection}>
                   Désélectionner tout
                 </button>
-                <button className="btn-selection-edit" onClick={onOpenBulkModal}>
+                <button className="btn-selection-edit" onClick={() => setShowBulkEdit(true)}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -1102,8 +1087,28 @@ function CarteTab({
                 </button>
               </>
             )}
+            {showBulkEdit && (
+              <button className="btn-selection-clear" onClick={() => setShowBulkEdit(false)}>
+                Annuler la modification
+              </button>
+            )}
           </div>
         </div>
+      )}
+
+      {/* Bulk Metadata — inline panel (same view as selection mode) */}
+      {selectionMode && showBulkEdit && selectedCount > 0 && (
+        <BulkMetadataModal
+          projectId={projectId}
+          selectedCount={selectedCount}
+          selectedLotIds={selectedLotIds}
+          onClose={() => setShowBulkEdit(false)}
+          onSuccess={() => {
+            setShowBulkEdit(false);
+            onBulkSuccess();
+          }}
+          inline
+        />
       )}
 
       {/* Map Container */}
@@ -1150,15 +1155,17 @@ function CarteTab({
 // ============================================================
 function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
   const STATUS_CONFIG = {
-    available: { label: 'Disponible', color: '#2ecc71', bg: 'rgba(46,204,113,0.12)' },
-    reserved:  { label: 'Réservé',    color: '#e8a93a', bg: 'rgba(232,169,58,0.12)' },
-    validated: { label: 'Validé',     color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)' },
-    sold:      { label: 'Vendu',      color: '#8896ae', bg: 'rgba(136,150,174,0.12)' },
-    blocked:   { label: 'Bloqué',     color: '#e05555', bg: 'rgba(224,85,85,0.12)'  },
+    creation:               { label: 'En création',        color: '#6b7280', bg: 'rgba(107,114,128,0.12)' },
+    available:              { label: 'Disponible',         color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
+    option:                 { label: 'Option',             color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+    reservation_a_finaliser:{ label: 'Résa. à finaliser',  color: '#ef6c00', bg: 'rgba(239,108,0,0.12)' },
+    reservation_engagee:    { label: 'Résa. engagée',      color: '#7c3aed', bg: 'rgba(124,58,237,0.12)' },
+    reservation_soldee:     { label: 'Résa. soldée',       color: '#2563eb', bg: 'rgba(37,99,235,0.12)' },
+    chez_notaire:           { label: 'Chez le notaire',    color: '#0891b2', bg: 'rgba(8,145,178,0.12)' },
+    chez_proprietaire:      { label: 'Chez le propriétaire',color: '#16a34a', bg: 'rgba(22,163,74,0.12)' },
+    blocked:                { label: 'Bloqué',             color: '#e05555', bg: 'rgba(224,85,85,0.12)' },
   };
-  // Determine display status: validated reservation → show as validated
-  const displayStatus = (lot.status === 'reserved' && lot.reservation_status === 'validated')
-    ? 'validated' : lot.status;
+  const displayStatus = lot.status;
   const conf = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.available;
   const priceM2 = lot.price && lot.surface && lot.surface > 0
     ? Math.round(lot.price / lot.surface)
@@ -1287,7 +1294,7 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
         </div>
       )}
 
-      {lot.status === 'reserved' && lot.client_name && (
+      {['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire'].includes(lot.status) && lot.client_name && (
         <div className="lot-map-popup-meta">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
@@ -1301,31 +1308,22 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
         </div>
       )}
 
-      {lot.status === 'sold' && lot.sold_by_name && (
-        <div className="lot-map-popup-meta">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-          Vendu par {lot.sold_by_name}
-        </div>
-      )}
-
       {/* Actions */}
       <div className="lot-map-popup-actions">
         {lot.status === 'available' && (
-          <button className="lot-map-popup-btn lot-map-popup-btn--primary" onClick={() => onViewDetails('reserve')}>
+          <button className="lot-map-popup-btn lot-map-popup-btn--primary" onClick={() => onViewDetails('start_option')}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
             </svg>
-            Réserver
+            Mettre en option
           </button>
         )}
-        {lot.status === 'reserved' && (
-          <button className="lot-map-popup-btn lot-map-popup-btn--primary" onClick={() => onViewDetails('sell')}>
+        {lot.status === 'option' && (
+          <button className="lot-map-popup-btn lot-map-popup-btn--primary" onClick={() => onViewDetails('to_reservation')}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
-            Finaliser
+            Réserver
           </button>
         )}
         <button className="lot-map-popup-btn lot-map-popup-btn--outline" onClick={() => onViewDetails(null)}>
@@ -2456,10 +2454,55 @@ function ParametresTab({ project, onUpdate }) {
     name: project.name || '',
     description: project.description || '',
     visibility: project.visibility || 'private',
+    delivery_date: project.delivery_date || '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Financing plan state
+  const [planLoading, setPlanLoading] = useState(true);
+  const [planSaving, setPlanSaving] = useState(false);
+  const [planError, setPlanError] = useState('');
+  const [planSuccess, setPlanSuccess] = useState('');
+  const [plan, setPlan] = useState({ deposit_pct: 50 });
+
+  useEffect(() => {
+    loadFinancingPlan();
+  }, [project.id]);
+
+  const loadFinancingPlan = async () => {
+    setPlanLoading(true);
+    try {
+      const data = await apiGet(`/api/projects/${project.id}/financing-plan`);
+      if (data) setPlan({ deposit_pct: data.deposit_pct });
+    } catch (_) {
+      // No plan yet — keep default 50%
+    } finally {
+      setPlanLoading(false);
+    }
+  };
+
+  const handlePlanChange = (field) => (e) => {
+    setPlan((prev) => ({ ...prev, [field]: parseFloat(e.target.value) || 0 }));
+  };
+
+  const handlePlanSubmit = async (e) => {
+    e.preventDefault();
+    setPlanError('');
+    setPlanSuccess('');
+    setPlanSaving(true);
+    try {
+      await apiPost(`/api/projects/${project.id}/financing-plan`, {
+        deposit_pct: parseFloat(plan.deposit_pct),
+      });
+      setPlanSuccess('Plan de financement mis à jour.');
+    } catch (err) {
+      setPlanError(err.message || 'Erreur lors de la sauvegarde');
+    } finally {
+      setPlanSaving(false);
+    }
+  };
 
   // CSV Import state
   const [csvFile, setCsvFile] = useState(null);
@@ -2486,6 +2529,7 @@ function ParametresTab({ project, onUpdate }) {
         name: formData.name.trim(),
         description: formData.description.trim() || null,
         visibility: formData.visibility,
+        delivery_date: formData.delivery_date || null,
       };
 
       await apiPut(`/api/projects/${project.id}`, payload);
@@ -2593,9 +2637,21 @@ function ParametresTab({ project, onUpdate }) {
               value={formData.visibility}
               onChange={handleChange}
             >
-              <option value="private">🔒 Privé</option>
-              <option value="public">🌐 Public</option>
+              <option value="private">Privé</option>
+              <option value="public">Public</option>
             </select>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Date de livraison</label>
+            <input
+              type="date"
+              name="delivery_date"
+              className="form-input"
+              style={{ maxWidth: 220 }}
+              value={formData.delivery_date}
+              onChange={handleChange}
+            />
           </div>
 
           <button
@@ -2613,10 +2669,11 @@ function ParametresTab({ project, onUpdate }) {
         <h3>Import CSV Métadonnées</h3>
         <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
           Importez un fichier CSV pour mettre à jour les métadonnées des lots.
-          Le fichier doit contenir une colonne <strong>parcelid</strong> correspondant au numéro du lot.
+          La colonne de mapping obligatoire est <strong>N_LOT</strong> — elle doit correspondre au numéro du lot.
+          Les lots absents du CSV ne sont pas modifiés.
         </p>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
-          Colonnes supportées: <code>parcelid</code>, <code>type de lots</code>, <code>emplacement</code>, <code>type maison</code>, <code>prix</code>
+          Colonnes supportées&nbsp;: <code>N_LOT</code>, <code>TYPE_DE_LOT</code>, <code>EMPLACEMENT</code>, <code>TYPE_DE_MAISON</code>, <code>ZONE</code>
         </p>
 
         <div className="flex gap-md items-center" style={{ flexWrap: 'wrap' }}>
@@ -2663,6 +2720,11 @@ function ParametresTab({ project, onUpdate }) {
                   <li style={{ color: csvResult.updated > 0 ? 'var(--success)' : 'inherit' }}>
                     ✓ Lots mis à jour: <strong>{csvResult.updated || 0}</strong>
                   </li>
+                  {(csvResult.activated || 0) > 0 && (
+                    <li style={{ color: 'var(--color-primary)' }}>
+                      ✓ Lots activés (disponibles): <strong>{csvResult.activated}</strong>
+                    </li>
+                  )}
                   {(csvResult.skipped || 0) > 0 && (
                     <li style={{ color: 'var(--text-secondary)' }}>
                       ○ Lots ignorés: {csvResult.skipped}
@@ -2698,12 +2760,64 @@ function ParametresTab({ project, onUpdate }) {
           </div>
         )}
       </div>
+
+      {/* Financing Plan Section */}
+      <div className="section-card" style={{ marginTop: 'var(--spacing-lg)' }}>
+        <h3>Plan de financement par défaut</h3>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+          Ce plan est proposé automatiquement lors du passage en <strong>Réservation engagée</strong>.
+          Il peut être ajusté au cas par cas sur chaque réservation. Changer le plan ici n'affecte pas les échéanciers déjà créés.
+        </p>
+
+        {planLoading ? (
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Chargement...</div>
+        ) : (
+          <form onSubmit={handlePlanSubmit}>
+            {planError && (
+              <div className="alert alert-error" style={{ marginBottom: 'var(--spacing-md)' }}>{planError}</div>
+            )}
+            {planSuccess && (
+              <div className="alert alert-success" style={{ marginBottom: 'var(--spacing-md)' }}>{planSuccess}</div>
+            )}
+
+            {/* Visual split bar */}
+            <div style={{ marginBottom: 'var(--spacing-lg)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                <span>Acompte <strong style={{ color: 'var(--color-primary)' }}>{plan.deposit_pct}%</strong></span>
+                <span>Solde <strong>{Math.round((100 - plan.deposit_pct) * 100) / 100}%</strong></span>
+              </div>
+              <div style={{ display: 'flex', height: 8, borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--bg-tertiary)' }}>
+                <div style={{ width: `${plan.deposit_pct}%`, background: 'var(--color-primary)', transition: 'width 0.2s' }} />
+                <div style={{ flex: 1, background: 'var(--text-muted)', opacity: 0.4 }} />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Acompte (%)</label>
+              <input
+                type="number" min="1" max="99" step="1"
+                className="form-input"
+                style={{ maxWidth: 120 }}
+                value={plan.deposit_pct}
+                onChange={handlePlanChange('deposit_pct')}
+              />
+            </div>
+
+            <button type="submit" className="btn btn-primary" disabled={planSaving} style={{ marginTop: 'var(--spacing-sm)' }}>
+              {planSaving ? 'Enregistrement...' : 'Enregistrer le plan de financement'}
+            </button>
+          </form>
+        )}
+      </div>
+
+      {/* Pricing Grid Section */}
+      <LotPricingConfigPanel projectId={project.id} />
     </div>
   );
 }
 
 // ─── Bulk Metadata Modal ────────────────────────────────────────────────────
-function BulkMetadataModal({ projectId, selectedCount, selectedLotIds, onClose, onSuccess }) {
+function BulkMetadataModal({ projectId, selectedCount, selectedLotIds, onClose, onSuccess, inline = false }) {
   const [form, setForm] = useState({
     type_lot: '',
     emplacement: '',
@@ -2750,9 +2864,8 @@ function BulkMetadataModal({ projectId, selectedCount, selectedLotIds, onClose, 
 
   const filledCount = Object.values(form).filter(v => v !== '').length;
 
-  return (
-    <div className="bm-overlay" onClick={onClose}>
-      <div className="bm-panel" onClick={(e) => e.stopPropagation()}>
+  const panelContent = (
+    <div className={inline ? 'bm-panel bm-panel--inline' : 'bm-panel'} onClick={inline ? undefined : (e) => e.stopPropagation()}>
 
         {/* ── Header ── */}
         <div className="bm-header">
@@ -2954,6 +3067,12 @@ function BulkMetadataModal({ projectId, selectedCount, selectedLotIds, onClose, 
           </div>
         </form>
       </div>
+  );
+
+  if (inline) return panelContent;
+  return (
+    <div className="bm-overlay" onClick={onClose}>
+      {panelContent}
     </div>
   );
 }

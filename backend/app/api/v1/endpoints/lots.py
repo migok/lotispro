@@ -4,7 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Query, status
 
-from app.api.dependencies import CurrentUser, LotServiceDep
+from app.api.dependencies import CurrentUser, LotPricingServiceDep, LotServiceDep
 from app.domain.schemas.common import MessageResponse, PaginatedResponse, PaginationParams
 from app.domain.schemas.lot import LotCreate, LotFilter, LotResponse, LotUpdate
 
@@ -27,9 +27,11 @@ async def list_lots(
     project_id: int | None = Query(default=None, description="Filter by project"),
     numero: str | None = Query(default=None, description="Search by lot number"),
     zone: str | None = Query(default=None, description="Filter by zone"),
-    status: Literal["available", "reserved", "sold", "blocked"] | None = Query(
-        default=None, description="Filter by status"
-    ),
+    status: Literal[
+        "creation", "available", "option", "reservation_a_finaliser",
+        "reservation_engagee", "reservation_soldee", "chez_notaire",
+        "chez_proprietaire", "blocked"
+    ] | None = Query(default=None, description="Filter by status"),
     surface_min: float | None = Query(default=None, ge=0, description="Min surface"),
     surface_max: float | None = Query(default=None, ge=0, description="Max surface"),
 ) -> PaginatedResponse[LotResponse]:
@@ -77,6 +79,21 @@ async def list_lots(
         total=total,
         pagination=pagination,
     )
+
+
+@router.get(
+    "/{lot_id}/pricing-config",
+    summary="Get pricing config for a lot",
+    description="Returns prix_m2_acte, prix_m2_catalogue and computed prices from the project pricing grid for this lot's combination.",
+)
+async def get_lot_pricing_config(
+    lot_id: int,
+    current_user: CurrentUser,
+    pricing_service: LotPricingServiceDep,
+) -> dict:
+    """Return the matching pricing config for this lot, or empty dict if none."""
+    result = await pricing_service.get_config_for_lot(lot_id)
+    return result or {}
 
 
 @router.get(

@@ -100,6 +100,7 @@ class ProjectModel(Base):
     total_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     sold_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ca_objectif: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     geojson_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(
@@ -142,6 +143,17 @@ class ProjectModel(Base):
     sales: Mapped[list["SaleModel"]] = relationship(
         "SaleModel",
         back_populates="project",
+    )
+    financing_plans: Mapped[list["ProjectFinancingPlanModel"]] = relationship(
+        "ProjectFinancingPlanModel",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="ProjectFinancingPlanModel.id",
+    )
+    pricing_configs: Mapped[list["LotPricingConfigModel"]] = relationship(
+        "LotPricingConfigModel",
+        back_populates="project",
+        cascade="all, delete-orphan",
     )
 
     __table_args__ = (
@@ -211,7 +223,9 @@ class LotModel(Base):
     zone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     surface: Mapped[float | None] = mapped_column(Float, nullable=True)
     price: Mapped[float | None] = mapped_column(Float, nullable=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="available")
+    price_per_sqm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_per_sqm_acte: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="creation")
     current_reservation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     geometry: Mapped[str | None] = mapped_column(Text, nullable=True)  # GeoJSON geometry
     # Metadata fields from CSV import
@@ -247,7 +261,10 @@ class LotModel(Base):
     __table_args__ = (
         UniqueConstraint("project_id", "numero", name="unique_lot_numero"),
         CheckConstraint(
-            "status IN ('available', 'reserved', 'sold', 'blocked')",
+            "status IN ("
+            "'creation', 'available', 'option', 'reservation_a_finaliser', "
+            "'reservation_engagee', 'reservation_soldee', 'chez_notaire', "
+            "'chez_proprietaire', 'blocked')",
             name="valid_lot_status",
         ),
         Index("ix_lots_project_status", "project_id", "status"),
@@ -309,6 +326,42 @@ class ClientModel(Base):
     )
 
 
+class NotaireModel(Base):
+    """Notaire (notary) ORM model."""
+
+    __tablename__ = "notaires"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    nom: Mapped[str] = mapped_column(String(100), nullable=False)
+    prenom: Mapped[str] = mapped_column(String(100), nullable=False)
+    telephone: Mapped[str] = mapped_column(String(30), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ville: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    adresse: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    # Relationships
+    reservations: Mapped[list["ReservationModel"]] = relationship(
+        "ReservationModel",
+        back_populates="notaire",
+    )
+
+    __table_args__ = (
+        Index("ix_notaires_nom", "nom"),
+        Index("ix_notaires_telephone", "telephone"),
+    )
+
+
 class ReservationModel(Base):
     """Reservation ORM model."""
 
@@ -348,9 +401,32 @@ class ReservationModel(Base):
     deposit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     deposit_refund_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     deposit_refund_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    deposit_refund_payment_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     release_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    # New workflow fields
+    payment_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    guarantee_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notary_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    notary_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Réservation engagée — prix de vente et promotion
+    sale_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    promotion_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    promotion_paid_timing: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    promotion_received: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="false"
+    )
+    # Notaire — FK vers l'entité notaire (remplace le texte libre notary_name)
+    notaire_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("notaires.id"),
+        nullable=True,
+    )
+    # Réservation soldée — intention de passage chez le notaire
+    wants_notaire: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -374,6 +450,10 @@ class ReservationModel(Base):
     )
     client: Mapped["ClientModel"] = relationship(
         "ClientModel",
+        back_populates="reservations",
+    )
+    notaire: Mapped["NotaireModel | None"] = relationship(
+        "NotaireModel",
         back_populates="reservations",
     )
     reserved_by: Mapped["UserModel | None"] = relationship("UserModel")
@@ -582,6 +662,152 @@ class PaymentInstallmentModel(Base):
         Index("ix_installments_due_date", "due_date"),
     )
 
+
+class ProjectFinancingPlanModel(Base):
+    """Default financing plan template for a project.
+
+    Each row represents a new plan version; the most recent row
+    (highest id) is the active default used when creating payment
+    schedules for reservations in this project.
+    """
+
+    __tablename__ = "project_financing_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("projects.id"),
+        nullable=False,
+    )
+    deposit_pct: Mapped[float] = mapped_column(Float, nullable=False, default=50.0)
+    deposit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    deposit_periodicity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    balance_delay_months: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    balance_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    balance_periodicity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    # Relationships
+    project: Mapped["ProjectModel"] = relationship(
+        "ProjectModel",
+        back_populates="financing_plans",
+    )
+    creator: Mapped["UserModel"] = relationship(
+        "UserModel",
+        foreign_keys=[created_by],
+    )
+
+    __table_args__ = (
+        Index("ix_project_financing_plans_project", "project_id"),
+    )
+
+
+class LotPricingConfigModel(Base):
+    """Per-project pricing config for each categorical combination of lot attributes.
+
+    One row per (project, zone, type_lot, type_maison, emplacement) combination.
+    prix_m2_acte is stable (legal act price); prix_m2_catalogue is the marketing
+    price that can be updated by managers.
+    """
+
+    __tablename__ = "lot_pricing_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("projects.id"),
+        nullable=False,
+    )
+    zone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    type_lot: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    type_maison: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    emplacement: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    prix_m2_acte: Mapped[float] = mapped_column(Float, nullable=False)
+    prix_m2_catalogue: Mapped[float] = mapped_column(Float, nullable=False)
+    created_by: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    project: Mapped["ProjectModel"] = relationship(
+        "ProjectModel",
+        back_populates="pricing_configs",
+    )
+    creator: Mapped["UserModel"] = relationship(
+        "UserModel",
+        foreign_keys=[created_by],
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "zone",
+            "type_lot",
+            "type_maison",
+            "emplacement",
+            name="uq_lot_pricing_config_combination",
+        ),
+        Index("ix_lot_pricing_configs_project", "project_id"),
+    )
+
+
+class LotDocumentModel(Base):
+    """Document attached to a lot for the notaire workflow."""
+
+    __tablename__ = "lot_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lot_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("lots.id"),
+        nullable=False,
+    )
+    reservation_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("reservations.id"),
+        nullable=True,
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    content_type: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="application/octet-stream"
+    )
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    # Relationships
+    lot: Mapped["LotModel"] = relationship("LotModel")
+
+    __table_args__ = (Index("ix_lot_documents_lot", "lot_id"),)
 
 
 class AIConversationModel(Base):

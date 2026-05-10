@@ -217,7 +217,10 @@ function InstallmentBrick({ type, label, items, onInstallmentUpdate, prerequisit
       {!prerequisitesMet && (
         <div style={{ padding: '8px 12px', fontSize: '0.78rem', color: 'var(--color-warning, #f59e0b)', display: 'flex', alignItems: 'center', gap: 6, borderTop: '1px solid var(--border-color)' }}>
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2L1 13h14L8 2z"/><path d="M8 6v4M8 11.5v.5"/></svg>
-          L'échéancier acompte doit être intégralement payé avant de valider le solde.
+          {type === 'deposit'
+            ? "Le montant promotion doit être confirmé avant de déverrouiller l'acompte."
+            : "L'échéancier acompte doit être intégralement payé avant de valider le solde."
+          }
         </div>
       )}
       {/* Table */}
@@ -342,7 +345,7 @@ function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate, onVa
             </span>
           )}
         </div>
-        <div className="pay-overview-price" title={`Dont 1er versement : ${formatPrice(firstPaymentAmount)}`}>
+        <div className="pay-overview-price">
           {formatPrice(firstPaymentAmount + schedule.lot_price)}
         </div>
         <button className={`pay-overview-toggle ${collapsed ? '' : 'open'}`}>
@@ -354,49 +357,52 @@ function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate, onVa
 
       {!collapsed && (
         <div className="pay-bricks">
-          {/* ── Brique 1 : 1er versement ── */}
-          <div className={`pay-brick pay-brick--first ${isValidated ? 'pay-brick--first-paid' : ''}`}>
-            <div className="pay-brick-head">
-              <span className="pay-brick-label">1er versement</span>
-              <span className="pay-brick-progress">
-                <span className="pay-brick-paid">{formatPrice(firstPaymentAmount)}</span>
-              </span>
+          {/* ── Ligne promotion compacte ── */}
+          {firstPaymentAmount > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-tertiary)' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>
+                  Montant promotion
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatPrice(firstPaymentAmount)}</span>
+                  {firstPaymentDate && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <IconCalendar /> {formatDate(firstPaymentDate)}
+                    </span>
+                  )}
+                </div>
+              </div>
               {isValidated
-                ? <span className="badge badge-green pay-brick-status"><IconCheck /> Payé</span>
-                : <span className="badge badge-gray pay-brick-status"><IconClock /> En attente</span>
+                ? <span className="badge badge-green"><IconCheck /> Confirmé</span>
+                : (
+                  <button
+                    className="pay-first-payment-confirm"
+                    onClick={() => res && onValidateDeposit && onValidateDeposit(res.id)}
+                  >
+                    <IconCheck /> Confirmer la réception
+                  </button>
+                )
               }
             </div>
-            {firstPaymentDate && (
-              <div className="pay-first-payment-date">
-                <IconCalendar /> {formatDate(firstPaymentDate)}
-              </div>
-            )}
-            {!isValidated && (
-              <button
-                className="pay-first-payment-confirm"
-                onClick={() => res && onValidateDeposit && onValidateDeposit(res.id)}
-              >
-                <IconCheck /> Confirmer la réception
-              </button>
-            )}
-          </div>
+          )}
 
-          {/* ── Brique 2 : Échéancier acompte ── */}
+          {/* ── Brique 1 : Échéancier acompte ── */}
           <InstallmentBrick
             type="deposit"
             label="Échéancier acompte"
             items={depositInstallments}
             onInstallmentUpdate={onInstallmentUpdate}
-            prerequisitesMet={isValidated}
+            prerequisitesMet={true}
           />
 
-          {/* ── Brique 3 : Échéancier solde ── */}
+          {/* ── Brique 2 : Échéancier solde ── */}
           <InstallmentBrick
             type="balance"
             label="Échéancier solde"
             items={balanceInstallments}
             onInstallmentUpdate={onInstallmentUpdate}
-            prerequisitesMet={isValidated && depositInstallments.every(i => i.status === 'paid')}
+            prerequisitesMet={depositInstallments.every(i => i.status === 'paid')}
           />
         </div>
       )}
@@ -425,12 +431,8 @@ export default function ClientDetailPage() {
 
   useEffect(() => { loadClient(); }, [clientId]);
 
-  // Load payment schedules when payments tab is opened
-  useEffect(() => {
-    if (activeTab === 'payments' && paymentSchedules.length === 0) {
-      loadPaymentSchedules();
-    }
-  }, [activeTab]);
+  // Load payment schedules on mount (needed for acte condition in reservations tab)
+  useEffect(() => { loadPaymentSchedules(); }, [clientId]);
 
   const loadClient = async () => {
     setLoading(true);
@@ -527,6 +529,25 @@ export default function ClientDetailPage() {
     }
   };
 
+  const handleDownloadReceipt = async (reservationId, lotNumero) => {
+    try {
+      const response = await apiFetch(`/api/reservations/${reservationId}/receipt`);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `Erreur ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `recu_paiement_${reservationId}_lot${lotNumero}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de la génération du reçu');
+    }
+  };
+
   const handleSendCertificateEmail = async (reservationId) => {
     try {
       const result = await apiPost(`/api/reservations/${reservationId}/certificate/email`, {});
@@ -612,6 +633,17 @@ export default function ClientDetailPage() {
     .slice(0, 5);
 
   const hasMultipleProjects = projects.length > 1;
+
+  // Map reservationId → whether the first deposit (acompte) installment is paid
+  // Used to conditionally unlock the acte de réservation
+  const firstDepositPaidByReservation = {};
+  paymentSchedules.forEach(schedule => {
+    const depositInstallments = schedule.installments
+      .filter(i => i.payment_type === 'deposit')
+      .sort((a, b) => a.installment_number - b.installment_number);
+    firstDepositPaidByReservation[schedule.reservation_id] =
+      depositInstallments.length > 0 && depositInstallments[0].status === 'paid';
+  });
 
   const TABS = [
     { key: 'info',         label: 'Informations' },
@@ -985,25 +1017,65 @@ export default function ClientDetailPage() {
                           <div className="cd-list-expire">Expire {formatDate(res.expiration_date)}</div>
                         )}
                         <div className="cd-cert-actions">
-                          <span className="cd-cert-label">Acte de réservation</span>
-                          <button
-                            className="btn btn-ghost btn-sm cd-cert-btn"
-                            onClick={() => handleDownloadCertificate(res.id, res.lot_numero)}
-                            title="Télécharger l'acte de réservation en PDF"
-                          >
-                            <IconDownload />
-                            Télécharger
-                          </button>
-                          {client.email && (
-                            <button
-                              className="btn btn-ghost btn-sm cd-cert-btn"
-                              onClick={() => handleSendCertificateEmail(res.id)}
-                              title={`Envoyer l'acte par email à ${client.email}`}
-                            >
-                              <IconSend />
-                              Envoyer par email
-                            </button>
-                          )}
+                          {(() => {
+                            const firstAcomptePaid = firstDepositPaidByReservation[res.id] ?? false;
+                            const promotionOk = res.promotion_received || !(res.promotion_amount > 0);
+
+                            // 1er acompte non encore reçu → aucun document
+                            if (!firstAcomptePaid) {
+                              return (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+                                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="2" y="7.5" width="12" height="7" rx="1.5"/>
+                                    <path d="M5 7.5V5a3 3 0 016 0v2.5"/>
+                                  </svg>
+                                  Acte disponible après réception du 1er acompte
+                                </div>
+                              );
+                            }
+
+                            // 1er acompte reçu + promotion reçue → Acte de réservation
+                            if (promotionOk) {
+                              return (
+                                <>
+                                  <span className="cd-cert-label">Acte de réservation</span>
+                                  <button
+                                    className="btn btn-ghost btn-sm cd-cert-btn"
+                                    onClick={() => handleDownloadCertificate(res.id, res.lot_numero)}
+                                    title="Télécharger l'acte de réservation en PDF"
+                                  >
+                                    <IconDownload />
+                                    Télécharger
+                                  </button>
+                                  {client.email && (
+                                    <button
+                                      className="btn btn-ghost btn-sm cd-cert-btn"
+                                      onClick={() => handleSendCertificateEmail(res.id)}
+                                      title={`Envoyer l'acte par email à ${client.email}`}
+                                    >
+                                      <IconSend />
+                                      Envoyer par email
+                                    </button>
+                                  )}
+                                </>
+                              );
+                            }
+
+                            // 1er acompte reçu, promotion en attente → Reçu de paiement
+                            return (
+                              <>
+                                <span className="cd-cert-label">Reçu de paiement</span>
+                                <button
+                                  className="btn btn-ghost btn-sm cd-cert-btn"
+                                  onClick={() => handleDownloadReceipt(res.id, res.lot_numero)}
+                                  title="Télécharger le reçu de paiement"
+                                >
+                                  <IconDownload />
+                                  Télécharger
+                                </button>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>

@@ -8,13 +8,27 @@ from app.domain.schemas.common import BaseSchema
 
 
 class DashboardCounts(BaseSchema):
-    """Schema for lot count statistics."""
+    """Schema for lot count statistics (9-status workflow)."""
 
     total: int
-    available: int
-    reserved: int
-    sold: int
-    blocked: int
+    # Individual statuses
+    creation: int = 0
+    available: int = 0
+    option: int = 0
+    reservation_a_finaliser: int = 0
+    reservation_engagee: int = 0
+    reservation_soldee: int = 0
+    chez_notaire: int = 0
+    chez_proprietaire: int = 0
+    blocked: int = 0
+    # Aggregated for backward compatibility
+    en_cours: int = Field(
+        default=0,
+        description="Active lots in workflow (option + raf + engagee + soldee + notaire + proprietaire)",
+    )
+    # Legacy fields kept for backward compatibility
+    reserved: int = Field(default=0, description="Legacy: option + reservation_a_finaliser + reservation_engagee")
+    sold: int = Field(default=0, description="Legacy: chez_proprietaire")
 
 
 class DashboardSurfaces(BaseSchema):
@@ -22,26 +36,33 @@ class DashboardSurfaces(BaseSchema):
 
     total: float = Field(default=0, description="Total surface in m²")
     available: float = Field(default=0, description="Available surface in m²")
-    reserved: float = Field(default=0, description="Reserved surface in m²")
-    sold: float = Field(default=0, description="Sold surface in m²")
+    en_cours: float = Field(default=0, description="Active workflow surface in m²")
+    chez_proprietaire: float = Field(default=0, description="Completed sales surface in m²")
     blocked: float = Field(default=0, description="Blocked surface in m²")
+    # Legacy
+    reserved: float = Field(default=0, description="Legacy reserved surface in m²")
+    sold: float = Field(default=0, description="Legacy sold surface in m²")
 
 
 class DashboardPercentages(BaseSchema):
     """Schema for lot status percentages."""
 
     available: float
-    reserved: float
-    sold: float
+    en_cours: float
+    chez_proprietaire: float
     blocked: float
+    # Legacy
+    reserved: float = 0.0
+    sold: float = 0.0
 
 
 class CategoryStats(BaseSchema):
-    """Schema for statistics by category (sold/reserved/available counts)."""
+    """Schema for statistics by category."""
 
     sold: int = 0
     reserved: int = 0
     available: int = 0
+    en_cours: int = 0
 
 
 class DashboardStats(BaseSchema):
@@ -148,10 +169,17 @@ class CommercialPerformance(BaseSchema):
 
 
 class AlertsSummary(BaseSchema):
-    """Schema for reservation alerts summary."""
+    """Schema for lot workflow alerts summary."""
 
-    expired_count: int
-    expiring_soon_count: int
+    # Expired options (lot in 'option' status past expiration date)
+    expired_options: int = 0
+    # Expired reservations to finalize (lot in 'reservation_a_finaliser' past finalization date)
+    expired_finalisations: int = 0
+    # At-risk options expiring within threshold
+    expiring_soon_options: int = 0
+    # Legacy fields
+    expired_count: int = 0
+    expiring_soon_count: int = 0
     total_at_risk: int
     value_at_risk: float
     deposit_at_risk: float

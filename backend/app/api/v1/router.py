@@ -7,8 +7,12 @@ from app.api.v1.endpoints import (
     auth,
     clients,
     dashboard,
+    documents,
     health,
+    lot_pricing_configs,
+    lot_transitions,
     lots,
+    notaires,
     payments,
     projects,
     reservations,
@@ -49,9 +53,21 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    lot_transitions.router,
+    prefix="/lots",
+    tags=["Lot Transitions"],
+)
+
+api_router.include_router(
     clients.router,
     prefix="/clients",
     tags=["Clients"],
+)
+
+api_router.include_router(
+    notaires.router,
+    prefix="/notaires",
+    tags=["Notaires"],
 )
 
 api_router.include_router(
@@ -82,4 +98,16 @@ api_router.include_router(
     payments.router,
     prefix="/payments",
     tags=["Payments"],
+)
+
+api_router.include_router(
+    documents.router,
+    prefix="/lots",
+    tags=["Documents"],
+)
+
+api_router.include_router(
+    lot_pricing_configs.router,
+    prefix="/projects",
+    tags=["Pricing Config"],
 )

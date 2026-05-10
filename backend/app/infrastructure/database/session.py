@@ -31,6 +31,15 @@ logger = get_logger(__name__)
 
 database_url = str(settings.DATABASE_URL)
 
+_is_postgres = "postgresql" in database_url
+
+_connect_args: dict = {}
+if _is_postgres:
+    import ssl as _ssl
+
+    _ssl_ctx = _ssl.create_default_context()
+    _connect_args = {"statement_cache_size": 0, "ssl": _ssl_ctx}
+
 # Engine configuration
 engine_kwargs = {
     "echo": settings.DEBUG,
@@ -39,7 +48,7 @@ engine_kwargs = {
     "max_overflow": settings.DATABASE_MAX_OVERFLOW,
     "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
     "pool_pre_ping": True,
-    "connect_args": {"statement_cache_size": 0},
+    "connect_args": _connect_args,
 }
 
 # Create async engine
@@ -100,18 +109,19 @@ async def init_db() -> None:
     """Initialize database - create all tables.
 
     Should be called on application startup.
-    In production, use Alembic migrations instead.
+    For PostgreSQL (Docker/production), Alembic migrations manage the schema.
+    create_all is only used for SQLite (local dev without Docker).
     """
     logger.info("Initializing database", database_url=database_url[:50] + "...")
 
-    if settings.is_development:
+    if "sqlite" in database_url:
         from app.infrastructure.database.models import Base
 
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("Database tables created (development mode)")
+        logger.info("Database tables created (SQLite development mode)")
     else:
-        logger.info("Production mode: skipping create_all — run 'alembic upgrade head'")
+        logger.info("PostgreSQL detected: skipping create_all — Alembic manages schema")
 
 
 async def close_db() -> None:

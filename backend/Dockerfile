@@ -60,6 +60,8 @@ COPY --chown=appuser:appgroup app/ ./app/
 COPY --chown=appuser:appgroup alembic/ ./alembic/
 COPY --chown=appuser:appgroup alembic.ini ./
 COPY --chown=appuser:appgroup scripts/ ./scripts/
+COPY --chown=appuser:appgroup entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R appuser:appgroup /app/data
@@ -74,8 +76,10 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/api/health || exit 1
 
+ENTRYPOINT ["./entrypoint.sh"]
+
 # Default command (shell form to expand $PORT set by Railway)
-CMD gunicorn app.main:app \
+CMD ["sh", "-c", "gunicorn app.main:app \
     --bind 0.0.0.0:${PORT:-8000} \
     --worker-class uvicorn.workers.UvicornWorker \
     --workers 2 \
@@ -87,7 +91,7 @@ CMD gunicorn app.main:app \
     --access-logfile - \
     --error-logfile - \
     --capture-output \
-    --enable-stdio-inheritance
+    --enable-stdio-inheritance"]
 
 # ============================================
 # Development stage
@@ -104,5 +108,5 @@ RUN pip install --no-cache-dir \
 
 USER appuser
 
-# Override command for development
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --reload
+# Override command for development (entrypoint inherited from production stage)
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --reload"]

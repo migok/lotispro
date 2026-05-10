@@ -1,6 +1,6 @@
 """Reservation repository implementation."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import and_, select
 
@@ -8,8 +8,6 @@ from app.domain.schemas.reservation import ReservationFilter
 from app.infrastructure.database.models import (
     ClientModel,
     LotModel,
-    PaymentInstallmentModel,
-    PaymentScheduleModel,
     ProjectModel,
     ReservationModel,
     UserModel,
@@ -64,10 +62,10 @@ class ReservationRepository(BaseRepository[ReservationModel]):
         return list(result.scalars().all())
 
     async def get_expired_active(self) -> list[ReservationModel]:
-        """Get all active reservations that have expired.
+        """Get reservations with status 'active' that have expired (legacy query).
 
-        Returns:
-            List of expired reservations
+        Note: In the new workflow, use LotRepository.get_expired_options() /
+        get_expired_finalisations() instead. These return alert data without mutations.
         """
         now = datetime.now(timezone.utc)
 
@@ -80,77 +78,6 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             )
         )
         return list(result.scalars().all())
-
-    async def get_at_risk(self, days_threshold: int = 3) -> list[dict]:
-        """Get reservations at risk (expiring soon or already expired).
-
-        Args:
-            days_threshold: Days before expiration to consider "at risk"
-
-        Returns:
-            List of at-risk reservation dicts
-        """
-        now = datetime.now(timezone.utc)
-        threshold_date = now + timedelta(days=days_threshold)
-
-        # Subquery: reservation IDs that have at least one paid installment
-        paid_reservation_ids = (
-            select(PaymentScheduleModel.reservation_id)
-            .join(
-                PaymentInstallmentModel,
-                PaymentInstallmentModel.schedule_id == PaymentScheduleModel.id,
-            )
-            .where(PaymentInstallmentModel.status == "paid")
-            .scalar_subquery()
-        )
-
-        query = (
-            select(ReservationModel, LotModel, ClientModel, UserModel)
-            .join(LotModel, LotModel.id == ReservationModel.lot_id)
-            .join(ClientModel, ClientModel.id == ReservationModel.client_id)
-            .outerjoin(UserModel, UserModel.id == ReservationModel.reserved_by_user_id)
-            .where(
-                and_(
-                    ReservationModel.status == "active",
-                    ReservationModel.expiration_date <= threshold_date,
-                    ReservationModel.id.not_in(paid_reservation_ids),
-                )
-            )
-            .order_by(ReservationModel.expiration_date)
-        )
-
-        result = await self.session.execute(query)
-        at_risk = []
-
-        for reservation, lot, client, reserver in result.all():
-            exp_date = reservation.expiration_date
-            if exp_date.tzinfo is None:
-                exp_date = exp_date.replace(tzinfo=timezone.utc)
-            days_remaining = (exp_date - now).days
-
-            at_risk.append(
-                {
-                    "id": reservation.id,
-                    "lot_id": reservation.lot_id,
-                    "client_id": reservation.client_id,
-                    "reserved_by_user_id": reservation.reserved_by_user_id,
-                    "reservation_date": reservation.reservation_date,
-                    "expiration_date": reservation.expiration_date,
-                    "deposit": reservation.deposit,
-                    "status": reservation.status,
-                    "lot_numero": lot.numero,
-                    "lot_price": lot.price,
-                    "lot_surface": lot.surface,
-                    "client_name": client.name,
-                    "client_phone": client.phone,
-                    "client_email": client.email,
-                    "reserved_by_name": reserver.name if reserver else None,
-                    "risk_type": "expired" if days_remaining < 0 else "expiring_soon",
-                    "days_remaining": days_remaining,
-                }
-            )
-
-        return at_risk
 
     async def get_with_details(self, reservation_id: int) -> dict | None:
         """Get reservation with extended details.
@@ -190,11 +117,23 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             "deposit_date": reservation.deposit_date,
             "notes": reservation.notes,
             "status": reservation.status,
+            # New workflow fields
+            "payment_type": reservation.payment_type,
+            "guarantee_amount": reservation.guarantee_amount,
+            "notaire_id": reservation.notaire_id,
+            "notary_name": reservation.notary_name,
+            "notary_date": reservation.notary_date,
+            # Réservation engagée — prix de vente et promotion
+            "sale_price": reservation.sale_price,
+            "promotion_amount": reservation.promotion_amount,
+            "promotion_paid_timing": reservation.promotion_paid_timing,
+            "promotion_received": reservation.promotion_received,
             "created_at": reservation.created_at,
             "updated_at": reservation.updated_at,
             "lot_numero": lot.numero,
             "lot_price": lot.price,
             "lot_surface": lot.surface,
+            "lot_status": lot.status,
             "client_name": client.name,
             "client_phone": client.phone,
             "client_email": client.email,
@@ -205,7 +144,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
         }
 
     async def get_active_for_lot(self, lot_id: int) -> ReservationModel | None:
-        """Get active reservation for a lot.
+        """Get the current active reservation for a lot (via current_reservation_id).
 
         Args:
             lot_id: Lot ID
@@ -217,7 +156,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             select(ReservationModel).where(
                 and_(
                     ReservationModel.lot_id == lot_id,
-                    ReservationModel.status == "active",
+                    ReservationModel.status.in_(("active", "validated")),
                 )
             )
         )

@@ -15,19 +15,20 @@ Full-stack web application for managing real estate projects, lots, reservations
 lot_webapp/
 ├── backend/          # FastAPI REST API (Python 3.13)
 │   ├── app/
-│   │   ├── api/v1/endpoints/   # Route handlers (10 modules)
+│   │   ├── api/v1/endpoints/   # Route handlers (15 modules)
 │   │   ├── core/               # Config, security, logging, middlewares
 │   │   ├── domain/             # Schemas (Pydantic) + interfaces
 │   │   ├── infrastructure/     # DB models, repositories, Supabase storage
-│   │   └── services/           # Business logic (9 services)
-│   ├── alembic/      # DB migrations
+│   │   └── services/           # Business logic (16 services)
+│   ├── alembic/      # DB migrations (0001 → 0010)
 │   └── scripts/      # Utility scripts (seed_users.py)
 ├── frontend/         # React SPA
 │   └── src/
-│       ├── components/   # 13 React components
-│       ├── contexts/     # AuthContext, ToastContext
-│       ├── services/     # API service layer
-│       └── utils/        # api.js, config.js, constants.js
+│       ├── components/         # React components + useTheme.js hook
+│       │   └── ai_assistant/   # AI assistant widget (AIAssistant, ChatInterface, MessageBubble…)
+│       ├── contexts/           # AuthContext, ToastContext
+│       ├── services/           # API service layer
+│       └── utils/              # api.js, config.js, constants.js
 └── CLAUDE.md
 ```
 
@@ -125,6 +126,7 @@ Endpoint → Service → Repository → DB Model
 - `ToastContext` provides global notifications
 - `utils/api.js` is the central fetch wrapper — handles JWT headers and 401 errors
 - All API calls go through `utils/api.js`, not direct fetch
+- `useTheme.js` (in `components/`) manages dark/light theme via `localStorage` + `data-theme` on `<html>`
 
 ---
 
@@ -156,14 +158,21 @@ Endpoint → Service → Repository → DB Model
 |-------|-------|------------|
 | `UserModel` | `users` | email, password_hash, role |
 | `ProjectModel` | `projects` | name, geojson_file_url, KPI fields |
-| `LotModel` | `lots` | numero, zone, surface, price, status, geometry |
+| `LotModel` | `lots` | numero, zone, surface, price, price_per_sqm, status, geometry |
 | `ClientModel` | `clients` | name, email, phone |
-| `ReservationModel` | `reservations` | status, deposit, expiration |
+| `NotaireModel` | `notaires` | name, email, phone, address |
+| `ReservationModel` | `reservations` | status, deposit, expiration, sale_price, promotion, refund_payment_type, wants_notaire, notaire_id |
 | `SaleModel` | `sales` | price, from reservation or direct |
 | `AuditLogModel` | `audit_logs` | user, action, entity |
 | `AssignmentModel` | `assignments` | commercial ↔ project |
+| `PaymentScheduleModel` | `payment_schedules` | reservation_id, total_amount |
+| `PaymentInstallmentModel` | `payment_installments` | schedule_id, amount, due_date, status |
+| `LotDocumentModel` | `lot_documents` | lot_id, name, file_url, document_type |
+| `AIConversationModel` | `ai_conversations` | user_id, messages (JSONB) |
 
-**Lot status values:** `available` | `reserved` | `sold` | `blocked`
+**Lot status workflow (9 values):**
+`creation` → `available` → `option` → `reservation_a_finaliser` → `reservation_engagee` → `reservation_soldee` → `chez_notaire` → `chez_proprietaire` | `blocked`
+
 **User roles:** `manager` | `commercial` | `client`
 
 ---
@@ -177,12 +186,16 @@ Base prefix: `/api/v1`
 | Auth | `/auth` | Login → returns JWT |
 | Users | `/users` | Manager only |
 | Projects | `/projects` | GeoJSON upload via multipart |
-| Lots | `/lots` | Status management |
+| Lots | `/lots` | CRUD + status management |
+| Lot Transitions | `/lots` | Status workflow transitions (separate router) |
+| Documents | `/lots` | Lot document upload/download (notaire workflow) |
 | Clients | `/clients` | Manager + commercial |
-| Reservations | `/reservations` | Lifecycle + deposit |
+| Notaires | `/notaires` | Notaire CRUD |
+| Reservations | `/reservations` | Lifecycle + deposit + notaire assignment |
 | Sales | `/sales` | Direct or from reservation |
+| Payments | `/payments` | Payment schedules + installments |
 | Dashboard | `/dashboard` | KPIs and analytics |
-| Audit | `/audit` | Manager only |
+| Audit | `/audit-logs` | Manager only |
 | Health | `/health` | No auth required |
 
 ---
@@ -222,6 +235,7 @@ Base prefix: `/api/v1`
 - **Toast for feedback:** use `useToast()` from `ToastContext`
 - **Role checks:** use `ProtectedRoute` for route-level, check `user.role` in components
 - **Styling:** custom CSS in `styles.css`, no UI framework
+- **Theme:** `useTheme.js` in `components/` — reads/writes `localStorage('lotispro-theme')`, sets `data-theme` on `<html>`
 
 ---
 
@@ -230,3 +244,25 @@ Base prefix: `/api/v1`
 GeoJSON files are uploaded to Supabase Storage bucket. The `geojson_file_url` on `ProjectModel` stores the public URL. The `infrastructure/storage/supabase_storage.py` module handles uploads.
 
 To enable: set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` in `.env`.
+
+---
+
+## Design System
+
+**Palette Obsidian Navy + Warm Brass** — premium B2B real estate SaaS.
+
+Dark (default): `#090d16` bg + `#d4973a` brass primary  
+Light (`data-theme="light"`): `#f4f5f0` warm stone + `#b87728` deep brass
+
+**Status colors (map polygons + badges):**
+
+| Status | Color |
+|--------|-------|
+| available | `#10b981` emerald |
+| option / reserved | `#f59e0b` amber |
+| validated | `#8b5cf6` violet |
+| sold / chez_proprietaire | `#ef4444` red |
+| blocked | `#6b7280` gray |
+
+**Typography:** Cormorant Garamond (display) + DM Sans (body) + DM Mono (mono)  
+Numbers use `font-variant-numeric: tabular-nums lining-nums` — `.num` utility class available.

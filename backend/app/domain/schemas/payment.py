@@ -44,6 +44,11 @@ class PaymentScheduleCreate(BaseSchema):
         le=60,
         description="Months to wait after the last deposit installment before starting balance",
     )
+    promotion_amount: float = Field(
+        default=0.0,
+        ge=0,
+        description="Promotion déduite de l'acompte brut (prix catalogue − prix vente)",
+    )
     deposit_installments: InstallmentConfig = Field(
         description="Installment configuration for the deposit tranche",
     )

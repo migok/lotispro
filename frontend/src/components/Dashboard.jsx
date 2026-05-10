@@ -22,6 +22,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [lots, setLots] = useState([]);        // lots filtrés par user (pour la table)
   const [allLots, setAllLots] = useState([]);  // tous les lots du projet (pour le graphe catégorie)
   const [alerts, setAlerts] = useState({ reservations: [], summary: {} });
+  const [notaireAlerts, setNotaireAlerts] = useState([]);
   const [performance, setPerformance] = useState(null);
   const [clientsPipeline, setClientsPipeline] = useState([]);
   const [latePayments, setLatePayments] = useState([]);
@@ -36,7 +37,14 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [users, setUsers] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(null);
-  const [selectedStatuses, setSelectedStatuses] = useState(['sold', 'reserved', 'validated', 'blocked']); // Filtre par statut (pas de disponible)
+  const [selectedStatuses, setSelectedStatuses] = useState(['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire','blocked']);
+
+  // Onglet principal
+  const [activeMainTab, setActiveMainTab] = useState('overview'); // 'overview' | 'options'
+
+  // Suivi des options
+  const [optionsTracking, setOptionsTracking] = useState([]);
+  const [optionsTrackingError, setOptionsTrackingError] = useState(false);
 
   // Répartition par catégorie
   const [catRepTab, setCatRepTab] = useState('type_lot'); // 'type_lot' | 'emplacement' | 'type_maison' | 'zone'
@@ -172,6 +180,28 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         setLatePayments(lateData || []);
       } catch (_) {
         setLatePayments([]);
+      }
+
+      // Notaire-pending alerts (non-blocking)
+      try {
+        const notaireData = await apiGet(`/api/dashboard/notaire-alerts${queryString}`);
+        setNotaireAlerts(notaireData || []);
+      } catch (_) {
+        setNotaireAlerts([]);
+      }
+
+      // Options tracking (non-blocking)
+      try {
+        const optUrl = `/api/dashboard/options-tracking${queryString}`;
+        console.log('[DEBUG options-tracking] fetching:', optUrl);
+        const optData = await apiGet(optUrl);
+        console.log('[DEBUG options-tracking] result:', optData);
+        setOptionsTracking(optData || []);
+        setOptionsTrackingError(false);
+      } catch (e) {
+        console.error('[DEBUG options-tracking] FAILED:', e);
+        setOptionsTracking([]);
+        setOptionsTrackingError(true);
       }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
@@ -647,17 +677,17 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 />
                 <path
                   className="kpis-circle reserved"
-                  strokeDasharray={`${stats?.percentages?.reserved || 0}, 100`}
+                  strokeDasharray={`${stats?.percentages?.en_cours || 0}, 100`}
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
               </svg>
-              <div className="kpis-stock-percent">{stats?.percentages?.reserved || 0}%</div>
+              <div className="kpis-stock-percent">{stats?.percentages?.en_cours || 0}%</div>
             </div>
             <div className="kpis-stock-info">
-              <div className="kpis-stock-value">{stats?.counts?.reserved || 0}</div>
+              <div className="kpis-stock-value">{stats?.counts?.en_cours || 0}</div>
               <div className="kpis-stock-label">
-                {isCommercial() ? 'Mes réserv.' : 'Réservés'}
-                <span className="kpis-info-icon kpis-info-icon-dark" title="Lots avec réservation active">ⓘ</span>
+                {isCommercial() ? 'Pipeline actif' : 'En cours'}
+                <span className="kpis-info-icon kpis-info-icon-dark" title="Lots avec option/réservation active">ⓘ</span>
               </div>
             </div>
           </div>
@@ -671,17 +701,17 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 />
                 <path
                   className="kpis-circle sold"
-                  strokeDasharray={`${stats?.percentages?.sold || 0}, 100`}
+                  strokeDasharray={`${stats?.percentages?.chez_proprietaire || 0}, 100`}
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
               </svg>
-              <div className="kpis-stock-percent">{stats?.percentages?.sold || 0}%</div>
+              <div className="kpis-stock-percent">{stats?.percentages?.chez_proprietaire || 0}%</div>
             </div>
             <div className="kpis-stock-info">
-              <div className="kpis-stock-value">{stats?.counts?.sold || 0}</div>
+              <div className="kpis-stock-value">{stats?.counts?.chez_proprietaire || 0}</div>
               <div className="kpis-stock-label">
-                {isCommercial() ? 'Mes ventes' : 'Vendus'}
-                <span className="kpis-info-icon kpis-info-icon-dark" title="Lots vendus définitivement">ⓘ</span>
+                {isCommercial() ? 'Mes ventes' : 'Chez propriétaire'}
+                <span className="kpis-info-icon kpis-info-icon-dark" title="Lots transférés chez le propriétaire">ⓘ</span>
               </div>
             </div>
           </div>
@@ -778,37 +808,36 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           if (!groups[key]) {
             groups[key] = {
               name: key,
-              // Compteurs globaux (toujours présents)
-              sold: 0, reserved: 0, available: 0, blocked: 0,
-              amount_sold: 0, amount_reserved: 0, amount_available: 0, amount_blocked: 0,
-              // Compteurs "mon portefeuille" (vue commerciale)
-              mine_sold: 0, mine_reserved: 0,
-              amount_mine_sold: 0, amount_mine_reserved: 0,
-              // Lots des autres commerciaux
+              // Active pipeline buckets
+              en_cours: 0, chez_proprietaire: 0, available: 0, blocked: 0,
+              amount_en_cours: 0, amount_chez_proprietaire: 0, amount_available: 0, amount_blocked: 0,
+              // Commercial view
+              mine_en_cours: 0, mine_proprietaire: 0,
+              amount_mine_en_cours: 0, amount_mine_proprietaire: 0,
               others: 0, amount_others: 0,
               amount_total: 0,
             };
           }
           const price = parseFloat(lot.price) || 0;
           groups[key].amount_total += price;
+          const ACTIVE = ['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire'];
 
           if (hasUserFilter) {
             const isMine = myLotIds.has(lot.id);
-            if (isMine && lot.status === 'sold') {
-              groups[key].mine_sold++;
-              groups[key].amount_mine_sold += price;
-              groups[key].sold++;
-              groups[key].amount_sold += price;
-            } else if (isMine && lot.status === 'reserved') {
-              groups[key].mine_reserved++;
-              groups[key].amount_mine_reserved += price;
-              groups[key].reserved++;
-              groups[key].amount_reserved += price;
-            } else if (lot.status === 'available') {
+            if (isMine && lot.status === 'chez_proprietaire') {
+              groups[key].mine_proprietaire++;
+              groups[key].amount_mine_proprietaire += price;
+              groups[key].chez_proprietaire++;
+              groups[key].amount_chez_proprietaire += price;
+            } else if (isMine && ACTIVE.includes(lot.status)) {
+              groups[key].mine_en_cours++;
+              groups[key].amount_mine_en_cours += price;
+              groups[key].en_cours++;
+              groups[key].amount_en_cours += price;
+            } else if (lot.status === 'available' || lot.status === 'creation') {
               groups[key].available++;
               groups[key].amount_available += price;
             } else {
-              // Vendu/réservé par un autre commercial
               groups[key].others++;
               groups[key].amount_others += price;
             }
@@ -821,14 +850,14 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
 
         const catStats = Object.values(groups).sort((a, b) => b.amount_total - a.amount_total);
         const grandTotal = catStats.reduce((s, g) => s + g.amount_total, 0) || 1;
-        const grandSold = catStats.reduce((s, g) => s + g.sold, 0);
-        const grandReserved = catStats.reduce((s, g) => s + g.reserved, 0);
-        const grandAvailable = catStats.reduce((s, g) => s + g.available, 0);
-        const grandBlocked = catStats.reduce((s, g) => s + g.blocked, 0);
-        const amountSold = catStats.reduce((s, g) => s + g.amount_sold, 0);
-        const amountReserved = catStats.reduce((s, g) => s + g.amount_reserved, 0);
-        const amountAvailable = catStats.reduce((s, g) => s + g.amount_available, 0);
-        const amountBlocked = catStats.reduce((s, g) => s + g.amount_blocked, 0);
+        const grandSold = catStats.reduce((s, g) => s + (g.chez_proprietaire || 0), 0);
+        const grandReserved = catStats.reduce((s, g) => s + (g.en_cours || 0), 0);
+        const grandAvailable = catStats.reduce((s, g) => s + (g.available || 0), 0);
+        const grandBlocked = catStats.reduce((s, g) => s + (g.blocked || 0), 0);
+        const amountSold = catStats.reduce((s, g) => s + (g.amount_chez_proprietaire || 0), 0);
+        const amountReserved = catStats.reduce((s, g) => s + (g.amount_en_cours || 0), 0);
+        const amountAvailable = catStats.reduce((s, g) => s + (g.amount_available || 0), 0);
+        const amountBlocked = catStats.reduce((s, g) => s + (g.amount_blocked || 0), 0);
         const grandOthers = catStats.reduce((s, g) => s + g.others, 0);
         const amountOthers = catStats.reduce((s, g) => s + g.amount_others, 0);
 
@@ -1170,6 +1199,134 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         );
       })()}
 
+      {/* ── Onglets principaux ── */}
+      {(isManager() || isCommercial()) && (
+        <div className="dash-main-tabs">
+          <button
+            className={`dash-main-tab${activeMainTab === 'overview' ? ' active' : ''}`}
+            onClick={() => setActiveMainTab('overview')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+            </svg>
+            Vue générale
+          </button>
+          <button
+            className={`dash-main-tab${activeMainTab === 'options' ? ' active' : ''}`}
+            onClick={() => setActiveMainTab('options')}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Suivi des options
+            {optionsTracking.length > 0 && (
+              <span className={`dash-main-tab-badge${optionsTracking.some(o => o.is_expired) ? ' danger' : ' warn'}`}>
+                {optionsTracking.length}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* ── Onglet : Suivi des options ── */}
+      {activeMainTab === 'options' && (isManager() || isCommercial()) && (() => {
+        const expired = optionsTracking.filter(o => o.is_expired);
+        const active = optionsTracking.filter(o => !o.is_expired);
+
+        const fmtDays = (days) => {
+          if (days < 0) return { label: `+${Math.abs(Math.ceil(days))}j dépassé`, cls: 'opt-badge--expired' };
+          if (days <= 1) return { label: `J-${Math.ceil(days)} critique`, cls: 'opt-badge--critical' };
+          if (days <= 3) return { label: `J-${Math.ceil(days)}`, cls: 'opt-badge--warn' };
+          return { label: `J-${Math.ceil(days)}`, cls: 'opt-badge--ok' };
+        };
+
+        return (
+          <div className="opt-tracking-section">
+            {/* Résumé */}
+            <div className="opt-summary-strip">
+              <div className="opt-summary-tile opt-summary-tile--total">
+                <span className="opt-summary-value">{optionsTracking.length}</span>
+                <span className="opt-summary-label">Options actives</span>
+              </div>
+              <div className="opt-summary-tile opt-summary-tile--expired">
+                <span className="opt-summary-value">{expired.length}</span>
+                <span className="opt-summary-label">Expirées</span>
+              </div>
+              <div className="opt-summary-tile opt-summary-tile--warn">
+                <span className="opt-summary-value">{active.filter(o => o.days_remaining <= 3).length}</span>
+                <span className="opt-summary-label">Expirent dans 3j</span>
+              </div>
+              <div className="opt-summary-tile opt-summary-tile--ok">
+                <span className="opt-summary-value">{active.filter(o => o.days_remaining > 3).length}</span>
+                <span className="opt-summary-label">En cours</span>
+              </div>
+            </div>
+
+            {optionsTrackingError ? (
+              <div className="empty-state" style={{ padding: '48px 24px' }}>
+                <div className="empty-state-title" style={{ color: 'var(--color-danger)' }}>Erreur de chargement</div>
+                <div className="empty-state-description">Impossible de récupérer les options. Vérifiez la console pour plus de détails.</div>
+              </div>
+            ) : optionsTracking.length === 0 ? (
+              <div className="empty-state" style={{ padding: '48px 24px' }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 12px' }}>
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <div className="empty-state-title" style={{ color: 'var(--color-success)' }}>Aucune option active</div>
+                <div className="empty-state-description">Toutes les options ont été traitées.</div>
+              </div>
+            ) : (
+              <div className="opt-table-wrap">
+                <table className="opt-table">
+                  <thead>
+                    <tr>
+                      <th>Lot</th>
+                      {!effectiveProjectId && <th>Projet</th>}
+                      <th>Client</th>
+                      {isManager() && <th>Commercial</th>}
+                      <th>Statut</th>
+                      <th>Date option</th>
+                      <th>Expiration</th>
+                      <th>Urgence</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {optionsTracking.map((o) => {
+                      const { label, cls } = fmtDays(o.days_remaining);
+                      return (
+                        <tr
+                          key={o.lot_id}
+                          className={`opt-row${o.is_expired ? ' opt-row--expired' : ''}`}
+                          onClick={() => onSelectLot && onSelectLot({ id: o.lot_id })}
+                          style={{ cursor: onSelectLot ? 'pointer' : 'default' }}
+                        >
+                          <td className="opt-cell-numero">#{o.lot_numero}</td>
+                          {!effectiveProjectId && <td className="opt-cell-project">{o.project_name}</td>}
+                          <td className="opt-cell-client">
+                            <div className="opt-client-name">{o.client_name}</div>
+                            {o.client_phone && <div className="opt-client-phone">{o.client_phone}</div>}
+                          </td>
+                          {isManager() && <td className="opt-cell-commercial">{o.reserved_by_name || '—'}</td>}
+                          <td>
+                            <span className={`status-badge ${o.lot_status}`} style={{ fontSize: '0.7rem', padding: '3px 8px' }}>
+                              {o.lot_status === 'option' ? 'Option' : 'Résa. à finaliser'}
+                            </span>
+                          </td>
+                          <td className="opt-cell-date">{o.reservation_date ? new Date(o.reservation_date).toLocaleDateString('fr-FR') : '—'}</td>
+                          <td className="opt-cell-date">{new Date(o.expiration_date).toLocaleDateString('fr-FR')}</td>
+                          <td><span className={`opt-badge ${cls}`}>{label}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {activeMainTab === 'overview' && (
       <div className="dashboard-grid">
         {/* Main Column */}
         <div className="dashboard-main">
@@ -1263,6 +1420,63 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
             </div>
           )}
 
+          {/* Notaire Pending Alerts Section */}
+          {(isManager() || isCommercial()) && notaireAlerts.length > 0 && (
+            <div className="section-card">
+              <div className="section-header">
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-primary)' }}>
+                    <rect x="1.5" y="2.5" width="13" height="12" rx="1.5" />
+                    <path d="M1.5 6.5h13M5 1v3M11 1v3" />
+                  </svg>
+                  <span style={{ color: 'var(--color-primary)' }}>Passage chez le notaire</span>
+                </h3>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  {notaireAlerts.length} lot{notaireAlerts.length > 1 ? 's' : ''} en attente de rendez-vous
+                </span>
+              </div>
+              <div className="alerts-container">
+                {notaireAlerts.map(item => (
+                  <div key={item.lot_id} className="alert-card expiring_soon">
+                    <div className="alert-icon">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+                      </svg>
+                    </div>
+                    <div className="alert-content">
+                      <div className="alert-title">
+                        Lot {item.lot_numero}
+                        {item.lot_zone && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · Zone {item.lot_zone}</span>}
+                        <span className="alert-client-name"> — {item.client_name}</span>
+                      </div>
+                      <div className="alert-details">
+                        <span>Client souhaite passer chez le notaire</span>
+                        {item.lot_price && (
+                          <>
+                            <span className="alert-sep">·</span>
+                            <span className="num">{item.lot_price.toLocaleString('fr-FR')} MAD</span>
+                          </>
+                        )}
+                        {item.client_phone && (
+                          <>
+                            <span className="alert-sep">·</span>
+                            <span>{item.client_phone}</span>
+                          </>
+                        )}
+                        {item.notary_name && (
+                          <>
+                            <span className="alert-sep">·</span>
+                            <span>Notaire : {item.notary_name}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Late Payments Section */}
           {(isManager() || isCommercial()) && latePayments.length > 0 && (
             <div className="section-card">
@@ -1337,10 +1551,13 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
               <div className="section-actions">
                 <div className="lots-status-filters">
                   {[
-                    { key: 'sold',      label: 'Vendu',   cls: 'filter-sold' },
-                    { key: 'blocked',   label: 'Bloqué',  cls: 'filter-blocked' },
-                    { key: 'reserved',  label: 'Réservé', cls: 'filter-reserved' },
-                    { key: 'validated', label: 'Validé',  cls: 'filter-validated' },
+                    { key: 'option',                  cls: 'filter-option',                  label: 'Option' },
+                    { key: 'reservation_a_finaliser', cls: 'filter-reservation_a_finaliser', label: 'Résa. à finaliser' },
+                    { key: 'reservation_engagee',     cls: 'filter-reservation_engagee',     label: 'Résa. engagée' },
+                    { key: 'reservation_soldee',      cls: 'filter-reservation_soldee',      label: 'Résa. soldée' },
+                    { key: 'chez_notaire',            cls: 'filter-chez_notaire',            label: 'Notaire' },
+                    { key: 'chez_proprietaire',       cls: 'filter-chez_proprietaire',       label: 'Propriétaire' },
+                    { key: 'blocked',                 cls: 'filter-blocked',                 label: 'Bloqué' },
                   ].map(({ key, label, cls }) => (
                     <button
                       key={key}
@@ -1382,17 +1599,13 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 <tbody>
                   {lots.filter(lot => {
                     if (selectedStatuses.length === 0) return true;
-                    if (lot.status === 'reserved' && lot.reservation_status === 'validated') {
-                      return selectedStatuses.includes('validated');
-                    }
                     return selectedStatuses.includes(lot.status);
                   }).slice(0, 20).map((lot) => {
-                    const daysRemaining = lot.status === 'reserved' ? getDaysRemaining(lot.expiration_date) : null;
+                    const hasExpiry = ['option','reservation_a_finaliser'].includes(lot.status);
+                    const daysRemaining = hasExpiry ? getDaysRemaining(lot.expiration_date) : null;
                     const isExpiringSoon = daysRemaining !== null && daysRemaining <= 3 && daysRemaining > 0;
                     const isExpired = daysRemaining !== null && daysRemaining <= 0;
-                    const isValidated = lot.reservation_status === 'validated';
-                    // Effective display status
-                    const displayStatus = (lot.status === 'reserved' && isValidated) ? 'validated' : lot.status;
+                    const displayStatus = lot.status;
                     // Payment data
                     const depositPct = lot.deposit_paid_pct ?? null;
                     const balancePct = lot.balance_paid_pct ?? null;
@@ -1418,7 +1631,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                       </td>
                       {/* Expiration */}
                       <td>
-                        {lot.status === 'reserved' && !isValidated && daysRemaining !== null ? (
+                        {daysRemaining !== null ? (
                           <span className={`expiry-chip ${isExpired ? 'expiry-expired' : isExpiringSoon ? 'expiry-soon' : 'expiry-ok'}`}>
                             {isExpired ? `−${Math.abs(daysRemaining)}j` : `${daysRemaining}j`}
                           </span>
@@ -1476,46 +1689,29 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                       </td>
                       {(isManager() || isCommercial()) && (
                         <td onClick={(e) => e.stopPropagation()}>
-                          {lot.status === 'reserved' && (
+                          {['option','reservation_a_finaliser'].includes(lot.status) && (
                             <div style={{ display: 'flex', gap: '0.375rem' }}>
-                              {!isValidated && (
-                                <button
-                                  className="btn-lot-action btn-lot-extend"
-                                  title="Prolonger la réservation"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    const days = prompt('Jours à ajouter à la réservation :', '7');
-                                    if (days && !isNaN(parseInt(days)) && parseInt(days) > 0) {
-                                      try {
-                                        await apiPost(`/api/reservations/${lot.reservation_id}/extend`, {
-                                          additional_days: parseInt(days)
-                                        });
-                                        toast.success('Réservation prolongée');
-                                        loadDashboardData();
-                                      } catch (error) {
-                                        toast.error(error.message || 'Erreur lors de la prolongation');
-                                      }
-                                    }
-                                  }}
-                                >
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                                  </svg>
-                                  Prolonger
-                                </button>
-                              )}
                               <button
-                                className="btn-lot-action btn-lot-release"
-                                title="Libérer le lot"
-                                onClick={(e) => {
+                                className="btn-lot-action btn-lot-extend"
+                                title="Prolonger l'option"
+                                onClick={async (e) => {
                                   e.stopPropagation();
-                                  handleReleaseLot(lot);
+                                  const days = prompt('Jours à ajouter :', '7');
+                                  if (days && !isNaN(parseInt(days)) && parseInt(days) > 0) {
+                                    try {
+                                      await apiPost(`/api/lots/${lot.id}/transitions/extend-option?additional_days=${parseInt(days)}`, {});
+                                      toast.success('Option prolongée');
+                                      loadDashboardData();
+                                    } catch (error) {
+                                      toast.error(error.message || 'Erreur lors de la prolongation');
+                                    }
+                                  }
                                 }}
                               >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                                 </svg>
-                                Libérer
+                                Prolonger
                               </button>
                             </div>
                           )}
@@ -1529,9 +1725,6 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
 
             {lots.filter(lot => {
               if (selectedStatuses.length === 0) return true;
-              if (lot.status === 'reserved' && lot.reservation_status === 'validated') {
-                return selectedStatuses.includes('validated');
-              }
               return selectedStatuses.includes(lot.status);
             }).length === 0 && (
               <div className="empty-state">
@@ -1677,6 +1870,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           )}
         </div>
       </div>
+      )}
 
       {/* Modal de vente */}
       {showSaleModal && selectedLotForSale && (

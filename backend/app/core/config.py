@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     SUPABASE_STORAGE_URL: str | None = None
     SUPABASE_STORAGE_BUCKET: str = "geojson-files"
     SUPABASE_IMAGES_BUCKET: str = "project-images"
+    SUPABASE_DOCUMENTS_BUCKET: str = "lot-documents"
 
     @property
     def supabase_public_base_url(self) -> str | None:
@@ -139,9 +140,9 @@ class Settings(BaseSettings):
     def settings_customise_sources(cls, settings_cls, **kwargs):  # type: ignore[override]
         """Use a custom env source that handles comma-separated list values."""
         sources = super().settings_customise_sources(settings_cls, **kwargs)
-        # Replace the EnvSettingsSource with our tolerant subclass
+        # Replace only the bare EnvSettingsSource (not DotEnvSettingsSource subclass)
         return tuple(
-            _CommaListEnvSource(settings_cls) if isinstance(s, EnvSettingsSource) else s
+            _CommaListEnvSource(settings_cls) if type(s) is EnvSettingsSource else s
             for s in sources
         )
 
