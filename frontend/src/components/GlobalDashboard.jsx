@@ -587,6 +587,9 @@ export default function GlobalDashboard() {
   const [stats, setStats] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [latePayments, setLatePayments] = useState([]);
+  const [notaireAlerts, setNotaireAlerts] = useState([]);
+  const [optionsTracking, setOptionsTracking] = useState([]);
+  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "options"
   const [loading, setLoading] = useState(true);
 
   const isManager = user?.role === "manager";
@@ -600,11 +603,16 @@ export default function GlobalDashboard() {
       const uid = !isManager && user?.id ? user.id : null;
       const statsUrl = uid ? `/api/dashboard/stats?user_id=${uid}` : "/api/dashboard/stats";
       const alertsUrl = uid ? `/api/dashboard/alerts?days=7&user_id=${uid}` : "/api/dashboard/alerts?days=7";
-      const [projRes, statsRes, alertRes, payRes] = await Promise.allSettled([
+      // Options: no user_id filter — commercials should see all options, not just ones they created
+      const optionsUrl = "/api/dashboard/options-tracking";
+      const notaireUrl = uid ? `/api/dashboard/notaire-alerts?user_id=${uid}` : "/api/dashboard/notaire-alerts";
+      const [projRes, statsRes, alertRes, payRes, optRes, notaireRes] = await Promise.allSettled([
         apiGet("/api/projects"),
         apiGet(statsUrl),
         apiGet(alertsUrl),
         apiGet("/api/dashboard/late-payments"),
+        apiGet(optionsUrl),
+        apiGet(notaireUrl),
       ]);
 
       if (projRes.status === "fulfilled") {
@@ -619,6 +627,14 @@ export default function GlobalDashboard() {
       if (payRes.status === "fulfilled") {
         const d = payRes.value;
         setLatePayments(Array.isArray(d) ? d : []);
+      }
+      if (optRes.status === "fulfilled") {
+        setOptionsTracking(Array.isArray(optRes.value) ? optRes.value : []);
+      } else {
+        console.error("Options tracking fetch failed:", optRes.reason);
+      }
+      if (notaireRes.status === "fulfilled") {
+        setNotaireAlerts(Array.isArray(notaireRes.value) ? notaireRes.value : []);
       }
     } catch (err) {
       showToast("Erreur lors du chargement du tableau de bord", "error");
@@ -708,13 +724,13 @@ export default function GlobalDashboard() {
             ) : (
               <div className="gdb-tile" style={{ "--tile-accent": "var(--color-warning)", "--tile-icon-bg": "rgba(245,158,11,0.1)" }}>
                 <div className="gdb-tile-icon" style={{ color: "var(--color-warning)" }}><IconLot /></div>
-                <div className="gdb-tile-value num">{stats?.counts?.reserved ?? 0}</div>
+                <div className="gdb-tile-value num">{stats?.counts?.en_cours ?? 0}</div>
                 <div className="gdb-tile-label">
-                  Mes réservations
-                  <span className="kpis-info-icon" title="Lots que vous avez réservés pour vos clients — statut actif ou validé">ⓘ</span>
+                  Mes lots actifs
+                  <span className="kpis-info-icon" title="Lots en pipeline actif (option, réservation, soldé, notaire)">ⓘ</span>
                 </div>
                 <div className="gdb-tile-sub">
-                  {(stats?.counts?.sold ?? 0) > 0 ? `${stats.counts.sold} vente${stats.counts.sold > 1 ? "s" : ""} confirmée${stats.counts.sold > 1 ? "s" : ""}` : "Réservations en cours"}
+                  {(stats?.counts?.chez_proprietaire ?? 0) > 0 ? `${stats.counts.chez_proprietaire} chez propriétaire` : "Pipeline en cours"}
                 </div>
               </div>
             )}
@@ -780,8 +796,112 @@ export default function GlobalDashboard() {
         )}
       </div>
 
+      {/* ── Onglets principaux ── */}
+      <div className="dash-main-tabs" style={{ marginBottom: "var(--spacing-lg)" }}>
+        <button className={`dash-main-tab${activeTab === "overview" ? " active" : ""}`} onClick={() => setActiveTab("overview")}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+          </svg>
+          Vue générale
+        </button>
+        <button className={`dash-main-tab${activeTab === "options" ? " active" : ""}`} onClick={() => setActiveTab("options")}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Suivi des options
+          {optionsTracking.length > 0 && (
+            <span className={`dash-main-tab-badge${optionsTracking.some(o => o.is_expired) ? " danger" : " warn"}`}>
+              {optionsTracking.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ── Onglet Suivi des options ── */}
+      {activeTab === "options" && (() => {
+        const expired = optionsTracking.filter(o => o.is_expired);
+        const active = optionsTracking.filter(o => !o.is_expired);
+        const fmtDays = (days) => {
+          if (days < 0) return { label: `+${Math.abs(Math.ceil(days))}j dépassé`, cls: "opt-badge--expired" };
+          if (days <= 1) return { label: `J-${Math.ceil(days)} critique`, cls: "opt-badge--critical" };
+          if (days <= 3) return { label: `J-${Math.ceil(days)}`, cls: "opt-badge--warn" };
+          return { label: `J-${Math.ceil(days)}`, cls: "opt-badge--ok" };
+        };
+        return (
+          <div className="opt-tracking-section">
+            <div className="opt-summary-strip">
+              <div className="opt-summary-tile opt-summary-tile--total">
+                <span className="opt-summary-value">{optionsTracking.length}</span>
+                <span className="opt-summary-label">Options actives</span>
+              </div>
+              <div className="opt-summary-tile opt-summary-tile--expired">
+                <span className="opt-summary-value">{expired.length}</span>
+                <span className="opt-summary-label">Expirées</span>
+              </div>
+              <div className="opt-summary-tile opt-summary-tile--warn">
+                <span className="opt-summary-value">{active.filter(o => o.days_remaining <= 3).length}</span>
+                <span className="opt-summary-label">Expirent dans 3j</span>
+              </div>
+              <div className="opt-summary-tile opt-summary-tile--ok">
+                <span className="opt-summary-value">{active.filter(o => o.days_remaining > 3).length}</span>
+                <span className="opt-summary-label">En cours</span>
+              </div>
+            </div>
+            {optionsTracking.length === 0 ? (
+              <div className="empty-state" style={{ padding: "48px 24px" }}>
+                <div className="empty-state-title" style={{ color: "var(--color-success)" }}>Aucune option active</div>
+                <div className="empty-state-description">Toutes les options ont été traitées.</div>
+              </div>
+            ) : (
+              <div className="opt-table-wrap">
+                <table className="opt-table">
+                  <thead>
+                    <tr>
+                      <th>Lot</th>
+                      <th>Projet</th>
+                      <th>Client</th>
+                      {isManager && <th>Commercial</th>}
+                      <th>Statut</th>
+                      <th>Date option</th>
+                      <th>Expiration</th>
+                      <th>Urgence</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {optionsTracking.map((o) => {
+                      const { label, cls } = fmtDays(o.days_remaining);
+                      return (
+                        <tr key={o.lot_id} className={`opt-row${o.is_expired ? " opt-row--expired" : ""}`}
+                          style={{ cursor: "pointer" }}
+                          onClick={() => navigate(`/app/projects/${o.project_id}`)}>
+                          <td className="opt-cell-numero">#{o.lot_numero}</td>
+                          <td className="opt-cell-project">{o.project_name}</td>
+                          <td className="opt-cell-client">
+                            <div className="opt-client-name">{o.client_name}</div>
+                            {o.client_phone && <div className="opt-client-phone">{o.client_phone}</div>}
+                          </td>
+                          {isManager && <td className="opt-cell-commercial">{o.reserved_by_name || "—"}</td>}
+                          <td>
+                            <span className={`status-badge ${o.lot_status}`} style={{ fontSize: "0.7rem", padding: "3px 8px" }}>
+                              {o.lot_status === "option" ? "Option" : "Résa. à finaliser"}
+                            </span>
+                          </td>
+                          <td className="opt-cell-date">{o.reservation_date ? new Date(o.reservation_date).toLocaleDateString("fr-FR") : "—"}</td>
+                          <td className="opt-cell-date">{new Date(o.expiration_date).toLocaleDateString("fr-FR")}</td>
+                          <td><span className={`opt-badge ${cls}`}>{label}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── Body ───────────────────────────────────────────────────────────── */}
-      <div className="gdb-body">
+      {activeTab === "overview" && <div className="gdb-body">
 
         {/* Left: Projects */}
         <div>
@@ -903,10 +1023,10 @@ export default function GlobalDashboard() {
                   Aucune réservation à risque
                 </div>
               ) : (
-                alerts.slice(0, 5).map((a) => {
+                alerts.slice(0, 5).map((a, i) => {
                   const days = daysUntil(a.expiration_date);
                   return (
-                    <div key={a.id} className="gdb-alert-row">
+                    <div key={a.id ?? i} className="gdb-alert-row">
                       <div className="gdb-alert-info">
                         <div className="gdb-alert-client">{a.client_name ?? "Client inconnu"}</div>
                         <div className="gdb-alert-lot">
@@ -974,8 +1094,60 @@ export default function GlobalDashboard() {
             </div>
           </div>
 
+          {/* Passage chez le notaire */}
+          <div>
+            <div className="gdb-section-head">
+              <div className="gdb-section-title">Notaire</div>
+            </div>
+            <div className="gdb-panel">
+              <div className="gdb-panel-head">
+                <div className="gdb-panel-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+                  </svg>
+                  En attente de rendez-vous
+                </div>
+                <span className={`gdb-panel-count ${notaireAlerts.length > 0 ? "has-items" : ""}`}>
+                  {notaireAlerts.length}
+                </span>
+              </div>
+
+              {loading ? (
+                <div style={{ padding: "var(--spacing-lg)" }}>
+                  {[0, 1].map((i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0" }}>
+                      <div className="gdb-shimmer gdb-skel" style={{ flex: 1, height: 12 }} />
+                      <div className="gdb-shimmer gdb-skel" style={{ width: 50, height: 18, borderRadius: "9999px" }} />
+                    </div>
+                  ))}
+                </div>
+              ) : notaireAlerts.length === 0 ? (
+                <div className="gdb-panel-empty">
+                  <IconCheckCircle />
+                  Aucun client en attente
+                </div>
+              ) : (
+                notaireAlerts.slice(0, 5).map((item) => (
+                  <div key={item.lot_id} className="gdb-alert-row">
+                    <div className="gdb-alert-info">
+                      <div className="gdb-alert-client">{item.client_name ?? "Client inconnu"}</div>
+                      <div className="gdb-alert-lot">
+                        Lot {item.lot_numero}
+                        {item.lot_zone ? ` · Zone ${item.lot_zone}` : ""}
+                      </div>
+                    </div>
+                    <span className="gdb-days-badge gdb-days-warn" style={{ background: "rgba(139,92,246,0.12)", color: "#8b5cf6", borderColor: "rgba(139,92,246,0.2)" }}>
+                      Notaire
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
         </div>
-      </div>
+      </div>}
+
     </div>
   );
 }

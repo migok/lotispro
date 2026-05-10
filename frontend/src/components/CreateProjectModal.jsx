@@ -59,7 +59,7 @@ export default function CreateProjectModal({ onClose, onCreated }) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           <div className="modal-body">
             {error && (
               <div className="alert alert-error" style={{ marginBottom: 'var(--spacing-md)' }}>

@@ -238,6 +238,62 @@ class SupabaseStorageClient:
             logger.error(f"Failed to delete image {file_path}: {e}")
             raise StorageError(f"Failed to delete image: {e}")
 
+    # ------------------------------------------------------------------ #
+    # Generic bucket helpers (used by DocumentService and other callers) #
+    # ------------------------------------------------------------------ #
+
+    def ensure_bucket(self, bucket: str, public: bool = False) -> None:
+        """Create *bucket* if it does not already exist."""
+        try:
+            buckets = self.client.storage.list_buckets()
+            if bucket not in [b.name for b in buckets]:
+                self.client.storage.create_bucket(bucket, options={"public": public})
+                logger.info(f"Created bucket: {bucket}")
+        except Exception as e:
+            logger.error(f"Failed to ensure bucket {bucket}: {e}")
+            raise StorageError(f"Failed to ensure bucket: {e}")
+
+    def upload_bytes(
+        self,
+        bucket: str,
+        path: str,
+        content: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> None:
+        """Upload raw bytes to *bucket* at *path*."""
+        try:
+            self.ensure_bucket(bucket, public=False)
+            self.client.storage.from_(bucket).upload(
+                path=path,
+                file=content,
+                file_options={"content-type": content_type, "upsert": "true"},
+            )
+            logger.info(f"Uploaded {len(content)} bytes → {bucket}/{path}")
+        except StorageError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to upload {path} to {bucket}: {e}")
+            raise StorageError(f"Failed to upload file: {e}")
+
+    def download_bytes(self, bucket: str, path: str) -> bytes:
+        """Download and return the raw bytes of *bucket*/*path*."""
+        try:
+            data = self.client.storage.from_(bucket).download(path)
+            logger.info(f"Downloaded {bucket}/{path}")
+            return data
+        except Exception as e:
+            logger.error(f"Failed to download {path} from {bucket}: {e}")
+            raise StorageError(f"Failed to download file: {e}")
+
+    def delete_from_bucket(self, bucket: str, path: str) -> None:
+        """Delete *path* from *bucket*."""
+        try:
+            self.client.storage.from_(bucket).remove([path])
+            logger.info(f"Deleted {bucket}/{path}")
+        except Exception as e:
+            logger.error(f"Failed to delete {path} from {bucket}: {e}")
+            raise StorageError(f"Failed to delete file: {e}")
+
     def list_files(self, folder_path: str = "") -> list[dict]:
         """List files in a folder.
 

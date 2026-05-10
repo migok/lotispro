@@ -1,6 +1,6 @@
 """Project-related schemas for API requests and responses."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import Field
@@ -41,6 +41,10 @@ class ProjectUpdate(BaseSchema):
         default=None,
         description="Project visibility",
     )
+    delivery_date: date | None = Field(
+        default=None,
+        description="Expected project delivery date",
+    )
 
 
 class ProjectResponse(BaseSchema):
@@ -54,6 +58,10 @@ class ProjectResponse(BaseSchema):
     sold_lots: int
     reserved_lots: int = Field(default=0, description="Number of reserved lots")
     ca_objectif: float | None
+    delivery_date: date | None = Field(
+        default=None,
+        description="Expected project delivery date",
+    )
     geojson_file_url: str | None = Field(
         default=None,
         description="URL of the uploaded GeoJSON file in Supabase Storage",
@@ -130,3 +138,59 @@ class AssignUserRequest(BaseSchema):
     """Schema for assigning a user to a project."""
 
     user_id: int = Field(description="ID of the user to assign")
+
+
+class ProjectFinancingPlanCreate(BaseSchema):
+    """Schema for creating / updating a project financing plan."""
+
+    deposit_pct: float = Field(
+        default=50.0,
+        ge=1.0,
+        le=99.0,
+        description="Deposit percentage (1–99)",
+    )
+    deposit_count: int = Field(
+        default=1,
+        ge=1,
+        le=120,
+        description="Number of deposit installments",
+    )
+    deposit_periodicity: int = Field(
+        default=1,
+        ge=1,
+        le=24,
+        description="Months between deposit installments",
+    )
+    balance_delay_months: int = Field(
+        default=0,
+        ge=0,
+        le=60,
+        description="Delay in months before first balance installment",
+    )
+    balance_count: int = Field(
+        default=1,
+        ge=1,
+        le=120,
+        description="Number of balance installments",
+    )
+    balance_periodicity: int = Field(
+        default=1,
+        ge=1,
+        le=24,
+        description="Months between balance installments",
+    )
+
+
+class ProjectFinancingPlanResponse(BaseSchema):
+    """Schema for a project financing plan in responses."""
+
+    id: int
+    project_id: int
+    deposit_pct: float
+    deposit_count: int
+    deposit_periodicity: int
+    balance_delay_months: int
+    balance_count: int
+    balance_periodicity: int
+    created_by: int
+    created_at: datetime

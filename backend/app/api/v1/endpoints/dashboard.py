@@ -56,6 +56,27 @@ async def get_alerts(
 
 
 @router.get(
+    "/notaire-alerts",
+    summary="Lots en attente notaire",
+    description=(
+        "Lots en statut réservation soldée dont le client souhaite passer chez le notaire "
+        "(wants_notaire=True). Sert à alimenter la section d'alertes notaire du dashboard."
+    ),
+)
+async def get_notaire_pending_alerts(
+    current_user: CurrentUser,
+    dashboard_service: DashboardServiceDep,
+    project_id: int | None = Query(default=None, description="Filter by project"),
+    user_id: int | None = Query(default=None, description="Filter by user"),
+) -> list[dict]:
+    """Get soldée lots waiting for notaire transition."""
+    return await dashboard_service.get_notaire_pending_alerts(
+        project_id=project_id,
+        user_id=user_id,
+    )
+
+
+@router.get(
     "/performance",
     response_model=PerformanceData,
     summary="Performance analytics",
@@ -187,6 +208,31 @@ async def get_late_payments(
     if current_user.role == "commercial":
         user_id = current_user.id
     return await dashboard_service.get_late_payments(
+        project_id=project_id,
+        user_id=user_id,
+    )
+
+
+@router.get(
+    "/options-tracking",
+    summary="Options tracking",
+    description="Get all active options and reservations-à-finaliser sorted by urgency (expired first, then by expiration date). Commercials see only their own lots.",
+)
+async def get_options_tracking(
+    current_user: CurrentUser,
+    dashboard_service: DashboardServiceDep,
+    project_id: int | None = Query(default=None, description="Filter by project"),
+    user_id: int | None = Query(default=None, description="Filter by commercial (manager only)"),
+) -> list[dict]:
+    """Get all active options sorted by urgency.
+
+    When project_id is provided, all options in that project are returned (no user filter).
+    Without project_id, commercials see only their own lots.
+    """
+    if current_user.role == "commercial" and not project_id:
+        # No project scope — limit to own lots only
+        user_id = current_user.id
+    return await dashboard_service.get_options_tracking(
         project_id=project_id,
         user_id=user_id,
     )

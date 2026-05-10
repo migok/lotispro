@@ -14,6 +14,8 @@ from app.core.exceptions import (
 from app.core.logging import get_logger
 from app.domain.schemas.project import (
     ProjectCreate,
+    ProjectFinancingPlanCreate,
+    ProjectFinancingPlanResponse,
     ProjectKPIs,
     ProjectPerformance,
     ProjectResponse,
@@ -1325,6 +1327,12 @@ class ProjectService:
                     or props.get("SHAPE_AREA")
                 )
                 price = props.get("price") or props.get("Prix") or props.get("prix")
+                price_per_sqm = (
+                    props.get("price_per_sqm")
+                    or props.get("prix_m2")
+                    or props.get("prix_par_m2")
+                    or props.get("PrixM2")
+                )
 
                 # Metadata fields
                 type_lot = props.get("type_lot") or props.get("type de lots") or props.get("type_de_lots")
@@ -1344,6 +1352,16 @@ class ProjectService:
                     except (ValueError, TypeError):
                         price = None
 
+                if price_per_sqm and not isinstance(price_per_sqm, (int, float)):
+                    try:
+                        price_per_sqm = float(price_per_sqm)
+                    except (ValueError, TypeError):
+                        price_per_sqm = None
+
+                # Auto-compute price from price_per_sqm × surface
+                if price_per_sqm and surface and surface > 0:
+                    price = round(price_per_sqm * surface, 2)
+
                 geometry_str = json.dumps(geometry) if geometry else None
 
                 if existing_lot:
@@ -1353,6 +1371,7 @@ class ProjectService:
                         zone=zone or existing_lot.zone,
                         surface=surface or existing_lot.surface,
                         price=price or existing_lot.price,
+                        price_per_sqm=price_per_sqm or existing_lot.price_per_sqm,
                         geometry=geometry_str,
                         type_lot=type_lot or existing_lot.type_lot,
                         emplacement=emplacement or existing_lot.emplacement,
@@ -1367,7 +1386,8 @@ class ProjectService:
                         zone=zone,
                         surface=surface,
                         price=price,
-                        status="available",
+                        price_per_sqm=price_per_sqm,
+                        status="creation",
                         geometry=geometry_str,
                         type_lot=type_lot,
                         emplacement=emplacement,
@@ -1709,15 +1729,30 @@ class ProjectService:
             )
 
         updated = 0
+        activated = 0
         skipped = 0
         not_found = 0
         errors = []
 
+        def _to_float(val: object) -> float | None:
+            if val is None or val == "":
+                return None
+            if isinstance(val, (int, float)):
+                return float(val)
+            try:
+                return float(str(val).replace(" ", "").replace(",", "."))
+            except (ValueError, TypeError):
+                return None
+
         for i, row in enumerate(csv_rows):
             try:
-                # Get lot numero from parcelid column (support various naming)
+                # Get lot numero from N_LOT / id_parcel / parcelid column (support various naming)
                 numero = (
-                    row.get("parcelid")
+                    row.get("N_LOT")
+                    or row.get("n_lot")
+                    or row.get("id_parcel")
+                    or row.get("id_parcelle")
+                    or row.get("parcelid")
                     or row.get("parcel_id")
                     or row.get("Parcelid")
                     or row.get("PARCELID")
@@ -1726,7 +1761,7 @@ class ProjectService:
                 )
 
                 if not numero:
-                    errors.append(f"Row {i + 1}: missing 'parcelid' column")
+                    errors.append(f"Row {i + 1}: missing 'N_LOT' column")
                     skipped += 1
                     continue
 
@@ -1741,50 +1776,97 @@ class ProjectService:
 
                 # Extract metadata fields (support various column naming)
                 type_lot = (
-                    row.get("type de lots")
+                    row.get("TYPE_DE_LOT")
+                    or row.get("type_de_lot")
+                    or row.get("type de lots")
                     or row.get("type_de_lots")
                     or row.get("type_lot")
                     or row.get("Type de lots")
                 )
                 emplacement = (
-                    row.get("emplacement")
+                    row.get("EMPLACEMENT")
+                    or row.get("emplacement")
                     or row.get("Emplacement")
-                    or row.get("EMPLACEMENT")
                 )
                 type_maison = (
-                    row.get("type maison")
+                    row.get("TYPE_DE_MAISON")
+                    or row.get("type_de_maison")
+                    or row.get("type maison")
                     or row.get("type_maison")
                     or row.get("Type maison")
                     or row.get("TYPE_MAISON")
                 )
-                price = (
+                zone_raw = (
+                    row.get("ZONE")
+                    or row.get("zone")
+                    or row.get("Zone")
+                )
+                price_per_sqm = _to_float(
+                    row.get("prix_m2")
+                    or row.get("prix m2")
+                    or row.get("prix par m2")
+                    or row.get("Prix/m2")
+                    or row.get("Prix m2")
+                    or row.get("price_per_sqm")
+                    or row.get("PrixM2")
+                    or row.get("prix/m2")
+                )
+                surface_raw = _to_float(
+                    row.get("surface")
+                    or row.get("Surface")
+                    or row.get("SURFACE")
+                )
+                price_raw = _to_float(
                     row.get("prix")
                     or row.get("Prix")
                     or row.get("price")
                     or row.get("Price")
                 )
 
-                # Convert price to float if provided
-                if price and not isinstance(price, (int, float)):
-                    try:
-                        price = float(str(price).replace(" ", "").replace(",", "."))
-                    except (ValueError, TypeError):
-                        price = None
+                # Determine effective surface and price
+                surface = surface_raw if surface_raw and surface_raw > 0 else existing_lot.surface
+                price_per_sqm_final = price_per_sqm if price_per_sqm and price_per_sqm > 0 else None
 
-                # Update lot with metadata
-                update_data = {}
+                # Compute price: prix_m2 × surface takes precedence over explicit prix column
+                if price_per_sqm_final and surface and surface > 0:
+                    computed_price = round(price_per_sqm_final * surface, 2)
+                elif price_raw is not None:
+                    computed_price = price_raw
+                else:
+                    computed_price = None
+
+                # Build update dict
+                update_data: dict = {}
                 if type_lot:
                     update_data["type_lot"] = str(type_lot).strip()
                 if emplacement:
                     update_data["emplacement"] = str(emplacement).strip()
                 if type_maison:
                     update_data["type_maison"] = str(type_maison).strip()
-                if price is not None:
-                    update_data["price"] = price
+                if zone_raw:
+                    update_data["zone"] = str(zone_raw).strip()
+                if surface_raw and surface_raw > 0:
+                    update_data["surface"] = surface_raw
+                if price_per_sqm_final:
+                    update_data["price_per_sqm"] = price_per_sqm_final
+                if computed_price is not None:
+                    update_data["price"] = computed_price
 
                 if update_data:
                     await self.lot_repo.update(existing_lot.id, **update_data)
                     updated += 1
+
+                    # Auto-activate: if lot is in 'creation' and now has both price and surface
+                    effective_price = computed_price if computed_price is not None else existing_lot.price
+                    effective_surface = surface_raw if surface_raw and surface_raw > 0 else existing_lot.surface
+                    if (
+                        existing_lot.status == "creation"
+                        and effective_price
+                        and effective_surface
+                        and effective_surface > 0
+                    ):
+                        await self.lot_repo.update(existing_lot.id, status="available")
+                        activated += 1
                 else:
                     skipped += 1
 
@@ -1796,13 +1878,114 @@ class ProjectService:
             "CSV metadata imported",
             project_id=project_id,
             updated=updated,
+            activated=activated,
             skipped=skipped,
             not_found=not_found,
         )
 
         return {
             "updated": updated,
+            "activated": activated,
             "skipped": skipped,
             "not_found": not_found,
             "errors": errors[:20],  # Limit errors to first 20
         }
+
+    async def get_project_financing_plan(
+        self,
+        project_id: int,
+        requester_id: int,
+        requester_role: str,
+    ) -> ProjectFinancingPlanResponse | None:
+        """Return the current (latest) financing plan for a project.
+
+        Args:
+            project_id: Project ID
+            requester_id: Current user ID
+            requester_role: Current user role
+
+        Returns:
+            Current financing plan or None if not yet configured
+        """
+        can_access = await self.project_repo.can_user_access(
+            project_id, requester_id, requester_role
+        )
+        if not can_access:
+            raise AuthorizationError("Access to this project is not allowed")
+
+        plan = await self.project_repo.get_current_financing_plan(project_id)
+        if plan is None:
+            return None
+
+        return ProjectFinancingPlanResponse(
+            id=plan.id,
+            project_id=plan.project_id,
+            deposit_pct=plan.deposit_pct,
+            deposit_count=plan.deposit_count,
+            deposit_periodicity=plan.deposit_periodicity,
+            balance_delay_months=plan.balance_delay_months,
+            balance_count=plan.balance_count,
+            balance_periodicity=plan.balance_periodicity,
+            created_by=plan.created_by,
+            created_at=plan.created_at,
+        )
+
+    async def set_project_financing_plan(
+        self,
+        project_id: int,
+        data: ProjectFinancingPlanCreate,
+        requester_id: int,
+        requester_role: str,
+    ) -> ProjectFinancingPlanResponse:
+        """Create a new financing plan version for a project.
+
+        The new plan becomes the active default immediately.
+
+        Args:
+            project_id: Project ID
+            data: New plan configuration
+            requester_id: Current user ID
+            requester_role: Current user role
+
+        Returns:
+            Newly created financing plan
+        """
+        if requester_role not in ("manager", "commercial"):
+            raise AuthorizationError("Only managers and commercials can configure financing plans")
+
+        can_access = await self.project_repo.can_user_access(
+            project_id, requester_id, requester_role
+        )
+        if not can_access:
+            raise AuthorizationError("Access to this project is not allowed")
+
+        plan = await self.project_repo.save_financing_plan(
+            project_id=project_id,
+            deposit_pct=data.deposit_pct,
+            deposit_count=data.deposit_count,
+            deposit_periodicity=data.deposit_periodicity,
+            balance_delay_months=data.balance_delay_months,
+            balance_count=data.balance_count,
+            balance_periodicity=data.balance_periodicity,
+            created_by=requester_id,
+        )
+
+        logger.info(
+            "Project financing plan updated",
+            project_id=project_id,
+            deposit_pct=data.deposit_pct,
+            updated_by=requester_id,
+        )
+
+        return ProjectFinancingPlanResponse(
+            id=plan.id,
+            project_id=plan.project_id,
+            deposit_pct=plan.deposit_pct,
+            deposit_count=plan.deposit_count,
+            deposit_periodicity=plan.deposit_periodicity,
+            balance_delay_months=plan.balance_delay_months,
+            balance_count=plan.balance_count,
+            balance_periodicity=plan.balance_periodicity,
+            created_by=plan.created_by,
+            created_at=plan.created_at,
+        )

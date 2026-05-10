@@ -237,3 +237,147 @@ class CertificateService:
             pdf.cell(0, 4, line, align="C", new_x="LMARGIN", new_y="NEXT")
 
         return bytes(pdf.output())
+
+    def generate_payment_receipt(
+        self,
+        reservation_id: int,
+        receipt_date: datetime,
+        deposit_amount: float,
+        deposit_date: date | None,
+        lot_numero: str,
+        lot_surface: float | None,
+        sale_price: float | None,
+        promotion_amount: float | None,
+        project_name: str,
+        client_name: str,
+        client_cin: str | None,
+        client_address: str | None,
+    ) -> bytes:
+        """Generate PDF Reçu de Paiement (premier acompte) and return as bytes."""
+        pdf = FPDF(orientation="P", unit="mm", format="A4")
+        pdf.set_margins(left=20, top=20, right=20)
+        pdf.set_auto_page_break(auto=True, margin=20)
+        pdf.add_page()
+
+        w = pdf.epw
+
+        # ── Header ─────────────────────────────────────────────────────────
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 10, COMPANY_NAME, align="C", new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_font("Helvetica", "BU", 13)
+        pdf.cell(0, 8, "RECU DE PAIEMENT", align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(6)
+
+        # ── Reference line ──────────────────────────────────────────────────
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(
+            0, 6,
+            f"Recu N° {reservation_id:04d}  |  Fait a {COMPANY_CITY}, le {_fmt_date(receipt_date)}",
+            align="R",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        pdf.ln(4)
+
+        # ── Reçu de ────────────────────────────────────────────────────────
+        pdf.set_font("Helvetica", "BU", 10)
+        pdf.cell(0, 6, "RECU DE :", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+
+        cin_str = f"CIN N°  {client_cin}" if client_cin else "CIN N°  _______________"
+        address_str = client_address if client_address else "_______________________________________________"
+        pdf.set_font("Helvetica", "", 10)
+        txt_client = (
+            f"Monsieur/Madame {client_name}, portant {cin_str},"
+            f" demeurant à {address_str}"
+        )
+        pdf.multi_cell(w, 5.5, txt_client, align="J", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(6)
+
+        # ── La somme de ─────────────────────────────────────────────────────
+        pdf.set_font("Helvetica", "BU", 10)
+        pdf.cell(0, 6, "LA SOMME DE :", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(0, 8, _fmt_price(deposit_amount), new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(
+            0, 6,
+            f"Verse le {_fmt_date(deposit_date)} - Dont quittance.",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+        pdf.ln(6)
+
+        # ── Au titre de ─────────────────────────────────────────────────────
+        pdf.set_font("Helvetica", "BU", 10)
+        pdf.cell(0, 6, "AU TITRE DE :", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+
+        surface_str = f"{lot_surface} m²" if lot_surface else "___ m²"
+        pdf.set_font("Helvetica", "", 10)
+        txt_titre = (
+            f"Premier acompte sur réservation du lot N°{lot_numero}"
+            f" d'une superficie approximative de {surface_str},"
+            f" lotissement {project_name}."
+        )
+        pdf.multi_cell(w, 5.5, txt_titre, align="J", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(4)
+
+        # ── Prix de vente ───────────────────────────────────────────────────
+        if sale_price is not None:
+            pdf.set_font("Helvetica", "", 10)
+            pdf.cell(
+                0, 6,
+                f"Prix de vente contractuel : {_fmt_price(sale_price)}",
+                new_x="LMARGIN",
+                new_y="NEXT",
+            )
+
+        # ── Note promotion ─────────────────────────────────────────────────
+        if promotion_amount and promotion_amount > 0:
+            pdf.ln(3)
+            pdf.set_font("Helvetica", "I", 9)
+            pdf.multi_cell(
+                w, 5,
+                (
+                    f"Note : Le montant de la promotion de {_fmt_price(promotion_amount)}"
+                    " (différence entre le prix catalogue et le prix de vente) n'a pas encore"
+                    " été encaissé. L'acte de réservation sera émis après réception de ce montant."
+                ),
+                align="J",
+                new_x="LMARGIN",
+                new_y="NEXT",
+            )
+
+        pdf.ln(14)
+
+        # ── Signature block ──────────────────────────────────────────────────
+        col_w = w / 2
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(col_w, 5.5, f"Le réservataire ({client_name})", align="L")
+        pdf.cell(col_w, 5.5, f"Le réservant ({COMPANY_NAME})", align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+        pdf.cell(col_w, 5.5, "Lu et accepté", align="L")
+        pdf.cell(col_w, 5.5, "Lu et accepté", align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(22)
+
+        # ── Footer ──────────────────────────────────────────────────────────
+        pdf.set_font("Helvetica", "", 7.5)
+        footer_lines = [
+            f"Siège social : {COMPANY_ADDRESS}",
+            (
+                f"Capital social : {COMPANY_CAPITAL} - Patente : {COMPANY_PATENTE}"
+                f" - Identifiant fiscal : {COMPANY_IF}"
+                f" - R.C : {COMPANY_RC} - ICE : {COMPANY_ICE}"
+            ),
+            f"Téléphone : {COMPANY_TEL} - Portable : {COMPANY_MOBILE}",
+        ]
+        for line in footer_lines:
+            pdf.cell(0, 4, line, align="C", new_x="LMARGIN", new_y="NEXT")
+
+        return bytes(pdf.output())

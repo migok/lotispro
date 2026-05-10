@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
-import { apiGet, apiPost, apiPatch } from '../utils/api';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { apiGet, apiPost, apiPatch, apiPut, apiFetch, apiUploadFile } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { formatPrice, formatDate } from '../utils/formatters';
-import { CLIENT_TYPES, STATUS_LABELS } from '../utils/constants';
+import { CLIENT_TYPES, STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
 
 /* ── Default payment plan ─────────────────────────────────── */
 const DEFAULT_PAYMENT_PLAN = {
@@ -53,10 +53,14 @@ function splitAmount(total, count) {
   amounts[count - 1] = Math.round((total - base * (count - 1)) * 100) / 100;
   return amounts;
 }
-function computePreview(lotPrice, plan) {
+function computePreview(salePrice, plan, promotionAmount = 0) {
   const depPct = Math.min(100, Math.max(0, parseFloat(plan.deposit_pct) || 50));
-  const depositTotal = Math.round(lotPrice * depPct) / 100;
-  const balanceTotal = Math.round((lotPrice - depositTotal) * 100) / 100;
+  const promo = Math.max(0, promotionAmount || 0);
+  // Deposit % applies to catalogue price (salePrice + promo); promotion is then deducted
+  const catalogueForPlan = salePrice + promo;
+  const depositGross = Math.round(catalogueForPlan * depPct) / 100;
+  const depositTotal = Math.max(0, Math.round((depositGross - promo) * 100) / 100);
+  const balanceTotal = Math.max(0, Math.round((salePrice - depositTotal) * 100) / 100);
   const depositStart = plan.deposit_start_date ? new Date(plan.deposit_start_date) : new Date();
   const depCount = Math.max(1, parseInt(plan.deposit_count) || 1);
   const depPeriod = Math.max(1, parseInt(plan.deposit_periodicity) || 1);
@@ -72,7 +76,7 @@ function computePreview(lotPrice, plan) {
   const depositRows = depositDates.map((d, i) => ({ type: 'deposit', number: i + 1, date: d, amount: depositAmounts[i] }));
   const balanceRows = balanceDates.map((d, i) => ({ type: 'balance', number: i + 1, date: d, amount: balanceAmounts[i] }));
   const allRows = [...depositRows, ...balanceRows].sort((a, b) => a.date - b.date);
-  return { depositTotal, balanceTotal, depositRows, balanceRows, allRows, balanceStart };
+  return { depositTotal, depositGross, balanceTotal, depositRows, balanceRows, allRows, balanceStart };
 }
 function fmtShort(date) {
   return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -210,11 +214,62 @@ const IcTable = () => (
   </svg>
 );
 
+/* ── Expired alert banner ─────────────────────────────────── */
+const IcAlertTriangle = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 2L1 13h14L8 2z" /><path d="M8 6v4M8 11.5v.5" />
+  </svg>
+);
+const IcDownload = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1" />
+  </svg>
+);
+const IcUpload = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M8 10V2M5 5l3-3 3 3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1" />
+  </svg>
+);
+const IcFile = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 1.5H3.5A1.5 1.5 0 002 3v10a1.5 1.5 0 001.5 1.5h9A1.5 1.5 0 0014 13V6.5L9 1.5z" />
+    <path d="M9 1.5V6.5H14" />
+  </svg>
+);
+const IcTrash = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 4h12M5.5 4V2.5a.5.5 0 01.5-.5h4a.5.5 0 01.5.5V4M6 7v5M10 7v5M3 4l.8 9.5a1 1 0 001 .9h6.4a1 1 0 001-.9L13 4" />
+  </svg>
+);
+
+function ExpiredAlert({ status, expirationDate }) {
+  if (!expirationDate) return null;
+  const now = new Date();
+  const exp = new Date(expirationDate);
+  if (exp >= now) return null;
+  const daysOver = Math.ceil((now - exp) / (1000 * 60 * 60 * 24));
+  const title = status === 'option' ? 'Option expirée' : 'Délai de finalisation dépassé';
+  return (
+    <div className="ldm-expired-alert">
+      <div className="ldm-ea-icon"><IcAlertTriangle /></div>
+      <div className="ldm-ea-body">
+        <div className="ldm-ea-title">{title}</div>
+        <div className="ldm-ea-sub">Validation commerciale requise</div>
+      </div>
+      <div className="ldm-ea-badge">
+        <span className="ldm-ea-days">{daysOver}</span>
+        <span className="ldm-ea-unit">j</span>
+      </div>
+    </div>
+  );
+}
+
 /* ── Payment plan configurator ────────────────────────────── */
-function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false }) {
+function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, promotionAmount = 0 }) {
   const depPct = parseFloat(plan.deposit_pct) || 50;
   const balPct = Math.round((100 - depPct) * 100) / 100;
-  const preview = useMemo(() => computePreview(lotPrice, plan), [lotPrice, plan]);
+  const promo = Math.max(0, promotionAmount || 0);
+  const preview = useMemo(() => computePreview(lotPrice, plan, promo), [lotPrice, plan, promo]);
   const [showPreview, setShowPreview] = useState(false);
 
   return (
@@ -234,6 +289,11 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false }) {
               <span className="pay-plan-pct-sym">%</span>
             </div>
             <div className="pay-plan-tranche-amount">{formatPrice(preview.depositTotal)}</div>
+            {promo > 0 && (
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                {formatPrice(preview.depositGross)} brut − {formatPrice(promo)} promo
+              </div>
+            )}
           </div>
           <div className="pay-plan-divider">+</div>
           <div className="pay-plan-tranche">
@@ -266,7 +326,14 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false }) {
         <div className="pay-plan-section pay-plan-section--deposit">
           <div className="pay-plan-section-title pay-plan-section-title--deposit">
             <span>Étalement acompte</span>
-            <span className="pay-plan-section-total">{formatPrice(preview.depositTotal)}</span>
+            <span className="pay-plan-section-total">
+              {formatPrice(preview.depositTotal)}
+              {promo > 0 && (
+                <span style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
+                  ({formatPrice(preview.depositGross)} brut)
+                </span>
+              )}
+            </span>
           </div>
           <div className="pay-plan-section-row">
             <div className="pay-plan-field">
@@ -385,6 +452,47 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false }) {
 }
 
 /* ── Add client inline panel ──────────────────────────────── */
+function AddNotairePanel({ newNotaire, onChange, onSave, onCancel, saving }) {
+  return (
+    <div className="add-client-panel">
+      <div className="add-client-panel-header">
+        <span className="add-client-panel-title">Nouveau notaire</span>
+        <button type="button" className="modal-close" style={{ width: 26, height: 26 }} onClick={onCancel}>
+          <IcClose />
+        </button>
+      </div>
+      <div className="add-client-grid">
+        {[
+          { label: 'Nom *', key: 'nom', type: 'text', placeholder: 'Dupont' },
+          { label: 'Prénom *', key: 'prenom', type: 'text', placeholder: 'Jean' },
+          { label: 'Téléphone *', key: 'telephone', type: 'tel', placeholder: '0612 345 678' },
+          { label: 'Email', key: 'email', type: 'email', placeholder: 'notaire@etude.fr' },
+          { label: 'Ville', key: 'ville', type: 'text', placeholder: 'Paris' },
+        ].map(f => (
+          <div key={f.key} className="add-client-field">
+            <label className="form-field-label">{f.label}</label>
+            <input type={f.type} className="form-field-input" placeholder={f.placeholder}
+              value={newNotaire[f.key]}
+              onChange={e => onChange({ ...newNotaire, [f.key]: e.target.value })} />
+          </div>
+        ))}
+        <div className="add-client-field add-client-field--full">
+          <label className="form-field-label">Adresse</label>
+          <input type="text" className="form-field-input" placeholder="12 rue de la Paix, 75001 Paris"
+            value={newNotaire.adresse}
+            onChange={e => onChange({ ...newNotaire, adresse: e.target.value })} />
+        </div>
+      </div>
+      <div className="add-client-actions">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>Annuler</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={onSave} disabled={saving}>
+          {saving ? 'Création...' : 'Créer et sélectionner'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AddClientPanel({ newClient, onChange, onSave, onCancel, saving }) {
   return (
     <div className="add-client-panel">
@@ -439,31 +547,231 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
   const [depositAmount, setDepositAmount] = useState('');
-  const [firstPaymentImmediate, setFirstPaymentImmediate] = useState(false);
   const [reservationDays, setReservationDays] = useState(7);
-  const depositDate = (() => { const d = new Date(); d.setDate(d.getDate() + (parseInt(reservationDays) || 7)); return d.toISOString().split('T')[0]; })();
-  const [finalPrice, setFinalPrice] = useState('');
   const [notes, setNotes] = useState('');
   const [mode, setMode] = useState(initialMode);
   const [loading, setLoading] = useState(false);
-  const [enablePaymentPlan, setEnablePaymentPlan] = useState(false);
+  const [enablePaymentPlan, setEnablePaymentPlan] = useState(true);
   const [paymentPlan, setPaymentPlan] = useState(DEFAULT_PAYMENT_PLAN);
+  const [projectFinancingPlan, setProjectFinancingPlan] = useState(null);
+  const [lotPricingConfig, setLotPricingConfig] = useState(null); // prix_m2_acte from project pricing grid
   const [showAddClient, setShowAddClient] = useState(false);
   const [savingClient, setSavingClient] = useState(false);
   const [newClient, setNewClient] = useState({ name: '', phone: '', email: '', cin: '', address: '', client_type: 'autre', notes: '' });
   const [releaseData, setReleaseData] = useState({ deposit_refund_amount: '', deposit_refund_date: new Date().toISOString().split('T')[0], release_reason: '' });
   const [paymentSchedule, setPaymentSchedule] = useState(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const [reservation, setReservation] = useState(null); // full reservation details from API
+  const [validationChoice, setValidationChoice] = useState(null); // 'refund' | 'deduct' | null
+  // New transition state
+  const [guaranteeAmount, setGuaranteeAmount] = useState('');
+  const [finalizationDate, setFinalizationDate] = useState('');
+  const [paymentType, setPaymentType] = useState('cash');
+  const [notaryName, setNotaryName] = useState('');
+  const [notaryDate, setNotaryDate] = useState('');
+  const [notaires, setNotaires] = useState([]);
+  const [selectedNotaire, setSelectedNotaire] = useState(null);
+  const [showAddNotaire, setShowAddNotaire] = useState(false);
+  const [newNotaire, setNewNotaire] = useState({ nom: '', prenom: '', telephone: '', email: '', ville: '', adresse: '' });
+  const [savingNotaire, setSavingNotaire] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
+  const [finalSalePrice, setFinalSalePrice] = useState('');
+  const [editForm, setEditForm] = useState({ price_per_sqm: '', price_per_sqm_acte: '', surface: '', zone: '', type_lot: '', emplacement: '', type_maison: '' });
+  const [extendDays, setExtendDays] = useState(7);
+  // Réservation engagée — prix de vente et promotion
+  const [salePriceEngaged, setSalePriceEngaged] = useState('');
+  const [promotionTiming, setPromotionTiming] = useState('debut');
+  const [markingPromotion, setMarkingPromotion] = useState(false);
+  const [downloadingDoc, setDownloadingDoc] = useState(false);
+  const [settingNotaireIntent, setSettingNotaireIntent] = useState(false);
+  const [documents, setDocuments] = useState([]);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const docFileInputRef = useRef(null);
 
   useEffect(() => {
     loadClients();
-    if (lot?.price) setFinalPrice(lot.price.toString());
-    if (lot?.reservation_id) loadPaymentSchedule(lot.reservation_id);
+    loadNotaires();
+    if (lot?.reservation_id) {
+      loadPaymentSchedule(lot.reservation_id);
+      loadReservation(lot.reservation_id);
+    } else {
+      setReservation(null);
+    }
+    if (lot?.id && ['chez_notaire', 'chez_proprietaire'].includes(lot.status)) {
+      loadDocuments();
+    } else {
+      setDocuments([]);
+    }
+    if (lot?.project_id) {
+      loadProjectFinancingPlan(lot.project_id);
+      loadLotPricingConfig(lot.project_id, lot);
+    }
   }, [lot]);
+
+  // When pricing config loads after handleSetMode was called without it, re-apply auto-calc
+  useEffect(() => {
+    if (!lotPricingConfig?.sale_price_computed) return;
+    if (!['direct_engage', 'finaliser_engage'].includes(mode)) return;
+    if (lot?.price_per_sqm_acte) return; // already set on lot directly
+    setSalePriceEngaged(String(lotPricingConfig.sale_price_computed));
+  }, [lotPricingConfig]);
+
+  const loadProjectFinancingPlan = async (projectId) => {
+    try {
+      const plan = await apiGet(`/api/projects/${projectId}/financing-plan`);
+      if (plan) {
+        setProjectFinancingPlan(plan);
+        setPaymentPlan({
+          deposit_pct: plan.deposit_pct,
+          deposit_start_date: '',
+          deposit_count: plan.deposit_count,
+          deposit_periodicity: plan.deposit_periodicity,
+          balance_delay_months: plan.balance_delay_months,
+          balance_count: plan.balance_count,
+          balance_periodicity: plan.balance_periodicity,
+        });
+      }
+    } catch (_) {
+      // No plan configured yet — keep DEFAULT_PAYMENT_PLAN
+    }
+  };
+
+  const loadLotPricingConfig = async (projectId, currentLot) => {
+    console.log('[PricingConfig] called with projectId=', projectId, 'lot.id=', currentLot?.id);
+    if (!projectId) { console.log('[PricingConfig] EARLY RETURN — no projectId'); return; }
+    try {
+      const data = await apiGet(`/api/projects/${projectId}/pricing-configs`);
+      const configs = data?.configs || [];
+      console.log('[PricingConfig] projectId=', projectId, 'lot fields:', {
+        zone: currentLot.zone,
+        type_lot: currentLot.type_lot,
+        type_maison: currentLot.type_maison,
+        emplacement: currentLot.emplacement,
+        surface: currentLot.surface,
+      });
+      console.log('[PricingConfig] configs from API:', configs.map(c => ({
+        zone: c.zone, type_lot: c.type_lot, type_maison: c.type_maison, emplacement: c.emplacement,
+        prix_m2_acte: c.prix_m2_acte, prix_m2_catalogue: c.prix_m2_catalogue,
+      })));
+      const match = configs.find(c =>
+        String(c.zone ?? '') === String(currentLot.zone ?? '') &&
+        String(c.type_lot ?? '') === String(currentLot.type_lot ?? '') &&
+        String(c.type_maison ?? '') === String(currentLot.type_maison ?? '') &&
+        String(c.emplacement ?? '') === String(currentLot.emplacement ?? '')
+      );
+      console.log('[PricingConfig] match=', match ?? 'NONE');
+      if (match) {
+        const surface = currentLot.surface || 0;
+        setLotPricingConfig({
+          prix_m2_acte: match.prix_m2_acte,
+          prix_m2_catalogue: match.prix_m2_catalogue,
+          sale_price_computed: surface > 0 ? Math.round(match.prix_m2_acte * surface * 100) / 100 : null,
+          catalogue_price_computed: surface > 0 ? Math.round(match.prix_m2_catalogue * surface * 100) / 100 : null,
+        });
+      } else {
+        setLotPricingConfig(null);
+      }
+    } catch (err) {
+      console.log('[PricingConfig] ERROR:', err);
+      setLotPricingConfig(null);
+    }
+  };
+
+  const loadReservation = async (reservationId) => {
+    try {
+      const data = await apiGet(`/api/reservations/${reservationId}`);
+      setReservation(data);
+    } catch (_) {
+      setReservation(null);
+    }
+  };
 
   const loadClients = async () => {
     try { const data = await apiGet('/api/clients'); setClients(data); }
     catch (error) { console.error('Error loading clients:', error); }
+  };
+
+  const loadNotaires = async () => {
+    try { const data = await apiGet('/api/notaires'); setNotaires(data); }
+    catch (error) { console.error('Error loading notaires:', error); }
+  };
+
+  const handleCreateNotaire = async () => {
+    if (!newNotaire.nom.trim()) { toast.warning('Le nom est requis'); return; }
+    if (!newNotaire.prenom.trim()) { toast.warning('Le prénom est requis'); return; }
+    if (!newNotaire.telephone.trim()) { toast.warning('Le téléphone est requis'); return; }
+    setSavingNotaire(true);
+    try {
+      const created = await apiPost('/api/notaires', {
+        nom: newNotaire.nom.trim(),
+        prenom: newNotaire.prenom.trim(),
+        telephone: newNotaire.telephone.trim(),
+        email: newNotaire.email.trim() || undefined,
+        ville: newNotaire.ville.trim() || undefined,
+        adresse: newNotaire.adresse.trim() || undefined,
+      });
+      await loadNotaires();
+      setSelectedNotaire(created);
+      setShowAddNotaire(false);
+      setNewNotaire({ nom: '', prenom: '', telephone: '', email: '', ville: '', adresse: '' });
+      toast.success('Notaire créé et sélectionné');
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de la création du notaire');
+    } finally { setSavingNotaire(false); }
+  };
+
+  const loadDocuments = async () => {
+    if (!lot?.id) return;
+    try {
+      const data = await apiGet(`/api/lots/${lot.id}/documents`);
+      setDocuments(data);
+    } catch (_) { setDocuments([]); }
+  };
+
+  const handleUploadDocument = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploadingDoc(true);
+    try {
+      await apiUploadFile(`/api/lots/${lot.id}/documents`, file);
+      toast.success('Document ajouté');
+      loadDocuments();
+    } catch (err) {
+      toast.error(err.message || 'Erreur lors de l\'upload');
+    } finally { setUploadingDoc(false); }
+  };
+
+  const handleDownloadDocument = async (doc) => {
+    try {
+      const response = await apiFetch(`/api/lots/${lot.id}/documents/${doc.id}`);
+      if (!response.ok) throw new Error('Erreur de téléchargement');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.filename;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      toast.error(err.message || 'Erreur de téléchargement');
+    }
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    try {
+      const response = await apiFetch(`/api/lots/${lot.id}/documents/${docId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || 'Erreur de suppression');
+      }
+      toast.success('Document supprimé');
+      setDocuments(docs => docs.filter(d => d.id !== docId));
+    } catch (err) {
+      toast.error(err.message || 'Erreur de suppression');
+    }
   };
 
   const loadPaymentSchedule = async (reservationId) => {
@@ -525,102 +833,438 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     setReservationDays(7);
     setNotes('');
     setEnablePaymentPlan(false);
-    setPaymentPlan(DEFAULT_PAYMENT_PLAN);
+    setPaymentPlan(projectFinancingPlan ? {
+      deposit_pct: projectFinancingPlan.deposit_pct,
+      deposit_start_date: '',
+      deposit_count: projectFinancingPlan.deposit_count,
+      deposit_periodicity: projectFinancingPlan.deposit_periodicity,
+      balance_delay_months: projectFinancingPlan.balance_delay_months,
+      balance_count: projectFinancingPlan.balance_count,
+      balance_periodicity: projectFinancingPlan.balance_periodicity,
+    } : DEFAULT_PAYMENT_PLAN);
+    setGuaranteeAmount('');
+    setFinalizationDate('');
+    setPaymentType('cash');
+    setNotaryName('');
+    setNotaryDate('');
+    setBlockReason('');
+    setFinalSalePrice('');
+    setEditForm({ price_per_sqm: '', price_per_sqm_acte: '', surface: '', zone: '', type_lot: '', emplacement: '', type_maison: '' });
+    setExtendDays(7);
+    setValidationChoice(null);
+    setSalePriceEngaged('');
+    setPromotionTiming('debut');
   };
 
   const handleSetMode = (newMode) => {
     resetFormState();
     setMode(newMode);
-    if (newMode === 'sell' && lot?.price) setFinalPrice(lot.price.toString());
-    if (newMode === 'release') {
+    if (newMode === 'to_soldee' && lot?.price) setFinalSalePrice(lot.price.toString());
+    if (newMode === 'finaliser_refund' || newMode === 'finaliser_engage') {
+      const gAmount = reservation?.guarantee_amount ?? lot?.guarantee_amount ?? 0;
+      const gPayType = reservation?.payment_type ?? lot?.payment_type ?? 'cash';
       setReleaseData({
-        deposit_refund_amount: lot?.deposit > 0 ? String(lot.deposit) : '',
+        deposit_refund_amount: gAmount > 0 ? String(gAmount) : '',
         deposit_refund_date: new Date().toISOString().split('T')[0],
         release_reason: '',
+        refund_payment_type: gPayType,
+      });
+    }
+    if (newMode === 'finaliser_engage' || newMode === 'direct_engage') {
+      setEnablePaymentPlan(true);
+      if (lot?.price_per_sqm_acte && lot?.surface && lot.surface > 0) {
+        setSalePriceEngaged(String(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100));
+      } else if (lotPricingConfig?.sale_price_computed) {
+        setSalePriceEngaged(String(lotPricingConfig.sale_price_computed));
+      } else if (lot?.price) {
+        setSalePriceEngaged(lot.price.toString());
+      }
+    }
+    if (newMode === 'update_notaire') {
+      setNotaryDate(lot?.notary_date || '');
+      if (lot?.notaire_id) {
+        const existing = notaires.find(n => n.id === lot.notaire_id);
+        setSelectedNotaire(existing || null);
+      } else {
+        setSelectedNotaire(null);
+      }
+    }
+    if (newMode === 'to_notaire') {
+      setSelectedNotaire(null);
+      setNotaryDate('');
+    }
+    if (newMode === 'complete_lot') {
+      setEditForm({
+        price_per_sqm: lot?.price_per_sqm ? lot.price_per_sqm.toString() : '',
+        price_per_sqm_acte: lot?.price_per_sqm_acte ? lot.price_per_sqm_acte.toString() : '',
+        surface: lot?.surface ? lot.surface.toString() : '',
+        zone: lot?.zone || '',
+        type_lot: lot?.type_lot || '',
+        emplacement: lot?.emplacement || '',
+        type_maison: lot?.type_maison || '',
       });
     }
   };
 
-  const handleReserve = async () => {
+  const handleActivateLot = async () => {
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/activate`, {});
+      toast.success('Lot activé — disponible');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Champs obligatoires manquants'); }
+    finally { setLoading(false); }
+  };
+
+  const handleCompleteLot = async () => {
+    if (!editForm.price_per_sqm || parseFloat(editForm.price_per_sqm) <= 0) { toast.warning('Le prix/m² catalogue est requis'); return; }
+    if (!editForm.surface || parseFloat(editForm.surface) <= 0) { toast.warning('La surface est requise'); return; }
+    const price_per_sqm = parseFloat(editForm.price_per_sqm);
+    const price_per_sqm_acte = editForm.price_per_sqm_acte ? parseFloat(editForm.price_per_sqm_acte) : null;
+    const surface = parseFloat(editForm.surface);
+    const computedPrice = Math.round(price_per_sqm * surface * 100) / 100;
+    setLoading(true);
+    try {
+      await apiPut(`/api/lots/${lot.id}`, {
+        price_per_sqm,
+        price_per_sqm_acte,
+        price: computedPrice,
+        surface,
+        zone: editForm.zone.trim() || null,
+        type_lot: editForm.type_lot.trim() || null,
+        emplacement: editForm.emplacement.trim() || null,
+        type_maison: editForm.type_maison.trim() || null,
+      });
+      await apiPost(`/api/lots/${lot.id}/transitions/activate`, {});
+      toast.success('Lot activé — disponible');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur lors de la mise à jour'); }
+    finally { setLoading(false); }
+  };
+
+  const handleStartOption = async () => {
     if (!selectedClient) { toast.warning('Veuillez sélectionner un client'); return; }
     const days = parseInt(reservationDays) || 7;
     if (days < 1 || days > 365) { toast.warning('Le nombre de jours doit être entre 1 et 365'); return; }
-    const deposit = depositAmount ? parseFloat(depositAmount) : 0;
-    if (lot.price && deposit >= lot.price) {
-      toast.warning(`L'acompte doit être inférieur au prix du lot (${formatPrice(lot.price)})`);
-      return;
-    }
+    const expDate = new Date();
+    expDate.setDate(expDate.getDate() + days);
     setLoading(true);
     try {
-      const reservation = await apiPost('/api/reservations', {
-        lot_id: lot.id, client_id: selectedClient.id,
-        reservation_days: days, deposit,
-        deposit_date: depositDate || undefined,
+      await apiPost(`/api/lots/${lot.id}/transitions/start-option`, {
+        client_id: selectedClient.id,
+        expiration_date: expDate.toISOString(),
         notes: notes || undefined,
       });
-      if (lot.price) {
-        try {
-          const remainingForPlan = Math.max(0, lot.price - deposit);
-          const schedule = await apiPost('/api/payments/schedules', {
-            reservation_id: reservation.id, lot_price: remainingForPlan,
-            deposit_pct: parseFloat(paymentPlan.deposit_pct) || 50,
-            deposit_start_date: paymentPlan.deposit_start_date || undefined,
-            balance_delay_months: parseInt(paymentPlan.balance_delay_months) || 0,
-            deposit_installments: { count: parseInt(paymentPlan.deposit_count) || 1, periodicity_months: parseInt(paymentPlan.deposit_periodicity) || 1 },
-            balance_installments: { count: parseInt(paymentPlan.balance_count) || 1, periodicity_months: parseInt(paymentPlan.balance_periodicity) || 1 },
-          });
-          if (firstPaymentImmediate) {
-            await apiPost(`/api/reservations/${reservation.id}/validate-deposit`, {});
-          }
-        } catch (err) {
-          console.error('Error creating payment schedule:', err);
-          toast.warning('Réservation créée, mais erreur lors de la création du plan de paiement');
-        }
-      }
-      toast.success('Lot réservé avec succès');
-      onClose();
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      toast.error(error.message || 'Erreur lors de la réservation');
-    } finally { setLoading(false); }
+      toast.success('Option démarrée avec succès');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
   };
 
-  const handleSell = async () => {
-    if (!finalPrice) { toast.warning('Veuillez entrer le prix final'); return; }
-    const clientId = lot.status === 'reserved' ? lot.client_id : selectedClient?.id;
-    if (!clientId) { toast.warning('Veuillez sélectionner un client'); return; }
+  const handleCancelOption = async () => {
     setLoading(true);
     try {
-      await apiPost('/api/sales', {
-        lot_id: lot.id, client_id: clientId, price: parseFloat(finalPrice),
-        reservation_id: lot.reservation_id || undefined, notes: notes || undefined,
+      const url = notes.trim()
+        ? `/api/lots/${lot.id}/transitions/cancel-option?reason=${encodeURIComponent(notes.trim())}`
+        : `/api/lots/${lot.id}/transitions/cancel-option`;
+      await apiPost(url, {});
+      toast.success('Option annulée — lot disponible');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleDirectReservation = async () => {
+    if (!selectedClient) { toast.warning('Veuillez sélectionner un client'); return; }
+    if (!guaranteeAmount || parseFloat(guaranteeAmount) <= 0) { toast.warning('Le montant de garantie est requis'); return; }
+    if (!finalizationDate) { toast.warning('La date de finalisation est requise'); return; }
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/direct-reservation`, {
+        client_id: selectedClient.id,
+        guarantee_amount: parseFloat(guaranteeAmount),
+        payment_type: paymentType,
+        finalization_date: new Date(finalizationDate).toISOString(),
+        notes: notes || undefined,
       });
-      toast.success('Vente enregistrée avec succès');
-      onClose();
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      toast.error(error.message || 'Erreur lors de la vente');
-    } finally { setLoading(false); }
+      toast.success('Réservation à finaliser créée');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
   };
 
-  const handleConfirmRelease = async () => {
+  const handleDirectEngage = async () => {
+    if (!selectedClient) { toast.warning('Veuillez sélectionner un client'); return; }
+    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
+    if (!guaranteeAmount || parseFloat(guaranteeAmount) <= 0) { toast.warning('Le montant du premier acompte (ND) est requis'); return; }
+    const salePrice = parseFloat(salePriceEngaged);
+    const promoAmt = lot?.price != null ? Math.max(0, lot.price - salePrice) : 0;
     setLoading(true);
     try {
-      const payload = {
-        deposit_refund_amount: releaseData.deposit_refund_amount !== '' ? parseFloat(releaseData.deposit_refund_amount) : null,
-        deposit_refund_date: releaseData.deposit_refund_date || null,
+      await apiPost(`/api/lots/${lot.id}/transitions/direct-engage`, {
+        client_id: selectedClient.id,
+        guarantee_amount: parseFloat(guaranteeAmount),
+        payment_type: paymentType,
+        sale_price: salePrice,
+        promotion_paid_timing: promoAmt > 0 ? promotionTiming : undefined,
+        promotion_received: promoAmt > 0 ? promotionTiming === 'debut' : false,
+        payment_plan: _buildPaymentPlanPayload(),
+        notes: notes || undefined,
+      });
+      toast.success('Réservation engagée créée');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleExtendOption = async () => {
+    const days = parseInt(extendDays) || 7;
+    if (days < 1 || days > 365) { toast.warning('La durée doit être entre 1 et 365 jours'); return; }
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/extend-option?additional_days=${days}`, {});
+      toast.success(`Option prolongée de ${days} jour${days > 1 ? 's' : ''}`);
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleToReservation = async () => {
+    if (!guaranteeAmount || parseFloat(guaranteeAmount) <= 0) { toast.warning('Le montant de garantie est requis'); return; }
+    if (!finalizationDate) { toast.warning('La date de finalisation est requise'); return; }
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/to-reservation`, {
+        guarantee_amount: parseFloat(guaranteeAmount),
+        finalization_date: new Date(finalizationDate).toISOString(),
+        payment_type: paymentType,
+        notes: notes || undefined,
+      });
+      toast.success('Réservation à finaliser');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleFinaliserRefund = async () => {
+    const amount = releaseData.deposit_refund_amount !== '' ? parseFloat(releaseData.deposit_refund_amount) : null;
+    if (amount === null || amount < 0) { toast.warning('Le montant remboursé est requis (0 si aucun remboursement)'); return; }
+    if (!releaseData.deposit_refund_date) { toast.warning('La date de remboursement est requise'); return; }
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/refund`, {
+        refund_amount: amount,
+        refund_date: releaseData.deposit_refund_date,
         release_reason: releaseData.release_reason.trim() || null,
-      };
-      await apiPost(`/api/reservations/${lot.reservation_id}/release`, payload);
-      toast.success('Réservation libérée avec succès');
-      onClose();
+      });
+      toast.success('Garantie remboursée — lot disponible');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  // Build payment_plan block from state — returns undefined if plan not enabled
+  const _buildPaymentPlanPayload = () => {
+    if (!enablePaymentPlan) return undefined;
+    return {
+      deposit_pct: parseFloat(paymentPlan.deposit_pct) || 50,
+      deposit_start_date: paymentPlan.deposit_start_date || undefined,
+      balance_delay_months: parseInt(paymentPlan.balance_delay_months) || 0,
+      deposit_count: parseInt(paymentPlan.deposit_count) || 1,
+      deposit_periodicity: parseInt(paymentPlan.deposit_periodicity) || 1,
+      balance_count: parseInt(paymentPlan.balance_count) || 1,
+      balance_periodicity: parseInt(paymentPlan.balance_periodicity) || 1,
+    };
+  };
+
+  const _buildEngagePayload = (guaranteeAction, extra = {}) => {
+    const salePrice = salePriceEngaged ? parseFloat(salePriceEngaged) : undefined;
+    const promoAmt = (salePrice != null && lot?.price != null) ? Math.max(0, lot.price - salePrice) : 0;
+    return {
+      guarantee_action: guaranteeAction,
+      sale_price: salePrice,
+      promotion_paid_timing: promoAmt > 0 ? promotionTiming : undefined,
+      promotion_received: promoAmt > 0 ? promotionTiming === 'debut' : false,
+      payment_plan: _buildPaymentPlanPayload(),
+      ...extra,
+    };
+  };
+
+  const handleFinaliserEngage = async () => {
+    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/engage`, _buildEngagePayload('deduct'));
+      toast.success('Réservation engagée — garantie déduite');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleFinaliserEngageWithRefund = async () => {
+    const amount = releaseData.deposit_refund_amount !== '' ? parseFloat(releaseData.deposit_refund_amount) : null;
+    if (amount === null || amount < 0) { toast.warning('Le montant remboursé est requis'); return; }
+    if (!releaseData.deposit_refund_date) { toast.warning('La date de remboursement est requise'); return; }
+    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/engage`, _buildEngagePayload('refund', {
+        refund_amount: amount,
+        refund_date: releaseData.deposit_refund_date,
+        refund_payment_type: releaseData.refund_payment_type || undefined,
+      }));
+      toast.success('Garantie rendue au client — réservation engagée');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleMarkPromotionReceived = async () => {
+    if (!lot?.reservation_id) return;
+    setMarkingPromotion(true);
+    try {
+      const updatedRes = await apiPost(`/api/reservations/${lot.reservation_id}/mark-promotion-received`, {});
+      setReservation(updatedRes);
+      toast.success('Montant de la promotion marqué comme reçu — acte de réservation disponible');
       if (onRefresh) onRefresh();
-    } catch (error) {
-      toast.error(error.message || 'Erreur lors de la libération');
-    } finally { setLoading(false); }
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setMarkingPromotion(false); }
+  };
+
+  const handleSetNotaireIntent = async (wantsNotaire) => {
+    if (!lot?.id) return;
+    setSettingNotaireIntent(true);
+    try {
+      const updatedRes = await apiPost(`/api/lots/${lot.id}/transitions/set-notaire-intent`, {
+        wants_notaire: wantsNotaire,
+      });
+      setReservation(updatedRes);
+      toast.success(wantsNotaire
+        ? 'Client positionné pour le passage chez le notaire'
+        : 'Intention notaire retirée');
+      if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setSettingNotaireIntent(false); }
+  };
+
+  const handleDownloadCertificate = async () => {
+    if (!lot?.reservation_id) return;
+    setDownloadingDoc(true);
+    try {
+      const response = await apiFetch(`/api/reservations/${lot.reservation_id}/certificate`);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `Erreur ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `acte_reservation_${lot.reservation_id}_lot${lot.numero}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) { toast.error(error.message || 'Erreur lors de la génération'); }
+    finally { setDownloadingDoc(false); }
+  };
+
+  const handleDownloadReceipt = async () => {
+    if (!lot?.reservation_id) return;
+    setDownloadingDoc(true);
+    try {
+      const response = await apiFetch(`/api/reservations/${lot.reservation_id}/receipt`);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `Erreur ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `recu_paiement_${lot.reservation_id}_lot${lot.numero}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) { toast.error(error.message || 'Erreur lors de la génération'); }
+    finally { setDownloadingDoc(false); }
+  };
+
+  const handleToSoldee = async () => {
+    const price = finalSalePrice ? parseFloat(finalSalePrice) : lot.price;
+    if (!price || price <= 0) { toast.warning('Le prix final est requis'); return; }
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/solde`, { price, notes: notes || undefined });
+      toast.success('Lot soldé — vente enregistrée');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleToNotaire = async () => {
+    if (!selectedNotaire) { toast.warning('Veuillez sélectionner un notaire'); return; }
+    if (!notaryDate) { toast.warning('La date de l\'acte est requise'); return; }
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/notaire`, {
+        notaire_id: selectedNotaire.id,
+        notary_date: notaryDate,
+        notes: notes || undefined,
+      });
+      toast.success('Lot passé chez le notaire');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleUpdateNotaire = async () => {
+    if (!selectedNotaire) { toast.warning('Veuillez sélectionner un notaire'); return; }
+    if (!notaryDate) { toast.warning('La date de l\'acte est requise'); return; }
+    setLoading(true);
+    try {
+      await apiPut(`/api/lots/${lot.id}/transitions/notaire`, {
+        notaire_id: selectedNotaire.id,
+        notary_date: notaryDate,
+      });
+      toast.success('Informations notaire mises à jour');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleToProprietaire = async () => {
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/proprietaire`, {});
+      toast.success('Lot transféré chez le propriétaire');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleBlock = async () => {
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/block`, { reason: blockReason.trim() || null });
+      toast.success('Lot bloqué');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleUnblock = async () => {
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/unblock`, {});
+      toast.success('Lot débloqué — disponible');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
   };
 
   if (!lot) return null;
+
+  // Source de vérité pour la garantie : API reservation > lot prop > 0
+  const activeGuarantee = reservation?.guarantee_amount ?? lot?.guarantee_amount ?? 0;
+  const activePaymentType = reservation?.payment_type ?? lot?.payment_type ?? null;
 
   // Remaining balance after initial deposit — used as base for payment plan
   const remainingBalance = lot.price
@@ -631,13 +1275,6 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     const d = new Date();
     d.setDate(d.getDate() + (parseInt(reservationDays) || 7));
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-  })();
-
-  const priceDiff = (() => {
-    if (!finalPrice || !lot?.price) return null;
-    const diff = parseFloat(finalPrice) - lot.price;
-    const pct = (diff / lot.price * 100).toFixed(1);
-    return { diff, pct, positive: diff > 0 };
   })();
 
   // Preview row count for panel header subtitle (based on remaining balance)
@@ -652,11 +1289,18 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     .sort((a, b) => a.installment_number - b.installment_number)[0] ?? null;
   const firstPaymentIsOverdue = firstDepositInstallment?.status === 'pending'
     && new Date(firstDepositInstallment.due_date) < new Date();
-  const isValidated = lot.reservation_status === 'validated';
-
   const lotStats = [
     lot.surface && { icon: <IcSurface />, value: `${lot.surface} m²`, label: 'Surface' },
-    (lot.price && lot.surface && lot.surface > 0) && { icon: <IcChart />, value: `${Math.round(lot.price / lot.surface).toLocaleString('fr-FR')} MAD`, label: 'Prix/m²' },
+    (lot.price_per_sqm || (lot.price && lot.surface && lot.surface > 0)) && {
+      icon: <IcChart />,
+      value: `${Math.round(lot.price_per_sqm ?? (lot.price / lot.surface)).toLocaleString('fr-FR')} MAD`,
+      label: 'Prix/m² catalogue'
+    },
+    lot.price_per_sqm_acte && {
+      icon: <IcChart />,
+      value: `${Math.round(lot.price_per_sqm_acte).toLocaleString('fr-FR')} MAD`,
+      label: 'Prix/m² acte'
+    },
     lot.zone && { icon: <IcPin />, value: `Zone ${lot.zone}`, label: 'Zone' },
     { icon: <IcCalendar />, value: `${lot.days_in_status ? Math.round(lot.days_in_status) : 0}j`, label: 'Dans ce statut' },
     lot.type_lot && { icon: <IcTag />, value: lot.type_lot, label: 'Type de lot' },
@@ -668,53 +1312,83 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   if (!mode) {
     return (
       <div className="modal-overlay" onClick={onClose}>
-        <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
-          <div className="modal-header">
-            <div>
-              <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-primary)', marginBottom: 2 }}>Lot</div>
-              <h2 className="modal-title" style={{ fontFamily: 'var(--font-mono)', fontSize: '1.6rem', letterSpacing: '-0.01em' }}>{lot.numero}</h2>
+        <div className="modal ldm-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
+          <div className="modal-header ldm-modal-header">
+            <div className="ldm-header-id">
+              <span className="ldm-header-eyebrow">Lot</span>
+              <h2 className="modal-title ldm-header-number">{lot.numero}</h2>
             </div>
             <button className="modal-close" onClick={onClose}><IcClose /></button>
           </div>
           <div className="modal-body">
             <div className="ldm-price-row">
-              <div>
+              <div className="ldm-price-block">
                 <div className="lot-price-main">{formatPrice(lot.price)}</div>
-                {lot.surface && lot.price && <div className="lot-price-per-m2">{formatPrice(lot.price / lot.surface)}/m²</div>}
+                {lot.price_per_sqm
+                  ? <div className="lot-price-per-m2">{lot.price_per_sqm.toLocaleString('fr-FR')} MAD/m² <span className="lot-price-tag">catalogue</span></div>
+                  : (lot.surface && lot.price && lot.surface > 0)
+                    ? <div className="lot-price-per-m2">{formatPrice(lot.price / lot.surface)}/m² <span className="lot-price-tag">catalogue</span></div>
+                    : null
+                }
+                {lot.price_per_sqm_acte && (
+                  <div className="lot-price-per-m2 lot-price-acte">
+                    {lot.surface
+                      ? <>{formatPrice(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100)} <span className="lot-price-tag">acte</span></>
+                      : <>{lot.price_per_sqm_acte.toLocaleString('fr-FR')} MAD/m² <span className="lot-price-tag">acte</span></>
+                    }
+                  </div>
+                )}
               </div>
-              <span className={`status-badge ${lot.status}`} style={{ fontSize: '0.82rem', padding: '7px 14px' }}>
+              <span className={`status-badge status-badge--pill ${lot.status}`}>
                 <span className="status-dot"></span>{STATUS_LABELS[lot.status]}
               </span>
             </div>
 
+            <div className="ldm-divider" />
+
+            {lotStats.length > 0 && <div className="ldm-section-label">Caractéristiques</div>}
             <div className="ldm-stats-grid">
               {lotStats.map((s, i) => (
                 <div key={i} className="ldm-stat-cell">
                   <div className="ldm-stat-icon">{s.icon}</div>
-                  <div className="ldm-stat-value">{s.value}</div>
-                  <div className="ldm-stat-label">{s.label}</div>
+                  <div className="ldm-stat-text">
+                    <div className="ldm-stat-value">{s.value}</div>
+                    <div className="ldm-stat-label">{s.label}</div>
+                  </div>
                 </div>
               ))}
             </div>
 
-            {lot.status === 'reserved' && lot.client_name && (
+            {['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire'].includes(lot.status) && lot.client_name && (
               <div className="ldm-reservation-info">
                 <div className="ldm-ri-header">
                   <IcUser />
-                  <span>{isValidated ? 'Réservation validée' : 'Réservation en cours'}</span>
-                  {isValidated && (
-                    <span className="badge badge-green" style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>
-                      <IcCheck /> Premier versement reçu
-                    </span>
-                  )}
+                  <span>{STATUS_LABELS[lot.status]}</span>
                 </div>
+                <ExpiredAlert status={lot.status} expirationDate={lot.expiration_date} />
                 <div className="ldm-ri-rows">
                   <div className="ldm-ri-row"><span className="ldm-ri-key">Client</span><span className="ldm-ri-val">{lot.client_name}</span></div>
                   {lot.client_phone && <div className="ldm-ri-row"><span className="ldm-ri-key">Téléphone</span><span className="ldm-ri-val">{lot.client_phone}</span></div>}
-                  {lot.reserved_by && <div className="ldm-ri-row"><span className="ldm-ri-key">Réservé par</span><span className="ldm-ri-val">{lot.reserved_by}</span></div>}
-                  {lot.reservation_date && <div className="ldm-ri-row"><span className="ldm-ri-key">Date</span><span className="ldm-ri-val">{formatDate(lot.reservation_date)}</span></div>}
-                  {lot.expiration_date && <div className="ldm-ri-row"><span className="ldm-ri-key">Expire le</span><span className="ldm-ri-val" style={{ color: 'var(--color-warning)' }}>{formatDate(lot.expiration_date)}</span></div>}
+                  {lot.reserved_by_name && <div className="ldm-ri-row"><span className="ldm-ri-key">Suivi par</span><span className="ldm-ri-val">{lot.reserved_by_name}</span></div>}
+                  {lot.reservation_date && <div className="ldm-ri-row"><span className="ldm-ri-key">Date option</span><span className="ldm-ri-val">{formatDate(lot.reservation_date)}</span></div>}
+                  {lot.expiration_date && <div className="ldm-ri-row"><span className="ldm-ri-key">Expiration</span><span className="ldm-ri-val" style={{ color: new Date(lot.expiration_date) < new Date() ? 'var(--color-error)' : 'var(--color-warning)' }}>{formatDate(lot.expiration_date)}</span></div>}
                   {lot.deposit > 0 && <div className="ldm-ri-row"><span className="ldm-ri-key">Acompte initial</span><span className="ldm-ri-val ldm-ri-val--bold">{formatPrice(lot.deposit)}</span></div>}
+                  {activeGuarantee > 0 && <div className="ldm-ri-row"><span className="ldm-ri-key">Garantie</span><span className="ldm-ri-val ldm-ri-val--bold">{formatPrice(activeGuarantee)}</span></div>}
+                  {activePaymentType && <div className="ldm-ri-row"><span className="ldm-ri-key">Paiement garantie</span><span className="ldm-ri-val">{PAYMENT_TYPES.find(p => p.value === activePaymentType)?.label || activePaymentType}</span></div>}
+                  {lot.notary_name && <div className="ldm-ri-row"><span className="ldm-ri-key">Notaire</span><span className="ldm-ri-val">{lot.notary_name}</span></div>}
+                  {lot.notary_date && <div className="ldm-ri-row"><span className="ldm-ri-key">Date acte</span><span className="ldm-ri-val">{formatDate(lot.notary_date)}</span></div>}
+                  {/* Tag intention notaire — visible pour reservation_soldee */}
+                  {lot.status === 'reservation_soldee' && (
+                    <div className="ldm-ri-row">
+                      <span className="ldm-ri-key">Chez le notaire</span>
+                      <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {reservation?.wants_notaire
+                          ? <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Souhaité</span>
+                          : <span className="badge badge-gray" style={{ fontSize: '0.65rem' }}>Non encore</span>
+                        }
+                      </span>
+                    </div>
+                  )}
                   {firstDepositInstallment && (
                     <div className="ldm-ri-row">
                       <span className="ldm-ri-key">1er versement plan</span>
@@ -727,28 +1401,75 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                       </span>
                     </div>
                   )}
+                  {/* Bloc promotion — visible uniquement en réservation engagée et au-delà */}
+                  {['reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire'].includes(lot.status) && reservation?.sale_price != null && (
+                    <>
+                      {reservation.sale_price !== lot.price && (
+                        <div className="ldm-ri-row">
+                          <span className="ldm-ri-key">Prix de vente</span>
+                          <span className="ldm-ri-val ldm-ri-val--bold">{formatPrice(reservation.sale_price)}</span>
+                        </div>
+                      )}
+                      {(reservation.promotion_amount ?? 0) > 0 && (
+                        <>
+                          <div className="ldm-ri-row">
+                            <span className="ldm-ri-key">Promotion</span>
+                            <span className="ldm-ri-val" style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
+                              {formatPrice(reservation.promotion_amount)}
+                            </span>
+                          </div>
+                          <div className="ldm-ri-row">
+                            <span className="ldm-ri-key">Paiement promotion</span>
+                            <span className="ldm-ri-val">
+                              {reservation.promotion_paid_timing === 'debut' ? 'Au début' : reservation.promotion_paid_timing === 'fin' ? 'À la fin' : '—'}
+                            </span>
+                          </div>
+                          <div className="ldm-ri-row">
+                            <span className="ldm-ri-key">Promotion reçue</span>
+                            <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {reservation.promotion_received
+                                ? <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Reçue</span>
+                                : <span className="badge badge-red" style={{ fontSize: '0.65rem' }}>Non reçue</span>
+                              }
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                  {/* Montant restant à payer */}
+                  {lot.status === 'reservation_engagee' && paymentSchedule && (() => {
+                    const unpaidTotal = paymentSchedule.installments
+                      ?.filter(i => i.status === 'pending')
+                      .reduce((s, i) => s + i.amount, 0) ?? 0;
+                    const promoRemaining = (reservation?.promotion_amount ?? 0) > 0 && !reservation?.promotion_received
+                      ? (reservation.promotion_paid_timing === 'fin' ? reservation.promotion_amount : 0)
+                      : 0;
+                    const remaining = unpaidTotal + promoRemaining;
+                    if (remaining <= 0) return null;
+                    return (
+                      <div className="ldm-ri-row" style={{ marginTop: 4, borderTop: '1px solid var(--bg-surface)', paddingTop: 6 }}>
+                        <span className="ldm-ri-key" style={{ fontWeight: 600 }}>Restant à payer</span>
+                        <span className="ldm-ri-val ldm-ri-val--bold" style={{ color: 'var(--color-primary)' }}>
+                          {formatPrice(remaining)}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
-                {/* First payment alert */}
                 {firstPaymentIsOverdue && (
                   <div className="ldm-first-payment-alert">
-                    <div className="ldm-fpa-icon">
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M8 2L1 13h14L8 2z" /><path d="M8 6v4M8 11.5v.5" />
-                      </svg>
-                    </div>
+                    <div className="ldm-fpa-icon"><IcAlertTriangle /></div>
                     <div className="ldm-fpa-body">
                       <div className="ldm-fpa-title">Premier versement en retard</div>
                       <div className="ldm-fpa-desc">
                         Échéance du {formatDate(firstDepositInstallment.due_date)} — {formatPrice(firstDepositInstallment.amount)}
                       </div>
                     </div>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={handleConfirmFirstPayment}
-                      disabled={confirmingPayment}
+                    <button className="btn btn-primary btn-sm"
+                      onClick={handleConfirmFirstPayment} disabled={confirmingPayment}
                       style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      <IcCheck />
-                      {confirmingPayment ? 'Confirmation...' : 'Confirmer le paiement'}
+                      <IcCheck />{confirmingPayment ? 'Confirmation...' : 'Confirmer le paiement'}
                     </button>
                   </div>
                 )}
@@ -756,41 +1477,239 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
             )}
           </div>
 
-          <div className="modal-footer">
-            {lot.status === 'available' && (
-              <>
-                <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => handleSetMode('reserve')}><IcLock /> Réserver</button>
-                <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => handleSetMode('sell')}><IcCheck /> Vendre</button>
-              </>
-            )}
-            {lot.status === 'reserved' && (() => {
-              const canManage = isManager || (lot.reserved_by_user_id && lot.reserved_by_user_id === user?.id);
-              const msg = `Seul ${lot.reserved_by || 'le commercial qui a réservé'} peut libérer ou finaliser cette réservation`;
+          {/* ── Documents notariés ── */}
+          {['chez_notaire', 'chez_proprietaire'].includes(lot.status) && (
+            <div className="ldm-documents-section">
+              <div className="ldm-documents-header">
+                <div className="ldm-section-label" style={{ margin: 0 }}>
+                  <IcFile /> Documents
+                  {documents.length > 0 && (
+                    <span className="badge badge-gray" style={{ fontSize: '0.65rem', marginLeft: 6 }}>{documents.length}</span>
+                  )}
+                </div>
+                {lot.status === 'chez_notaire' && (
+                  <>
+                    <input
+                      ref={docFileInputRef}
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"
+                      style={{ display: 'none' }}
+                      onChange={handleUploadDocument}
+                    />
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.78rem' }}
+                      onClick={() => docFileInputRef.current?.click()}
+                      disabled={uploadingDoc}
+                    >
+                      <IcUpload />{uploadingDoc ? 'Upload...' : 'Ajouter'}
+                    </button>
+                  </>
+                )}
+              </div>
+              {documents.length === 0 ? (
+                <div className="ldm-documents-empty">Aucun document</div>
+              ) : (
+                <div className="ldm-documents-list">
+                  {documents.map(doc => (
+                    <div key={doc.id} className="ldm-doc-row">
+                      <div className="ldm-doc-icon"><IcFile /></div>
+                      <div className="ldm-doc-name" title={doc.filename}>{doc.filename}</div>
+                      <div className="ldm-doc-actions">
+                        <button
+                          className="ldm-doc-btn"
+                          onClick={() => handleDownloadDocument(doc)}
+                          title="Télécharger"
+                        >
+                          <IcDownload />
+                        </button>
+                        {lot.status === 'chez_notaire' && (
+                          <button
+                            className="ldm-doc-btn ldm-doc-btn--danger"
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            title="Supprimer"
+                          >
+                            <IcTrash />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="modal-footer ldm-footer">
+            {lot.status === 'creation' && (() => {
+              const missingFields = [!lot.price && 'Prix', !lot.surface && 'Surface'].filter(Boolean);
+              const canActivate = missingFields.length === 0;
               return (
                 <>
-                  {/* Quick confirm first payment if pending — accessible directly from footer */}
-                  {firstPaymentIsOverdue && canManage && (
-                    <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                      onClick={handleConfirmFirstPayment} disabled={confirmingPayment}>
-                      <IcCheck /> {confirmingPayment ? 'Confirmation...' : 'Valider 1er paiement'}
-                    </button>
+                  {!canActivate && (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <IcAlertTriangle /> Manquant : {missingFields.join(', ')}
+                    </span>
                   )}
-                  <button className="btn btn-ghost"
-                    onClick={() => handleSetMode('release')} disabled={loading || !canManage}
-                    title={!canManage ? msg : ''}
-                    style={!canManage ? { opacity: 0.5, cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: 6 } : { display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <IcUnlock /> Libérer
+                  <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('complete_lot')}>
+                    Compléter
                   </button>
-                  <button className="btn btn-success"
-                    onClick={() => handleSetMode('sell')} disabled={!canManage}
-                    title={!canManage ? msg : ''}
-                    style={!canManage ? { opacity: 0.5, cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: 6 } : { display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <IcCheck /> Finaliser la vente
+                  <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={handleActivateLot} disabled={loading || !canActivate}
+                    title={!canActivate ? `Complétez d'abord : ${missingFields.join(', ')}` : ''}>
+                    <IcCheck /> Activer
                   </button>
                 </>
               );
             })()}
-            <button className="btn btn-ghost" onClick={onClose}>Fermer</button>
+            {lot.status === 'available' && (
+              <>
+                <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => handleSetMode('start_option')}><IcLock /> Option</button>
+                <button className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => handleSetMode('direct_reservation')}><IcCheck /> Résa. à finaliser</button>
+                <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => handleSetMode('direct_engage')}><IcCheck /> Résa. engagée</button>
+                <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => handleSetMode('block')}><IcLock /> Bloquer</button>
+              </>
+            )}
+            {lot.status === 'option' && (() => {
+              const canManage = isManager || (lot.reserved_by_user_id && lot.reserved_by_user_id === user?.id);
+              return (
+                <>
+                  <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('cancel_option')} disabled={!canManage}
+                    title={!canManage ? 'Seul le commercial responsable ou un manager peut annuler' : ''}>
+                    <IcUnlock /> Annuler option
+                  </button>
+                  <button className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('extend_option')} disabled={!canManage}
+                    title={!canManage ? 'Seul le commercial responsable ou un manager peut prolonger' : ''}>
+                    <IcCalendar /> Prolonger
+                  </button>
+                  <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('to_reservation')} disabled={!canManage}
+                    title={!canManage ? 'Seul le commercial responsable ou un manager peut valider' : ''}>
+                    <IcCheck /> Passer à réservation à finaliser
+                  </button>
+                </>
+              );
+            })()}
+            {lot.status === 'reservation_a_finaliser' && (() => {
+              const canManage = isManager || (lot.reserved_by_user_id && lot.reserved_by_user_id === user?.id);
+              return (
+                <>
+                  <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('finaliser_refund')} disabled={!canManage}>
+                    <IcUnlock /> Rembourser
+                  </button>
+                  <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('finaliser_engage')} disabled={!canManage}>
+                    <IcCheck /> Valider
+                  </button>
+                </>
+              );
+            })()}
+            {lot.status === 'reservation_engagee' && (
+              <>
+                {(reservation?.promotion_amount ?? 0) > 0 && !reservation?.promotion_received && (
+                  <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={handleMarkPromotionReceived} disabled={markingPromotion}
+                    title="Marquer le montant de la promotion comme reçu">
+                    <IcTag /> {markingPromotion ? 'En cours...' : 'Promotion reçue'}
+                  </button>
+                )}
+                {/* Document : reçu si promotion en attente, acte si promotion reçue (ou pas de promotion) */}
+                {(reservation?.promotion_received || !(reservation?.promotion_amount > 0)) ? (
+                  <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={handleDownloadCertificate} disabled={downloadingDoc}
+                    title="Télécharger l'acte de réservation PDF">
+                    <IcDownload /> {downloadingDoc ? 'Génération...' : 'Acte de réservation'}
+                  </button>
+                ) : (
+                  <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={handleDownloadReceipt} disabled={downloadingDoc}
+                    title="Télécharger le reçu de paiement (promotion non encore reçue)">
+                    <IcDownload /> {downloadingDoc ? 'Génération...' : 'Reçu de paiement'}
+                  </button>
+                )}
+                {(() => {
+                  const allPaid = !paymentSchedule || paymentSchedule.installments.every(i => i.status === 'paid');
+                  return (
+                    <button
+                      className="btn btn-success"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, ...(!allPaid ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
+                      onClick={() => allPaid && handleSetMode('to_soldee')}
+                      disabled={!allPaid}
+                      title={!allPaid ? 'Tous les versements doivent être encaissés avant de marquer soldé' : 'Marquer le lot comme soldé'}
+                    >
+                      <IcCheck /> Marquer soldé
+                    </button>
+                  );
+                })()}
+              </>
+            )}
+            {lot.status === 'reservation_soldee' && (
+              <>
+                {/* Tag : intention notaire */}
+                {reservation?.wants_notaire ? (
+                  <button
+                    className="btn btn-warning"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetNotaireIntent(false)}
+                    disabled={settingNotaireIntent}
+                    title="Retirer l'intention de passer chez le notaire">
+                    <IcTag /> {settingNotaireIntent ? 'En cours...' : 'Notaire : Oui'}
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-ghost"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetNotaireIntent(true)}
+                    disabled={settingNotaireIntent}
+                    title="Marquer que le client souhaite passer chez le notaire">
+                    <IcTag /> {settingNotaireIntent ? 'En cours...' : 'Notaire : Non'}
+                  </button>
+                )}
+                {/* Passage chez le notaire — seulement si intention confirmée */}
+                <button
+                  className="btn btn-primary"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    ...(!reservation?.wants_notaire ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
+                  }}
+                  onClick={() => reservation?.wants_notaire && handleSetMode('to_notaire')}
+                  disabled={!reservation?.wants_notaire}
+                  title={!reservation?.wants_notaire
+                    ? "Activez d'abord le tag 'Notaire : Oui' pour ce lot"
+                    : 'Passer chez le notaire'}>
+                  <IcCalendar /> Chez le notaire
+                </button>
+              </>
+            )}
+            {lot.status === 'chez_notaire' && (
+              <>
+                {isManager && (
+                  <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('to_proprietaire')}>
+                    <IcHome /> Confirmer acte
+                  </button>
+                )}
+                <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  onClick={() => handleSetMode('update_notaire')}>
+                  <IcCompass /> Modifier notaire
+                </button>
+              </>
+            )}
+            {lot.status === 'blocked' && (
+              <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                onClick={() => handleSetMode('unblock')}>
+                <IcUnlock /> Libérer
+              </button>
+            )}
+            <button className="btn btn-ghost" onClick={onClose} style={{ marginLeft: 'auto' }}>Fermer</button>
           </div>
         </div>
       </div>
@@ -798,12 +1717,38 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   }
 
   /* ── FORM VIEW — split layout ────────────────────────────── */
-  const isReserve = mode === 'reserve';
-  const isRelease = mode === 'release';
+  const modeTitles = {
+    complete_lot: "Compléter la fiche",
+    start_option: "Mettre en option",
+    extend_option: "Prolonger l'option",
+    direct_reservation: "Réservation à finaliser (direct)",
+    direct_engage: "Réservation engagée (direct)",
+    cancel_option: "Annuler l'option",
+    to_reservation: "Passer à réservation à finaliser",
+    finaliser_refund: "Rembourser la garantie",
+    finaliser_engage: "Engager la réservation",
+    to_soldee: "Marquer soldé",
+    to_notaire: "Chez le notaire",
+    update_notaire: "Modifier le notaire",
+    to_proprietaire: "Confirmer l'acte notarial",
+    block: "Bloquer le lot",
+    unblock: "Débloquer le lot",
+  };
+
+  const isStartOption = mode === 'start_option';
+  const isEngageMode = mode === 'direct_engage' || mode === 'finaliser_engage';
+  const showThirdPanel = (isStartOption || isEngageMode) && enablePaymentPlan && lot.price;
+  // Price to use in the third panel for engage modes (sale price if set, else catalogue)
+  const engagePlanPrice = salePriceEngaged ? parseFloat(salePriceEngaged) : (lot?.price || 0);
+  // When finaliser_engage + deduct: guarantee already paid → subtract from plan base
+  const finaliserDeductOffset = (mode === 'finaliser_engage' && validationChoice === 'deduct') ? activeGuarantee : 0;
+  const thirdPanelPrice = isEngageMode ? Math.max(0, engagePlanPrice - finaliserDeductOffset) : remainingBalance;
+  // Promotion = catalogue − prix de vente (si engage mode, sinon 0)
+  const engagePromoAmount = isEngageMode ? Math.max(0, (lot?.price || 0) - engagePlanPrice) : 0;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className={`modal ${enablePaymentPlan ? 'modal--3col' : 'modal--split'}`} onClick={e => e.stopPropagation()}>
+      <div className={`modal ${showThirdPanel ? 'modal--3col' : 'modal--split'}`} onClick={e => e.stopPropagation()}>
 
         {/* ── LEFT: Lot summary ── */}
         <div className="modal-split-left">
@@ -811,7 +1756,17 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
           <div className="msl-num">{lot.numero}</div>
           {lot.zone && <div className="msl-zone">Zone {lot.zone}{lot.type_lot ? ` · ${lot.type_lot}` : ''}</div>}
           <div className="msl-price">{formatPrice(lot.price)}</div>
-          {lot.surface && lot.price && <div className="msl-price-m2">{formatPrice(lot.price / lot.surface)}/m²</div>}
+          {lot.price_per_sqm
+            ? <div className="msl-price-m2">{lot.price_per_sqm.toLocaleString('fr-FR')} MAD/m² <span className="lot-price-tag">catalogue</span></div>
+            : (lot.surface && lot.price && lot.surface > 0)
+              ? <div className="msl-price-m2">{formatPrice(lot.price / lot.surface)}/m² <span className="lot-price-tag">catalogue</span></div>
+              : null
+          }
+          {lot.price_per_sqm_acte && lot.surface && (
+            <div className="msl-price-m2 lot-price-acte">
+              {formatPrice(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100)} <span className="lot-price-tag">acte</span>
+            </div>
+          )}
           <span className={`status-badge ${lot.status}`} style={{ display: 'inline-flex', fontSize: '0.78rem', padding: '5px 11px', margin: '14px 0 18px' }}>
             <span className="status-dot"></span>{STATUS_LABELS[lot.status]}
           </span>
@@ -826,7 +1781,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
               </div>
             ))}
           </div>
-          {lot.status === 'reserved' && lot.client_name && (
+          {lot.client_name && (
             <div className="msl-reservation-tag"><IcUser /><span>{lot.client_name}</span></div>
           )}
         </div>
@@ -835,273 +1790,917 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
         <div className="modal-split-right">
           <div className="msr-header">
             <div className="msr-header-left">
-              <h3 className="msr-title">
-                {isReserve ? 'Réserver le lot' : isRelease ? 'Libérer la réservation' : (lot.status === 'reserved' ? 'Finaliser la vente' : 'Vendre le lot')}
-              </h3>
+              <h3 className="msr-title">{modeTitles[mode] || mode}</h3>
               <div className="msr-subtitle">Lot {lot.numero}</div>
             </div>
             <button className="modal-close" onClick={onClose}><IcClose /></button>
           </div>
 
-          <div className="msr-price-pill">
-            <span className="msr-price-pill-label">Prix catalogue</span>
-            <span className="msr-price-pill-value">{formatPrice(lot.price)}</span>
-          </div>
+          {lot.price && (
+            <div className="msr-price-pill">
+              <span className="msr-price-pill-label">Prix catalogue</span>
+              <span className="msr-price-pill-value">{formatPrice(lot.price)}</span>
+            </div>
+          )}
+          {['direct_engage', 'finaliser_engage'].includes(mode) && !lot.price_per_sqm_acte && lotPricingConfig?.sale_price_computed && Math.abs(lotPricingConfig.sale_price_computed - lot.price) > 1 && (
+            <div className="msr-price-pill" style={{ background: 'rgba(139,92,246,0.08)', borderColor: 'rgba(139,92,246,0.25)' }}>
+              <span className="msr-price-pill-label">Prix acte</span>
+              <span className="msr-price-pill-value" style={{ color: '#8b5cf6' }}>{formatPrice(lotPricingConfig.sale_price_computed)}</span>
+            </div>
+          )}
 
           <div className="msr-form">
 
-            {/* ── Release form ── */}
-            {isRelease && (
+            {/* ── complete_lot form ── */}
+            {mode === 'complete_lot' && (
               <>
-                {/* Info client bloquée */}
-                {lot.client_name && (
-                  <div className="msr-field-group">
-                    <label className="msr-label"><IcUser /> Client</label>
-                    <div className="msr-client-locked">
-                      <div className="msr-client-locked-monogram">
-                        {lot.client_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="msr-client-locked-name">{lot.client_name}</div>
-                        <div className="msr-client-locked-sub">Client de la réservation</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Acompte versé (lecture seule) */}
-                {lot.deposit > 0 && (
-                  <div className="msr-field-group">
-                    <label className="msr-label"><IcMoney /> Acompte versé</label>
-                    <div className="msr-info-pill">
-                      <span className="msr-info-pill-value">{formatPrice(lot.deposit)}</span>
-                      {lot.deposit_date && <span className="msr-info-pill-sub">versé le {formatDate(lot.deposit_date)}</span>}
-                    </div>
-                  </div>
-                )}
-
-                {/* Acompte récupéré */}
-                <div className="msr-field-group">
-                  <label className="msr-label"><IcMoney /> Acompte récupéré par le client</label>
-                  <div className="msr-deposit-row">
-                    <input
-                      type="number" className="msr-input" min="0" step="1000"
-                      placeholder={lot.deposit > 0 ? lot.deposit.toString() : '0'}
-                      value={releaseData.deposit_refund_amount}
-                      onChange={e => setReleaseData(d => ({ ...d, deposit_refund_amount: e.target.value }))}
-                    />
-                    <span className="msr-currency">MAD</span>
-                  </div>
-                  <div className="msr-hint">Laisser vide si aucun remboursement</div>
+                <div className="msr-section-head">
+                  <IcChart />
+                  <span className="msr-section-label">Valeurs numériques</span>
                 </div>
-
-                {/* Date récupération */}
-                {releaseData.deposit_refund_amount !== '' && parseFloat(releaseData.deposit_refund_amount) > 0 && (
+                <div className="msr-fields-2">
                   <div className="msr-field-group">
-                    <label className="msr-label"><IcCalendar /> Date de récupération</label>
-                    <input
-                      type="date" className="msr-input"
-                      value={releaseData.deposit_refund_date}
-                      onChange={e => setReleaseData(d => ({ ...d, deposit_refund_date: e.target.value }))}
-                    />
+                    <label className="msr-label">Prix/m² catalogue <span className="msr-required">*</span></label>
+                    <div className="msr-price-input-wrap">
+                      <input type="number" className="msr-price-input" placeholder="0" min="0" step="100"
+                        value={editForm.price_per_sqm} onChange={e => setEditForm(f => ({ ...f, price_per_sqm: e.target.value }))} />
+                      <span className="msr-price-input-currency">MAD/m²</span>
+                    </div>
+                  </div>
+                  <div className="msr-field-group">
+                    <label className="msr-label">Prix/m² acte <span className="msr-optional">(opt.)</span></label>
+                    <div className="msr-price-input-wrap">
+                      <input type="number" className="msr-price-input" placeholder="0" min="0" step="100"
+                        value={editForm.price_per_sqm_acte} onChange={e => setEditForm(f => ({ ...f, price_per_sqm_acte: e.target.value }))} />
+                      <span className="msr-price-input-currency">MAD/m²</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="msr-fields-2">
+                  <div className="msr-field-group">
+                    <label className="msr-label">Surface <span className="msr-required">*</span></label>
+                    <div className="msr-price-input-wrap">
+                      <input type="number" className="msr-price-input" placeholder="0" min="0" step="1"
+                        value={editForm.surface} onChange={e => setEditForm(f => ({ ...f, surface: e.target.value }))} />
+                      <span className="msr-price-input-currency">m²</span>
+                    </div>
+                  </div>
+                </div>
+                {editForm.surface && parseFloat(editForm.surface) > 0 && (editForm.price_per_sqm || editForm.price_per_sqm_acte) && (
+                  <div className="msr-price-computed-row">
+                    {editForm.price_per_sqm && parseFloat(editForm.price_per_sqm) > 0 && (
+                      <div className="msr-price-computed">
+                        <span className="msr-price-computed-label">Prix catalogue</span>
+                        <span className="msr-price-computed-value">{formatPrice(parseFloat(editForm.price_per_sqm) * parseFloat(editForm.surface))}</span>
+                      </div>
+                    )}
+                    {editForm.price_per_sqm_acte && parseFloat(editForm.price_per_sqm_acte) > 0 && (
+                      <div className="msr-price-computed msr-price-computed--acte">
+                        <span className="msr-price-computed-label">Prix acte</span>
+                        <span className="msr-price-computed-value">{formatPrice(parseFloat(editForm.price_per_sqm_acte) * parseFloat(editForm.surface))}</span>
+                      </div>
+                    )}
                   </div>
                 )}
-
-                {/* Motif de libération */}
-                <div className="msr-field-group">
-                  <label className="msr-label">Motif de libération</label>
-                  <textarea
-                    className="msr-textarea"
-                    rows={3}
-                    placeholder="Raison de la libération (optionnel)…"
-                    value={releaseData.release_reason}
-                    onChange={e => setReleaseData(d => ({ ...d, release_reason: e.target.value }))}
-                  />
+                <div className="msr-section-head">
+                  <IcTag />
+                  <span className="msr-section-label">Descriptif</span>
+                </div>
+                <div className="msr-fields-2">
+                  <div className="msr-field-group">
+                    <label className="msr-label">Type de lot <span className="msr-optional">(opt.)</span></label>
+                    <input type="text" className="msr-input" placeholder="Résidentiel, Commercial…"
+                      value={editForm.type_lot} onChange={e => setEditForm(f => ({ ...f, type_lot: e.target.value }))} />
+                  </div>
+                  <div className="msr-field-group">
+                    <label className="msr-label">Zone <span className="msr-optional">(opt.)</span></label>
+                    <input type="text" className="msr-input" placeholder="A1, B2…"
+                      value={editForm.zone} onChange={e => setEditForm(f => ({ ...f, zone: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="msr-fields-2">
+                  <div className="msr-field-group">
+                    <label className="msr-label">Emplacement <span className="msr-optional">(opt.)</span></label>
+                    <input type="text" className="msr-input" placeholder="2 façades, Angle…"
+                      value={editForm.emplacement} onChange={e => setEditForm(f => ({ ...f, emplacement: e.target.value }))} />
+                  </div>
+                  <div className="msr-field-group">
+                    <label className="msr-label">Type de maison <span className="msr-optional">(opt.)</span></label>
+                    <input type="text" className="msr-input" placeholder="Villa, Appartement…"
+                      value={editForm.type_maison} onChange={e => setEditForm(f => ({ ...f, type_maison: e.target.value }))} />
+                  </div>
                 </div>
               </>
             )}
 
-            {/* Client selector */}
-            {!isRelease && (isReserve || lot.status !== 'reserved') && (
-              <div className="msr-field-group">
-                <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
-                <div className="msr-client-row">
-                  <select className="msr-select"
-                    value={selectedClient?.id || ''}
-                    onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
-                    <option value="">Sélectionner un client</option>
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
-                  </select>
-                  <button type="button" className="msr-btn-add-client"
-                    onClick={() => setShowAddClient(!showAddClient)}>
-                    {showAddClient ? <IcClose /> : <IcPlus />}
-                    {showAddClient ? 'Annuler' : 'Nouveau'}
-                  </button>
-                </div>
-                {showAddClient && (
-                  <AddClientPanel newClient={newClient} onChange={setNewClient}
-                    onSave={handleCreateClient}
-                    onCancel={() => { setShowAddClient(false); setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' }); }}
-                    saving={savingClient} />
-                )}
-              </div>
+            {/* ── Expired alert for option / raf modes ── */}
+            {(mode === 'cancel_option' || mode === 'to_reservation' || mode === 'finaliser_refund' || mode === 'finaliser_engage') && (
+              <ExpiredAlert status={lot.status} expirationDate={lot.expiration_date} />
             )}
 
-            {/* Client locked from reservation */}
-            {!isReserve && !isRelease && lot.status === 'reserved' && lot.client_name && (
-              <div className="msr-field-group">
-                <label className="msr-label"><IcUser /> Client</label>
-                <div className="msr-client-locked">
-                  <div className="msr-client-locked-monogram">
-                    {lot.client_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+            {/* ── start_option form ── */}
+            {isStartOption && (
+              <>
+                {/* Client selector */}
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
+                  <div className="msr-client-row">
+                    <select className="msr-select"
+                      value={selectedClient?.id || ''}
+                      onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
+                      <option value="">Sélectionner un client</option>
+                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
+                    </select>
+                    <button type="button" className="msr-btn-add-client"
+                      onClick={() => setShowAddClient(!showAddClient)}>
+                      {showAddClient ? <IcClose /> : <IcPlus />}
+                      {showAddClient ? 'Annuler' : 'Nouveau'}
+                    </button>
                   </div>
-                  <div>
-                    <div className="msr-client-locked-name">{lot.client_name}</div>
-                    <div className="msr-client-locked-sub">Client de la réservation</div>
-                  </div>
+                  {showAddClient && (
+                    <AddClientPanel newClient={newClient} onChange={setNewClient}
+                      onSave={handleCreateClient}
+                      onCancel={() => { setShowAddClient(false); setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' }); }}
+                      saving={savingClient} />
+                  )}
                 </div>
-              </div>
+                {/* Duration */}
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcCalendar /> Durée de l'option <span className="msr-required">*</span></label>
+                  <div className="msr-stepper">
+                    <button type="button" className="msr-stepper-btn"
+                      onClick={() => setReservationDays(d => Math.max(1, (parseInt(d) || 7) - 1))}>−</button>
+                    <input type="number" className="msr-stepper-input" min="1" max="365"
+                      value={reservationDays} onChange={e => setReservationDays(e.target.value)} />
+                    <span className="msr-stepper-unit">jours</span>
+                    <button type="button" className="msr-stepper-btn"
+                      onClick={() => setReservationDays(d => Math.min(365, (parseInt(d) || 7) + 1))}>+</button>
+                  </div>
+                  <div className="msr-expiry-hint"><IcCalendar /> Expire le <strong>{expiryDate}</strong></div>
+                </div>
+                {/* Notes */}
+                <div className="msr-field-group">
+                  <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
+                  <textarea className="msr-textarea" placeholder="Ajouter une note..."
+                    value={notes} onChange={e => setNotes(e.target.value)} />
+                </div>
+              </>
             )}
 
-            {/* Reservation duration */}
-            {isReserve && (
-              <div className="msr-field-group">
-                <div className="msr-duration-header">
-                  <label className="msr-label"><IcCalendar /> Durée avant 1er paiement <span className="msr-required">*</span></label>
-                  <label className="msr-immediate-toggle">
-                    <input type="checkbox" checked={firstPaymentImmediate}
-                      onChange={e => setFirstPaymentImmediate(e.target.checked)} />
-                    <span>Immédiat</span>
-                  </label>
-                </div>
-                {!firstPaymentImmediate && (
-                  <>
-                    <div className="msr-stepper">
-                      <button type="button" className="msr-stepper-btn"
-                        onClick={() => setReservationDays(d => Math.max(1, (parseInt(d) || 7) - 1))}>−</button>
-                      <input type="number" className="msr-stepper-input" min="1" max="365"
-                        value={reservationDays} onChange={e => setReservationDays(e.target.value)} />
-                      <span className="msr-stepper-unit">jours</span>
-                      <button type="button" className="msr-stepper-btn"
-                        onClick={() => setReservationDays(d => Math.min(365, (parseInt(d) || 7) + 1))}>+</button>
-                    </div>
-                    <div className="msr-expiry-hint">
-                      <IcCalendar />
-                      1er versement prévu le <strong>{expiryDate}</strong>
-                    </div>
-                  </>
-                )}
-                {firstPaymentImmediate && (
-                  <div className="msr-immediate-hint">
-                    <IcCheck /> Le 1er versement sera marqué payé dès la réservation
+            {/* ── direct_reservation form (available → RAF) ── */}
+            {mode === 'direct_reservation' && (
+              <>
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
+                  <div className="msr-client-row">
+                    <select className="msr-select"
+                      value={selectedClient?.id || ''}
+                      onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
+                      <option value="">Sélectionner un client</option>
+                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
+                    </select>
+                    <button type="button" className="msr-btn-add-client"
+                      onClick={() => setShowAddClient(!showAddClient)}>
+                      {showAddClient ? <IcClose /> : <IcPlus />}
+                      {showAddClient ? 'Annuler' : 'Nouveau'}
+                    </button>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Deposit amount + date (reserve only) */}
-            {isReserve && (
-              <div className="msr-field-group">
-                <label className="msr-label"><IcMoney /> Premier versement (acompte)</label>
-                <div className="msr-deposit-row">
-                  <div className="msr-price-input-wrap" style={{ flex: 1 }}>
+                  {showAddClient && (
+                    <AddClientPanel newClient={newClient} onChange={setNewClient}
+                      onSave={handleCreateClient}
+                      onCancel={() => { setShowAddClient(false); setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' }); }}
+                      saving={savingClient} />
+                  )}
+                </div>
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcMoney /> Montant de garantie <span className="msr-required">*</span></label>
+                  <div className="msr-price-input-wrap">
                     <input type="number" className="msr-price-input" placeholder="Montant reçu"
-                      value={depositAmount} onChange={e => setDepositAmount(e.target.value)}
-                      min="0" step="100" />
+                      min="0" step="1000" value={guaranteeAmount} onChange={e => setGuaranteeAmount(e.target.value)} />
                     <span className="msr-price-input-currency">MAD</span>
                   </div>
                 </div>
-                {lot.price && depositAmount && parseFloat(depositAmount) > 0 && (
-                  <div className="msr-balance-hint">
-                    Solde restant : <strong>{formatPrice(lot.price - parseFloat(depositAmount))}</strong>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Final price (sell) */}
-            {!isReserve && !isRelease && (
-              <div className="msr-field-group">
-                <label className="msr-label"><IcMoney /> Prix final de vente <span className="msr-required">*</span></label>
-                <div className="msr-price-input-wrap">
-                  <input type="number" className="msr-price-input" placeholder="Saisir le prix de vente"
-                    value={finalPrice} onChange={e => setFinalPrice(e.target.value)} />
-                  <span className="msr-price-input-currency">MAD</span>
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcPayments /> Mode de paiement <span className="msr-required">*</span></label>
+                  <select className="msr-select" value={paymentType} onChange={e => setPaymentType(e.target.value)}>
+                    {PAYMENT_TYPES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
                 </div>
-                {priceDiff !== null && finalPrice && (
-                  <div className={`msr-price-diff msr-price-diff--${priceDiff.diff > 0 ? 'up' : priceDiff.diff < 0 ? 'down' : 'eq'}`}>
-                    {priceDiff.diff > 0 ? '+' : ''}{priceDiff.pct}% {priceDiff.diff > 0 ? 'au-dessus' : priceDiff.diff < 0 ? 'en-dessous de' : 'identique au'} catalogue
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcCalendar /> Date limite de finalisation <span className="msr-required">*</span></label>
+                  <input type="date" className="msr-input" value={finalizationDate} onChange={e => setFinalizationDate(e.target.value)} />
+                </div>
+                <div className="msr-field-group">
+                  <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
+                  <textarea className="msr-textarea" placeholder="Ajouter une note..."
+                    value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+                </div>
+              </>
+            )}
+
+            {/* ── direct_engage form (available → reservation_engagee) ── */}
+            {mode === 'direct_engage' && (() => {
+              const salePrice = salePriceEngaged ? parseFloat(salePriceEngaged) : null;
+              const promoAmt = (salePrice != null && lot?.price != null) ? Math.max(0, lot.price - salePrice) : 0;
+              const planBasePrice = salePrice != null ? salePrice : (lot?.price || 0);
+              return (
+                <>
+                  {/* Client */}
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
+                    <div className="msr-client-row">
+                      <select className="msr-select"
+                        value={selectedClient?.id || ''}
+                        onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
+                        <option value="">Sélectionner un client</option>
+                        {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
+                      </select>
+                      <button type="button" className="msr-btn-add-client"
+                        onClick={() => setShowAddClient(!showAddClient)}>
+                        {showAddClient ? <IcClose /> : <IcPlus />}
+                        {showAddClient ? 'Annuler' : 'Nouveau'}
+                      </button>
+                    </div>
+                    {showAddClient && (
+                      <AddClientPanel newClient={newClient} onChange={setNewClient}
+                        onSave={handleCreateClient}
+                        onCancel={() => { setShowAddClient(false); setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' }); }}
+                        saving={savingClient} />
+                    )}
                   </div>
-                )}
-              </div>
-            )}
 
-            {/* Notes */}
-            {!isRelease && (
-              <div className="msr-field-group">
-                <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
-                <textarea className="msr-textarea" placeholder="Ajouter une note sur cette transaction..."
-                  value={notes} onChange={e => setNotes(e.target.value)} />
-              </div>
-            )}
+                  {/* Prix de vente (acte) — calculé automatiquement si prix/m² acte défini */}
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcTag /> Prix de vente (acte) <span className="msr-required">*</span></label>
+                    <div className="msr-price-input-wrap">
+                      <input type="number" className="msr-price-input"
+                        placeholder={lot?.price_per_sqm_acte && lot?.surface ? 'Calculé automatiquement' : "Prix indiqué sur l'acte"}
+                        min="0" step="1000"
+                        value={salePriceEngaged}
+                        onChange={e => setSalePriceEngaged(e.target.value)} />
+                      <span className="msr-price-input-currency">MAD</span>
+                    </div>
+                    {lot?.surface && lot.surface > 0 && (lot?.price_per_sqm_acte || lotPricingConfig?.prix_m2_acte) && (
+                      <div className="msr-price-diff msr-price-diff--eq" style={{ opacity: 0.7 }}>
+                        {Number(lot?.price_per_sqm_acte || lotPricingConfig.prix_m2_acte).toLocaleString('fr-FR')} MAD/m² acte × {lot.surface} m²
+                      </div>
+                    )}
+                    {lot?.price && salePriceEngaged && (
+                      <div className={`msr-price-diff msr-price-diff--${parseFloat(salePriceEngaged) < lot.price ? 'down' : parseFloat(salePriceEngaged) > lot.price ? 'up' : 'eq'}`}>
+                        {(() => {
+                          const diff = lot.price - parseFloat(salePriceEngaged);
+                          const pct = (Math.abs(diff) / lot.price * 100).toFixed(1);
+                          return diff > 0
+                            ? `Promotion : ${formatPrice(diff)} (−${pct}% du catalogue)`
+                            : diff < 0
+                              ? `Au-dessus du catalogue : +${formatPrice(Math.abs(diff))}`
+                              : 'Identique au prix catalogue — aucune promotion';
+                        })()}
+                      </div>
+                    )}
+                  </div>
 
-            {/* Payment plan toggle (reserve only) */}
-            {isReserve && lot.price && (
-              <div className="msr-pay-toggle-row">
-                <button type="button"
-                  className={`msr-pay-toggle ${enablePaymentPlan ? 'active' : ''}`}
-                  onClick={() => setEnablePaymentPlan(v => !v)}>
-                  <IcPayments />
-                  <div style={{ flex: 1 }}>
-                    <span>Personnaliser l'échéancier</span>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 1 }}>
-                      Plan par défaut : 50% acompte / 50% solde — 1 versement chacun
+                  {/* Montant promotion — calculé automatiquement */}
+                  {lot?.price != null && (
+                    <div className="msr-field-group">
+                      <label className="msr-label"><IcTag /> Montant promotion <span className="msr-optional">(calculé)</span></label>
+                      <div className="msr-price-input-wrap">
+                        <input type="number" className="msr-price-input" placeholder="0"
+                          min="0" step="1000"
+                          value={salePriceEngaged ? String(Math.max(0, Math.round((lot.price - parseFloat(salePriceEngaged)) * 100) / 100)) : ''}
+                          onChange={e => {
+                            const p = parseFloat(e.target.value) || 0;
+                            setSalePriceEngaged(String(lot.price - p));
+                          }} />
+                        <span className="msr-price-input-currency">MAD</span>
+                      </div>
+                    </div>
+                  )}
+                  {promoAmt > 0 && (
+                    <>
+                      <div className="msr-field-group">
+                        <label className="msr-label">Paiement promotion <span className="msr-required">*</span></label>
+                        <div className="msr-validation-choice" style={{ flexDirection: 'row', gap: 8 }}>
+                          <button type="button"
+                            className={`msr-vc-btn${promotionTiming === 'debut' ? ' msr-vc-btn--deduct-active' : ''}`}
+                            style={{ flex: 1 }}
+                            onClick={() => setPromotionTiming('debut')}>
+                            <IcCalendar />
+                            <span className="msr-vc-label">Au début</span>
+                            <span className="msr-vc-desc">Avec le 1er acompte</span>
+                          </button>
+                          <button type="button"
+                            className={`msr-vc-btn${promotionTiming === 'fin' ? ' msr-vc-btn--deduct-active' : ''}`}
+                            style={{ flex: 1 }}
+                            onClick={() => setPromotionTiming('fin')}>
+                            <IcCalendar />
+                            <span className="msr-vc-label">À la fin</span>
+                            <span className="msr-vc-desc">Avec le solde</span>
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: '0.8rem', color: promotionTiming === 'debut' ? 'var(--color-success)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {promotionTiming === 'debut'
+                          ? <><IcCheck /> Promotion encaissée maintenant — avant validation de l'engagement.</>
+                          : 'Promotion encaissée avec le solde final.'}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Échéancier de paiement */}
+                  <div className="pay-plan-toggle-row">
+                    <button type="button" className={`pay-plan-toggle${enablePaymentPlan ? ' active' : ''}`}
+                      onClick={() => setEnablePaymentPlan(v => !v)}>
+                      <IcPayments />
+                      Personnaliser l'échéancier
+                      <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
+                        {enablePaymentPlan
+                          ? 'Activé'
+                          : projectFinancingPlan
+                            ? `Plan projet : ${paymentPlan.deposit_pct}% / ${Math.round(100 - parseFloat(paymentPlan.deposit_pct))}%`
+                            : `Plan par défaut : ${paymentPlan.deposit_pct}% acompte / ${Math.round(100 - parseFloat(paymentPlan.deposit_pct))}% solde`}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Notes */}
+                  <div className="msr-field-group">
+                    <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
+                    <textarea className="msr-textarea" placeholder="Ajouter une note..."
+                      value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* ── cancel_option form ── */}
+            {mode === 'cancel_option' && (
+              <>
+                {lot.client_name && (
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcUser /> Client</label>
+                    <div className="msr-client-locked">
+                      <div className="msr-client-locked-monogram">{lot.client_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>
+                      <div><div className="msr-client-locked-name">{lot.client_name}</div></div>
                     </div>
                   </div>
-                  <div className={`msr-pay-switch ${enablePaymentPlan ? 'msr-pay-switch--on' : ''}`}>
-                    <div className="msr-pay-switch-thumb" />
+                )}
+                <div className="msr-field-group">
+                  <label className="msr-label">Motif d'annulation <span className="msr-optional">(optionnel)</span></label>
+                  <textarea className="msr-textarea" placeholder="Raison de l'annulation..."
+                    value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+                </div>
+              </>
+            )}
+
+            {/* ── extend_option form ── */}
+            {mode === 'extend_option' && (
+              <>
+                {lot.client_name && (
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcUser /> Client</label>
+                    <div className="msr-client-locked">
+                      <div className="msr-client-locked-monogram">{lot.client_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>
+                      <div><div className="msr-client-locked-name">{lot.client_name}</div></div>
+                    </div>
                   </div>
-                </button>
+                )}
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcCalendar /> Durée de prolongation <span className="msr-required">*</span></label>
+                  <div className="msr-stepper">
+                    <button type="button" className="msr-stepper-btn"
+                      onClick={() => setExtendDays(d => Math.max(1, (parseInt(d) || 7) - 1))}>−</button>
+                    <input type="number" className="msr-stepper-input" min="1" max="365"
+                      value={extendDays} onChange={e => setExtendDays(e.target.value)} />
+                    <span className="msr-stepper-unit">jours</span>
+                    <button type="button" className="msr-stepper-btn"
+                      onClick={() => setExtendDays(d => Math.min(365, (parseInt(d) || 7) + 1))}>+</button>
+                  </div>
+                  {lot.expiration_date && (() => {
+                    const newExp = new Date(lot.expiration_date);
+                    newExp.setDate(newExp.getDate() + (parseInt(extendDays) || 7));
+                    return (
+                      <div className="msr-expiry-hint"><IcCalendar /> Nouvelle expiration : <strong>{newExp.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></div>
+                    );
+                  })()}
+                </div>
+                <div className="msr-info-pill">
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                    La prolongation sera enregistrée dans l'historique de la réservation.
+                  </span>
+                </div>
+              </>
+            )}
+
+            {/* ── to_reservation form ── */}
+            {mode === 'to_reservation' && (
+              <>
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcMoney /> Montant de garantie <span className="msr-required">*</span></label>
+                  <div className="msr-price-input-wrap">
+                    <input type="number" className="msr-price-input" placeholder="Montant reçu"
+                      min="0" step="1000" value={guaranteeAmount} onChange={e => setGuaranteeAmount(e.target.value)} />
+                    <span className="msr-price-input-currency">MAD</span>
+                  </div>
+                </div>
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcCalendar /> Date limite de finalisation <span className="msr-required">*</span></label>
+                  <input type="date" className="msr-input" value={finalizationDate} onChange={e => setFinalizationDate(e.target.value)} />
+                </div>
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcPayments /> Mode de paiement garantie <span className="msr-required">*</span></label>
+                  <select className="msr-select" value={paymentType} onChange={e => setPaymentType(e.target.value)}>
+                    {PAYMENT_TYPES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
+                </div>
+                <div className="msr-field-group">
+                  <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
+                  <textarea className="msr-textarea" placeholder="Ajouter une note..."
+                    value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+                </div>
+              </>
+            )}
+
+            {/* ── finaliser_refund form ── */}
+            {mode === 'finaliser_refund' && (
+              <>
+                {lot.client_name && (
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcUser /> Client</label>
+                    <div className="msr-client-locked">
+                      <div className="msr-client-locked-monogram">{lot.client_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>
+                      <div><div className="msr-client-locked-name">{lot.client_name}</div></div>
+                    </div>
+                  </div>
+                )}
+                {activeGuarantee > 0 && (
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcMoney /> Garantie versée</label>
+                    <div className="msr-info-pill">
+                      <span className="msr-info-pill-value">{formatPrice(activeGuarantee)}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcMoney /> Montant remboursé <span className="msr-required">*</span></label>
+                  <div className="msr-deposit-row">
+                    <input type="number" className="msr-input" min="0" step="1000"
+                      placeholder={activeGuarantee > 0 ? activeGuarantee.toString() : '0'}
+                      value={releaseData.deposit_refund_amount}
+                      onChange={e => setReleaseData(d => ({ ...d, deposit_refund_amount: e.target.value }))} />
+                    <span className="msr-currency">MAD</span>
+                  </div>
+                </div>
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcCalendar /> Date de remboursement <span className="msr-required">*</span></label>
+                  <input type="date" className="msr-input"
+                    value={releaseData.deposit_refund_date}
+                    onChange={e => setReleaseData(d => ({ ...d, deposit_refund_date: e.target.value }))} />
+                </div>
+                <div className="msr-field-group">
+                  <label className="msr-label">Motif d'annulation</label>
+                  <textarea className="msr-textarea" rows={3} placeholder="Raison de l'annulation (optionnel)…"
+                    value={releaseData.release_reason}
+                    onChange={e => setReleaseData(d => ({ ...d, release_reason: e.target.value }))} />
+                </div>
+              </>
+            )}
+
+            {/* ── finaliser_engage — écran de décision (rembourser ou déduire) ── */}
+            {mode === 'finaliser_engage' && (() => {
+              const salePrice = salePriceEngaged ? parseFloat(salePriceEngaged) : null;
+              const promoAmt = (salePrice != null && lot?.price != null) ? Math.max(0, lot.price - salePrice) : 0;
+              return (
+                <>
+                  {lot.client_name && (
+                    <div className="msr-field-group">
+                      <label className="msr-label"><IcUser /> Client</label>
+                      <div className="msr-client-locked">
+                        <div className="msr-client-locked-monogram">{lot.client_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>
+                        <div><div className="msr-client-locked-name">{lot.client_name}</div></div>
+                      </div>
+                    </div>
+                  )}
+                  {activeGuarantee > 0 && (
+                    <div className="msr-field-group">
+                      <label className="msr-label"><IcMoney /> Garantie versée</label>
+                      <div className="msr-info-pill">
+                        <span className="msr-info-pill-value">{formatPrice(activeGuarantee)}</span>
+                        {activePaymentType && (
+                          <span className="msr-info-pill-sub">{PAYMENT_TYPES.find(p => p.value === activePaymentType)?.label || activePaymentType}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Prix de vente (acte) — calculé automatiquement si prix/m² acte défini */}
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcTag /> Prix de vente (acte) <span className="msr-required">*</span></label>
+                    <div className="msr-price-input-wrap">
+                      <input type="number" className="msr-price-input"
+                        placeholder={lot?.price_per_sqm_acte && lot?.surface ? 'Calculé automatiquement' : "Prix indiqué sur l'acte"}
+                        min="0" step="1000"
+                        value={salePriceEngaged}
+                        onChange={e => setSalePriceEngaged(e.target.value)} />
+                      <span className="msr-price-input-currency">MAD</span>
+                    </div>
+                    {lot?.surface && lot.surface > 0 && (lot?.price_per_sqm_acte || lotPricingConfig?.prix_m2_acte) && (
+                      <div className="msr-price-diff msr-price-diff--eq" style={{ opacity: 0.7 }}>
+                        {Number(lot?.price_per_sqm_acte || lotPricingConfig.prix_m2_acte).toLocaleString('fr-FR')} MAD/m² acte × {lot.surface} m²
+                      </div>
+                    )}
+                    {lot?.price && salePriceEngaged && (
+                      <div className={`msr-price-diff msr-price-diff--${parseFloat(salePriceEngaged) < lot.price ? 'down' : parseFloat(salePriceEngaged) > lot.price ? 'up' : 'eq'}`}>
+                        {(() => {
+                          const diff = lot.price - parseFloat(salePriceEngaged);
+                          const pct = (Math.abs(diff) / lot.price * 100).toFixed(1);
+                          return diff > 0
+                            ? `Promotion : ${formatPrice(diff)} (−${pct}% du catalogue)`
+                            : diff < 0
+                              ? `Au-dessus du catalogue : +${formatPrice(Math.abs(diff))}`
+                              : 'Identique au prix catalogue — aucune promotion';
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Montant promotion — calculé automatiquement */}
+                  {lot?.price != null && (
+                    <div className="msr-field-group">
+                      <label className="msr-label"><IcTag /> Montant promotion <span className="msr-optional">(calculé)</span></label>
+                      <div className="msr-price-input-wrap">
+                        <input type="number" className="msr-price-input" placeholder="0"
+                          min="0" step="1000"
+                          value={salePriceEngaged ? String(Math.max(0, Math.round((lot.price - parseFloat(salePriceEngaged)) * 100) / 100)) : ''}
+                          onChange={e => {
+                            const p = parseFloat(e.target.value) || 0;
+                            setSalePriceEngaged(String(lot.price - p));
+                          }} />
+                        <span className="msr-price-input-currency">MAD</span>
+                      </div>
+                    </div>
+                  )}
+                  {promoAmt > 0 && (
+                    <>
+                      <div className="msr-field-group">
+                        <label className="msr-label">Paiement promotion <span className="msr-required">*</span></label>
+                        <div className="msr-validation-choice" style={{ flexDirection: 'row', gap: 8 }}>
+                          <button type="button"
+                            className={`msr-vc-btn${promotionTiming === 'debut' ? ' msr-vc-btn--deduct-active' : ''}`}
+                            style={{ flex: 1 }}
+                            onClick={() => setPromotionTiming('debut')}>
+                            <IcCalendar />
+                            <span className="msr-vc-label">Au début</span>
+                            <span className="msr-vc-desc">Avec le 1er acompte</span>
+                          </button>
+                          <button type="button"
+                            className={`msr-vc-btn${promotionTiming === 'fin' ? ' msr-vc-btn--deduct-active' : ''}`}
+                            style={{ flex: 1 }}
+                            onClick={() => setPromotionTiming('fin')}>
+                            <IcCalendar />
+                            <span className="msr-vc-label">À la fin</span>
+                            <span className="msr-vc-desc">Avec le solde</span>
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: '0.8rem', color: promotionTiming === 'debut' ? 'var(--color-success)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {promotionTiming === 'debut'
+                          ? <><IcCheck /> Promotion encaissée maintenant — avant validation de l'engagement.</>
+                          : 'Promotion encaissée avec le solde final.'}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Échéancier de paiement */}
+                  <div className="pay-plan-toggle-row">
+                    <button type="button" className={`pay-plan-toggle${enablePaymentPlan ? ' active' : ''}`}
+                      onClick={() => setEnablePaymentPlan(v => !v)}>
+                      <IcPayments />
+                      Personnaliser l'échéancier
+                      <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
+                        {enablePaymentPlan
+                          ? 'Activé'
+                          : projectFinancingPlan
+                            ? `Plan projet : ${paymentPlan.deposit_pct}% / ${Math.round(100 - parseFloat(paymentPlan.deposit_pct))}%`
+                            : `Plan par défaut : ${paymentPlan.deposit_pct}% acompte / ${Math.round(100 - parseFloat(paymentPlan.deposit_pct))}% solde`}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="msr-field-group">
+                    <label className="msr-label">Décision garantie <span className="msr-required">*</span></label>
+                    <div className="msr-validation-choice">
+                      <button type="button"
+                        className={`msr-vc-btn${validationChoice === 'refund' ? ' msr-vc-btn--refund-active' : ''}`}
+                        onClick={() => setValidationChoice('refund')}>
+                        <IcUnlock />
+                        <span className="msr-vc-label">Rembourser la garantie</span>
+                        <span className="msr-vc-desc">Garantie rendue — Passe en Résa. engagée</span>
+                      </button>
+                      <button type="button"
+                        className={`msr-vc-btn${validationChoice === 'deduct' ? ' msr-vc-btn--deduct-active' : ''}`}
+                        onClick={() => setValidationChoice('deduct')}>
+                        <IcCheck />
+                        <span className="msr-vc-label">Déduire la garantie</span>
+                        <span className="msr-vc-desc">Garantie conservée — Passe en Résa. engagée</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {validationChoice === 'refund' && (
+                    <>
+                      <div className="msr-field-group">
+                        <label className="msr-label"><IcMoney /> Montant remboursé <span className="msr-required">*</span></label>
+                        <div className="msr-deposit-row">
+                          <input type="number" className="msr-input" min="0" step="1000"
+                            placeholder={activeGuarantee > 0 ? activeGuarantee.toString() : '0'}
+                            value={releaseData.deposit_refund_amount}
+                            onChange={e => setReleaseData(d => ({ ...d, deposit_refund_amount: e.target.value }))} />
+                          <span className="msr-currency">MAD</span>
+                        </div>
+                      </div>
+                      <div className="msr-field-group">
+                        <label className="msr-label"><IcCalendar /> Date de remboursement <span className="msr-required">*</span></label>
+                        <input type="date" className="msr-input"
+                          value={releaseData.deposit_refund_date}
+                          onChange={e => setReleaseData(d => ({ ...d, deposit_refund_date: e.target.value }))} />
+                      </div>
+                      <div className="msr-field-group">
+                        <label className="msr-label"><IcPayments /> Mode de remboursement <span className="msr-required">*</span></label>
+                        <select className="msr-select"
+                          value={releaseData.refund_payment_type || 'cash'}
+                          onChange={e => setReleaseData(d => ({ ...d, refund_payment_type: e.target.value }))}>
+                          {PAYMENT_TYPES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  {validationChoice === 'deduct' && (
+                    <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                        La garantie de <strong>{formatPrice(activeGuarantee)}</strong> sera déduite du prix de vente.
+                        {enablePaymentPlan && engagePlanPrice > 0 && (
+                          <> Le plan de paiement portera sur le solde restant : <strong>{formatPrice(Math.max(0, engagePlanPrice - activeGuarantee))}</strong>.</>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* ── to_soldee form ── */}
+            {mode === 'to_soldee' && (
+              <>
+                {/* Avertissement promotion non reçue (timing 'fin') */}
+                {reservation?.promotion_amount > 0
+                  && !reservation?.promotion_received
+                  && reservation?.promotion_paid_timing === 'fin' && (
+                  <div className="msr-info-pill" style={{ background: 'rgba(239,68,68,0.10)', borderColor: 'var(--color-danger)', marginBottom: 12 }}>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--color-danger)' }}>
+                      La différence de promotion (<strong>{reservation.promotion_amount.toLocaleString('fr-FR')} MAD</strong>) doit être reçue avant de solder — utilisez le bouton <em>Promotion reçue</em> sur la fiche du lot.
+                    </span>
+                  </div>
+                )}
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcMoney /> Prix final de vente <span className="msr-required">*</span></label>
+                  <div className="msr-price-input-wrap">
+                    <input type="number" className="msr-price-input" placeholder="Prix de vente final"
+                      value={finalSalePrice} onChange={e => setFinalSalePrice(e.target.value)} />
+                    <span className="msr-price-input-currency">MAD</span>
+                  </div>
+                  {finalSalePrice && lot.price && (
+                    <div className={`msr-price-diff msr-price-diff--${parseFloat(finalSalePrice) > lot.price ? 'up' : parseFloat(finalSalePrice) < lot.price ? 'down' : 'eq'}`}>
+                      {(() => { const diff = parseFloat(finalSalePrice) - lot.price; const pct = (diff / lot.price * 100).toFixed(1); return `${diff > 0 ? '+' : ''}${pct}% ${diff > 0 ? 'au-dessus du' : diff < 0 ? 'en-dessous du' : 'identique au'} catalogue`; })()}
+                    </div>
+                  )}
+                </div>
+                <div className="msr-field-group">
+                  <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
+                  <textarea className="msr-textarea" placeholder="Ajouter une note..."
+                    value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+                </div>
+              </>
+            )}
+
+            {/* ── to_notaire / update_notaire form ── */}
+            {(mode === 'to_notaire' || mode === 'update_notaire') && (
+              <>
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcUser /> Notaire <span className="msr-required">*</span></label>
+                  <div className="msr-client-row">
+                    <select className="msr-select"
+                      value={selectedNotaire?.id || ''}
+                      onChange={e => {
+                        const n = notaires.find(n => n.id === parseInt(e.target.value));
+                        setSelectedNotaire(n || null);
+                      }}>
+                      <option value="">Sélectionner un notaire</option>
+                      {notaires.map(n => (
+                        <option key={n.id} value={n.id}>
+                          {n.prenom} {n.nom}{n.telephone ? ` · ${n.telephone}` : ''}{n.ville ? ` — ${n.ville}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" className="msr-btn-add-client"
+                      onClick={() => setShowAddNotaire(!showAddNotaire)}>
+                      {showAddNotaire ? <IcClose /> : <IcPlus />}
+                      {showAddNotaire ? 'Annuler' : 'Nouveau'}
+                    </button>
+                  </div>
+                  {showAddNotaire && (
+                    <AddNotairePanel
+                      newNotaire={newNotaire}
+                      onChange={setNewNotaire}
+                      onSave={handleCreateNotaire}
+                      onCancel={() => { setShowAddNotaire(false); setNewNotaire({ nom: '', prenom: '', telephone: '', email: '', ville: '', adresse: '' }); }}
+                      saving={savingNotaire} />
+                  )}
+                </div>
+                <div className="msr-field-group">
+                  <label className="msr-label"><IcCalendar /> Date de l'acte <span className="msr-required">*</span></label>
+                  <input type="date" className="msr-input" value={notaryDate} onChange={e => setNotaryDate(e.target.value)} />
+                </div>
+                {mode === 'to_notaire' && (
+                  <div className="msr-field-group">
+                    <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
+                    <textarea className="msr-textarea" rows={3} placeholder="Notes sur le passage chez le notaire..."
+                      value={notes} onChange={e => setNotes(e.target.value)} />
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── to_proprietaire confirmation ── */}
+            {mode === 'to_proprietaire' && (
+              <div className="msr-field-group">
+                <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                    Confirmer la réception des documents notariaux. Le lot passera en <strong>Chez le propriétaire</strong> (état terminal).
+                  </span>
+                  {lot.client_name && <span style={{ fontWeight: 600 }}>{lot.client_name}</span>}
+                  {lot.notary_name && <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Notaire : {lot.notary_name}</span>}
+                  {lot.notary_date && <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Acte du : {formatDate(lot.notary_date)}</span>}
+                  {documents.length > 0 ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.82rem' }}>
+                      <IcFile style={{ color: 'var(--color-primary)' }} />
+                      <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
+                        {documents.length} document{documents.length > 1 ? 's' : ''} joint{documents.length > 1 ? 's' : ''}
+                      </span>
+                    </span>
+                  ) : (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.82rem', color: 'var(--color-warning)' }}>
+                      <IcAlertTriangle /> Aucun document joint — vous pouvez quand même confirmer
+                    </span>
+                  )}
+                </div>
               </div>
             )}
+
+            {/* ── block form ── */}
+            {mode === 'block' && (
+              <div className="msr-field-group">
+                <label className="msr-label">Motif de blocage <span className="msr-optional">(optionnel)</span></label>
+                <textarea className="msr-textarea" rows={3} placeholder="Raison du blocage..."
+                  value={blockReason} onChange={e => setBlockReason(e.target.value)} />
+              </div>
+            )}
+
+            {/* ── unblock confirmation ── */}
+            {mode === 'unblock' && (
+              <div className="msr-field-group">
+                <div className="msr-info-pill">
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                    Le lot sera remis en statut <strong>Disponible</strong>.
+                  </span>
+                </div>
+              </div>
+            )}
+
           </div>
 
-          {/* Sticky action footer — outside scroll area */}
+          {/* Sticky action footer */}
           <div className="msr-actions-footer">
             <button type="button" className="msr-btn-cancel" onClick={() => handleSetMode(null)}>
               Annuler
             </button>
-            {isReserve ? (
+            {mode === 'complete_lot' && (
               <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
-                onClick={handleReserve} disabled={loading}>
-                <IcCheck />{loading ? 'Réservation...' : 'Confirmer la réservation'}
+                onClick={handleCompleteLot} disabled={loading}>
+                <IcCheck />{loading ? 'Activation...' : 'Appliquer et activer'}
               </button>
-            ) : isRelease ? (
-              <button type="button" className="msr-btn-confirm msr-btn-confirm--release"
-                onClick={handleConfirmRelease} disabled={loading}>
-                <IcUnlock />{loading ? 'Libération...' : 'Confirmer la libération'}
+            )}
+            {mode === 'start_option' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
+                onClick={handleStartOption} disabled={loading}>
+                <IcCheck />{loading ? 'En cours...' : 'Confirmer l\'option'}
               </button>
-            ) : (
+            )}
+            {mode === 'direct_reservation' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
+                onClick={handleDirectReservation} disabled={loading}>
+                <IcCheck />{loading ? 'En cours...' : 'Créer la réservation'}
+              </button>
+            )}
+            {mode === 'direct_engage' && (
               <button type="button" className="msr-btn-confirm msr-btn-confirm--sell"
-                onClick={handleSell} disabled={loading}>
-                <IcCheck />{loading ? 'Vente en cours...' : 'Confirmer la vente'}
+                onClick={handleDirectEngage} disabled={loading}>
+                <IcCheck />{loading ? 'En cours...' : 'Engager la réservation'}
+              </button>
+            )}
+            {mode === 'cancel_option' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--release"
+                onClick={handleCancelOption} disabled={loading}>
+                <IcUnlock />{loading ? 'En cours...' : 'Annuler l\'option'}
+              </button>
+            )}
+            {mode === 'extend_option' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
+                onClick={handleExtendOption} disabled={loading}>
+                <IcCalendar />{loading ? 'En cours...' : 'Prolonger l\'option'}
+              </button>
+            )}
+            {mode === 'to_reservation' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
+                onClick={handleToReservation} disabled={loading}>
+                <IcCheck />{loading ? 'En cours...' : 'Confirmer la réservation'}
+              </button>
+            )}
+            {mode === 'finaliser_refund' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--release"
+                onClick={handleFinaliserRefund} disabled={loading}>
+                <IcUnlock />{loading ? 'En cours...' : 'Confirmer le remboursement'}
+              </button>
+            )}
+            {mode === 'finaliser_engage' && validationChoice === 'refund' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--sell"
+                onClick={handleFinaliserEngageWithRefund} disabled={loading}>
+                <IcCheck />{loading ? 'En cours...' : 'Rendre la garantie et engager'}
+              </button>
+            )}
+            {mode === 'finaliser_engage' && validationChoice === 'deduct' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--sell"
+                onClick={handleFinaliserEngage} disabled={loading}>
+                <IcCheck />{loading ? 'En cours...' : "Confirmer l'engagement"}
+              </button>
+            )}
+            {mode === 'finaliser_engage' && !validationChoice && (
+              <button type="button" className="msr-btn-confirm" disabled>
+                Choisir une décision
+              </button>
+            )}
+            {mode === 'to_soldee' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--sell"
+                onClick={handleToSoldee} disabled={loading}>
+                <IcCheck />{loading ? 'En cours...' : 'Confirmer la vente'}
+              </button>
+            )}
+            {mode === 'to_notaire' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
+                onClick={handleToNotaire} disabled={loading}>
+                <IcCalendar />{loading ? 'En cours...' : 'Confirmer'}
+              </button>
+            )}
+            {mode === 'update_notaire' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
+                onClick={handleUpdateNotaire} disabled={loading}>
+                <IcCheck />{loading ? 'En cours...' : 'Mettre à jour'}
+              </button>
+            )}
+            {mode === 'to_proprietaire' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--sell"
+                onClick={handleToProprietaire} disabled={loading}>
+                <IcHome />{loading ? 'En cours...' : 'Confirmer l\'acte'}
+              </button>
+            )}
+            {mode === 'block' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--release"
+                onClick={handleBlock} disabled={loading}>
+                <IcLock />{loading ? 'En cours...' : 'Bloquer le lot'}
+              </button>
+            )}
+            {mode === 'unblock' && (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
+                onClick={handleUnblock} disabled={loading}>
+                <IcUnlock />{loading ? 'En cours...' : 'Débloquer'}
               </button>
             )}
           </div>
         </div>
 
-        {/* ── THIRD PANEL: Payment plan (when enabled) ── */}
-        {isReserve && enablePaymentPlan && lot.price && (
+        {/* ── THIRD PANEL: Payment plan (start_option / direct_engage / finaliser_engage) ── */}
+        {showThirdPanel && (
           <div className="modal-pay-panel">
             <div className="mpp-header">
               <div className="mpp-header-left">
                 <span className="mpp-title">Plan de paiement</span>
                 <span className="mpp-subtitle">{previewRowCount} versement{previewRowCount > 1 ? 's' : ''}</span>
               </div>
-              <span className="mpp-total">{formatPrice(remainingBalance)}</span>
+              <span className="mpp-total">{formatPrice(thirdPanelPrice)}</span>
             </div>
             <div className="mpp-body">
-              <PaymentPlanConfigurator lotPrice={remainingBalance} plan={paymentPlan} onChange={setPaymentPlan} panel />
+              <PaymentPlanConfigurator lotPrice={thirdPanelPrice} plan={paymentPlan} onChange={setPaymentPlan} panel promotionAmount={engagePromoAmount} />
             </div>
           </div>
         )}
@@ -1109,4 +2708,3 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     </div>
   );
 }
-

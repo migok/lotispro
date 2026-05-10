@@ -10,6 +10,8 @@ from app.domain.schemas.common import MessageResponse
 from app.domain.schemas.project import (
     AssignUserRequest,
     ProjectCreate,
+    ProjectFinancingPlanCreate,
+    ProjectFinancingPlanResponse,
     ProjectKPIs,
     ProjectPerformance,
     ProjectResponse,
@@ -379,19 +381,23 @@ async def import_csv_metadata(
 ) -> dict:
     """Import CSV file to update lot metadata.
 
-    The CSV must have a 'parcelid' column that matches the lot 'numero'.
+    The CSV must have an 'id_parcel' (or 'parcelid') column that matches the lot 'numero'.
+    Lots absent from the CSV are left untouched (status stays 'creation').
     Supported columns:
-    - parcelid: Lot identifier (required, matches 'numero')
+    - id_parcel (or parcelid): Lot identifier (required, matches 'numero')
     - type de lots: Type of lot (e.g., commercial, residential)
     - emplacement: Location type (e.g., 2 façade, 3 façade)
     - type maison: House type (e.g., villa, apartment)
-    - prix: Price (optional, will update lot price)
+    - surface: Surface area in m²
+    - prix_m2: Price per m² (computes prix automatically)
+    - prix: Price (optional, overridden by prix_m2 × surface if both present)
+    - zone: Zone identifier
     """
     # Read CSV content
     content = await file.read()
 
-    # Try to decode with different encodings
-    for encoding in ["utf-8", "utf-8-sig", "latin-1", "cp1252"]:
+    # Try to decode with different encodings (utf-8-sig first to strip BOM)
+    for encoding in ["utf-8-sig", "utf-8", "latin-1", "cp1252"]:
         try:
             text = content.decode(encoding)
             break
@@ -400,14 +406,26 @@ async def import_csv_metadata(
     else:
         text = content.decode("utf-8", errors="replace")
 
-    # Parse CSV
-    reader = csv.DictReader(io.StringIO(text), delimiter=";")
+    # Strip leading BOM if still present
+    text = text.lstrip("﻿")
 
-    # If semicolon doesn't work, try comma
-    rows = list(reader)
-    if not rows or (rows and len(rows[0]) <= 1):
-        reader = csv.DictReader(io.StringIO(text), delimiter=",")
+    def _parse_csv(text: str, delimiter: str) -> list[dict]:
+        reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
         rows = list(reader)
+        if rows and reader.fieldnames:
+            # Strip whitespace from all field names and values
+            clean_fieldnames = [f.strip() if f else f for f in reader.fieldnames]
+            rows = [
+                {clean_fieldnames[i]: (v.strip() if isinstance(v, str) else v)
+                 for i, (k, v) in enumerate(row.items()) if i < len(clean_fieldnames)}
+                for row in rows
+            ]
+        return rows
+
+    # Try semicolon first, fall back to comma if only 1 column detected
+    rows = _parse_csv(text, ";")
+    if not rows or (rows and len(rows[0]) <= 1):
+        rows = _parse_csv(text, ",")
 
     return await project_service.import_csv_metadata(
         project_id=project_id,
@@ -438,3 +456,44 @@ async def bulk_update_lot_metadata(
         data=data,
     )
     return {"updated": count, "message": f"{count} lot(s) mis à jour"}
+
+
+@router.get(
+    "/{project_id}/financing-plan",
+    response_model=ProjectFinancingPlanResponse | None,
+    summary="Get project financing plan",
+    description="Return the current default financing plan for a project, or null if none configured",
+)
+async def get_project_financing_plan(
+    project_id: int,
+    current_user: CurrentUser,
+    project_service: ProjectServiceDep,
+) -> ProjectFinancingPlanResponse | None:
+    """Get the active financing plan for a project."""
+    return await project_service.get_project_financing_plan(
+        project_id=project_id,
+        requester_id=current_user.id,
+        requester_role=current_user.role,
+    )
+
+
+@router.post(
+    "/{project_id}/financing-plan",
+    response_model=ProjectFinancingPlanResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Set project financing plan",
+    description="Save a new financing plan for a project (becomes active immediately)",
+)
+async def set_project_financing_plan(
+    project_id: int,
+    data: ProjectFinancingPlanCreate,
+    current_user: CurrentUser,
+    project_service: ProjectServiceDep,
+) -> ProjectFinancingPlanResponse:
+    """Create a new financing plan version for a project."""
+    return await project_service.set_project_financing_plan(
+        project_id=project_id,
+        data=data,
+        requester_id=current_user.id,
+        requester_role=current_user.role,
+    )

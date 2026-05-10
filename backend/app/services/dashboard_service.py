@@ -36,8 +36,21 @@ from app.infrastructure.database.repositories import (
 
 logger = get_logger(__name__)
 
-# Reservation statuses that mean the lot is actively reserved
+# Reservation statuses that mean the lot is actively reserved (legacy, kept for queries)
 _ACTIVE_STATUSES = ("active", "validated")
+
+# Lot statuses that represent an active sales workflow
+_ACTIVE_LOT_STATUSES = (
+    "option",
+    "reservation_a_finaliser",
+    "reservation_engagee",
+    "reservation_soldee",
+    "chez_notaire",
+    "chez_proprietaire",
+)
+
+# Lot statuses representing completed/closed sales for CA réalisé
+_SOLD_LOT_STATUSES = ("reservation_soldee", "chez_notaire", "chez_proprietaire")
 
 
 class DashboardService:
@@ -73,27 +86,34 @@ class DashboardService:
         """
         # First, get global/project lot counts (always needed)
         global_query = select(
+            func.count().filter(LotModel.status == "creation").label("creation"),
+            func.count().filter(LotModel.status == "available").label("available"),
+            func.count().filter(LotModel.status == "option").label("option"),
             func.count()
-            .filter(LotModel.status == "available")
-            .label("available"),
+            .filter(LotModel.status == "reservation_a_finaliser")
+            .label("reservation_a_finaliser"),
             func.count()
-            .filter(LotModel.status == "reserved")
-            .label("reserved"),
-            func.count().filter(LotModel.status == "sold").label("sold"),
+            .filter(LotModel.status == "reservation_engagee")
+            .label("reservation_engagee"),
             func.count()
-            .filter(LotModel.status == "blocked")
-            .label("blocked"),
+            .filter(LotModel.status == "reservation_soldee")
+            .label("reservation_soldee"),
+            func.count().filter(LotModel.status == "chez_notaire").label("chez_notaire"),
+            func.count()
+            .filter(LotModel.status == "chez_proprietaire")
+            .label("chez_proprietaire"),
+            func.count().filter(LotModel.status == "blocked").label("blocked"),
             func.count().label("total"),
             # Surface aggregations
             func.coalesce(
                 func.sum(LotModel.surface).filter(LotModel.status == "available"), 0
             ).label("surface_available"),
             func.coalesce(
-                func.sum(LotModel.surface).filter(LotModel.status == "reserved"), 0
-            ).label("surface_reserved"),
+                func.sum(LotModel.surface).filter(LotModel.status.in_(_ACTIVE_LOT_STATUSES)), 0
+            ).label("surface_en_cours"),
             func.coalesce(
-                func.sum(LotModel.surface).filter(LotModel.status == "sold"), 0
-            ).label("surface_sold"),
+                func.sum(LotModel.surface).filter(LotModel.status == "chez_proprietaire"), 0
+            ).label("surface_proprietaire"),
             func.coalesce(
                 func.sum(LotModel.surface).filter(LotModel.status == "blocked"), 0
             ).label("surface_blocked"),
@@ -166,55 +186,84 @@ class DashboardService:
             user_sold_surface_result = await self.session.execute(user_sold_surface_query)
             user_sold_surface = float(user_sold_surface_result.scalar() or 0)
 
+            _en_cours = (
+                global_row.option
+                + global_row.reservation_a_finaliser
+                + global_row.reservation_engagee
+                + global_row.reservation_soldee
+                + global_row.chez_notaire
+                + global_row.chez_proprietaire
+            )
             counts = DashboardCounts(
                 total=global_row.total,
+                creation=global_row.creation,
                 available=global_row.available,
+                option=global_row.option,
+                reservation_a_finaliser=global_row.reservation_a_finaliser,
+                reservation_engagee=global_row.reservation_engagee,
+                reservation_soldee=global_row.reservation_soldee,
+                chez_notaire=global_row.chez_notaire,
+                chez_proprietaire=global_row.chez_proprietaire,
+                blocked=global_row.blocked,
+                en_cours=_en_cours,
                 reserved=user_reserved_count,
                 sold=user_sold_count,
-                blocked=global_row.blocked,
             )
 
             surfaces = DashboardSurfaces(
                 total=round(float(global_row.surface_total or 0), 2),
                 available=round(float(global_row.surface_available or 0), 2),
+                en_cours=round(float(global_row.surface_en_cours or 0), 2),
+                chez_proprietaire=round(float(global_row.surface_proprietaire or 0), 2),
+                blocked=round(float(global_row.surface_blocked or 0), 2),
                 reserved=round(user_reserved_surface, 2),
                 sold=round(user_sold_surface, 2),
-                blocked=round(float(global_row.surface_blocked or 0), 2),
             )
         else:
+            _en_cours = (
+                global_row.option
+                + global_row.reservation_a_finaliser
+                + global_row.reservation_engagee
+                + global_row.reservation_soldee
+                + global_row.chez_notaire
+                + global_row.chez_proprietaire
+            )
             counts = DashboardCounts(
                 total=global_row.total,
+                creation=global_row.creation,
                 available=global_row.available,
-                reserved=global_row.reserved,
-                sold=global_row.sold,
+                option=global_row.option,
+                reservation_a_finaliser=global_row.reservation_a_finaliser,
+                reservation_engagee=global_row.reservation_engagee,
+                reservation_soldee=global_row.reservation_soldee,
+                chez_notaire=global_row.chez_notaire,
+                chez_proprietaire=global_row.chez_proprietaire,
                 blocked=global_row.blocked,
+                en_cours=_en_cours,
+                reserved=global_row.option + global_row.reservation_a_finaliser + global_row.reservation_engagee,
+                sold=global_row.chez_proprietaire,
             )
 
             surfaces = DashboardSurfaces(
                 total=round(float(global_row.surface_total or 0), 2),
                 available=round(float(global_row.surface_available or 0), 2),
-                reserved=round(float(global_row.surface_reserved or 0), 2),
-                sold=round(float(global_row.surface_sold or 0), 2),
+                en_cours=round(float(global_row.surface_en_cours or 0), 2),
+                chez_proprietaire=round(float(global_row.surface_proprietaire or 0), 2),
                 blocked=round(float(global_row.surface_blocked or 0), 2),
+                reserved=round(float(global_row.surface_en_cours or 0), 2),
+                sold=round(float(global_row.surface_proprietaire or 0), 2),
             )
 
         # Calculate percentages based on global totals
         total = global_row.total or 1  # Avoid division by zero
-        if user_id:
-            # For commercials, percentages are based on their personal counts vs global total
-            percentages = DashboardPercentages(
-                available=round(global_row.available / total * 100, 2),
-                reserved=round(counts.reserved / total * 100, 2),
-                sold=round(counts.sold / total * 100, 2),
-                blocked=round(global_row.blocked / total * 100, 2),
-            )
-        else:
-            percentages = DashboardPercentages(
-                available=round(counts.available / total * 100, 2),
-                reserved=round(counts.reserved / total * 100, 2),
-                sold=round(counts.sold / total * 100, 2),
-                blocked=round(counts.blocked / total * 100, 2),
-            )
+        percentages = DashboardPercentages(
+            available=round(global_row.available / total * 100, 2),
+            en_cours=round(counts.en_cours / total * 100, 2),
+            chez_proprietaire=round(global_row.chez_proprietaire / total * 100, 2),
+            blocked=round(global_row.blocked / total * 100, 2),
+            reserved=round(counts.reserved / total * 100, 2),
+            sold=round(global_row.chez_proprietaire / total * 100, 2),
+        )
 
         # CA realized (sales + deposits from validated reservations)
         ca_query = select(func.sum(SaleModel.price))
@@ -277,7 +326,7 @@ class DashboardService:
         if user_id:
             taux_vente = round(counts.sold / total * 100, 2) if total > 0 else 0
         else:
-            taux_vente = round(global_row.sold / total * 100, 2) if total > 0 else 0
+            taux_vente = round(global_row.chez_proprietaire / total * 100, 2) if total > 0 else 0
 
         # Conversion rate (reservations to sales)
         conversion_query = select(
@@ -325,10 +374,11 @@ class DashboardService:
             if type_lot:
                 if type_lot not in by_type_lot:
                     by_type_lot[type_lot] = CategoryStats()
-                if status == "sold":
+                if status == "chez_proprietaire":
                     by_type_lot[type_lot].sold += 1
-                elif status == "reserved":
+                elif status in _ACTIVE_LOT_STATUSES:
                     by_type_lot[type_lot].reserved += 1
+                    by_type_lot[type_lot].en_cours += 1
                 elif status == "available":
                     by_type_lot[type_lot].available += 1
 
@@ -336,10 +386,11 @@ class DashboardService:
             if emplacement:
                 if emplacement not in by_emplacement:
                     by_emplacement[emplacement] = CategoryStats()
-                if status == "sold":
+                if status == "chez_proprietaire":
                     by_emplacement[emplacement].sold += 1
-                elif status == "reserved":
+                elif status in _ACTIVE_LOT_STATUSES:
                     by_emplacement[emplacement].reserved += 1
+                    by_emplacement[emplacement].en_cours += 1
                 elif status == "available":
                     by_emplacement[emplacement].available += 1
 
@@ -347,10 +398,11 @@ class DashboardService:
             if type_maison:
                 if type_maison not in by_type_maison:
                     by_type_maison[type_maison] = CategoryStats()
-                if status == "sold":
+                if status == "chez_proprietaire":
                     by_type_maison[type_maison].sold += 1
-                elif status == "reserved":
+                elif status in _ACTIVE_LOT_STATUSES:
                     by_type_maison[type_maison].reserved += 1
+                    by_type_maison[type_maison].en_cours += 1
                 elif status == "available":
                     by_type_maison[type_maison].available += 1
 
@@ -386,7 +438,9 @@ class DashboardService:
         project_id: int | None = None,
         user_id: int | None = None,
     ) -> tuple[list[dict], AlertsSummary]:
-        """Get reservations at risk.
+        """Get lots with expired or soon-to-expire options/reservations.
+
+        Uses lot status as source of truth (no reservation status queries).
 
         Args:
             days_threshold: Days before expiration to flag
@@ -394,35 +448,37 @@ class DashboardService:
             user_id: Optional user filter (for commercial view)
 
         Returns:
-            Tuple of (at-risk reservations, summary)
+            Tuple of (at-risk lots, summary)
         """
-        at_risk = await self.reservation_repo.get_at_risk(days_threshold)
+        at_risk = await self.lot_repo.get_at_risk_lots(days_threshold)
+        expired_options = await self.lot_repo.get_expired_options()
+        expired_finalisations = await self.lot_repo.get_expired_finalisations()
 
         # Filter by project if specified
         if project_id:
-            # Get lot-to-project mapping
             lot_project_result = await self.session.execute(
                 select(LotModel.id).where(LotModel.project_id == project_id)
             )
             project_lots = {row[0] for row in lot_project_result.all()}
             at_risk = [r for r in at_risk if r["lot_id"] in project_lots]
+            expired_options = [r for r in expired_options if r["lot_id"] in project_lots]
+            expired_finalisations = [r for r in expired_finalisations if r["lot_id"] in project_lots]
 
         # Filter by user if specified
         if user_id:
-            at_risk = [
-                r for r in at_risk if r.get("reserved_by_user_id") == user_id
-            ]
+            at_risk = [r for r in at_risk if r.get("reserved_by_user_id") == user_id]
 
         # Calculate summary
-        expired_count = sum(1 for r in at_risk if r["risk_type"] == "expired")
-        expiring_soon_count = sum(
-            1 for r in at_risk if r["risk_type"] == "expiring_soon"
-        )
+        expiring_soon_count = sum(1 for r in at_risk if r["risk_type"] == "expiring_soon")
+        expired_in_at_risk = sum(1 for r in at_risk if r["risk_type"] == "expired")
         value_at_risk = sum(r.get("lot_price", 0) or 0 for r in at_risk)
         deposit_at_risk = sum(r.get("deposit", 0) or 0 for r in at_risk)
 
         summary = AlertsSummary(
-            expired_count=expired_count,
+            expired_options=len(expired_options),
+            expired_finalisations=len(expired_finalisations),
+            expiring_soon_options=expiring_soon_count,
+            expired_count=expired_in_at_risk,
             expiring_soon_count=expiring_soon_count,
             total_at_risk=len(at_risk),
             value_at_risk=value_at_risk,
@@ -430,6 +486,69 @@ class DashboardService:
         )
 
         return at_risk, summary
+
+    async def get_notaire_pending_alerts(
+        self,
+        project_id: int | None = None,
+        user_id: int | None = None,
+    ) -> list[dict]:
+        """Return reservation_soldee lots where the client wants to pass chez le notaire.
+
+        Only lots explicitly tagged with wants_notaire=True are included.
+
+        Returns a list of dicts with lot + reservation + client info for the alert panel.
+        """
+        from sqlalchemy.orm import joinedload
+
+        query = (
+            select(LotModel, ReservationModel, ClientModel)
+            .join(ReservationModel, LotModel.current_reservation_id == ReservationModel.id)
+            .join(ClientModel, ReservationModel.client_id == ClientModel.id)
+            .where(
+                LotModel.status == "reservation_soldee",
+                ReservationModel.wants_notaire.is_(True),
+            )
+        )
+
+        if project_id:
+            query = query.where(LotModel.project_id == project_id)
+        if user_id:
+            query = query.where(ReservationModel.reserved_by_user_id == user_id)
+
+        result = await self.session.execute(query)
+        rows = result.all()
+
+        alerts = []
+        for lot, reservation, client in rows:
+            alerts.append({
+                "lot_id": lot.id,
+                "lot_numero": lot.numero,
+                "lot_zone": lot.zone,
+                "lot_price": lot.price,
+                "project_id": lot.project_id,
+                "reservation_id": reservation.id,
+                "client_id": client.id,
+                "client_name": client.name,
+                "client_phone": client.phone,
+                "sale_price": reservation.sale_price,
+                "reserved_by_user_id": reservation.reserved_by_user_id,
+                "wants_notaire": True,
+                "notary_name": reservation.notary_name,
+                "notary_date": str(reservation.notary_date) if reservation.notary_date else None,
+            })
+
+        return alerts
+
+    async def get_options_tracking(
+        self,
+        project_id: int | None = None,
+        user_id: int | None = None,
+    ) -> list[dict]:
+        """Get all active options and RAF lots sorted by urgency."""
+        return await self.lot_repo.get_all_options_tracking(
+            project_id=project_id,
+            user_id=user_id,
+        )
 
     async def get_performance_data(
         self,
@@ -1167,7 +1286,8 @@ class DashboardService:
             key = res.reservation_date.strftime("%Y-%m")
             if key not in monthly:
                 monthly[key] = {"period": key, "sold": 0, "reserved": 0, "total_amount": 0.0}
-            if res.status in _ACTIVE_STATUSES:
+            # Count all created options/reservations as "reserved" in monthly view
+            if res.status in ("active", "validated"):
                 monthly[key]["reserved"] += 1
 
         return sorted(monthly.values(), key=lambda x: x["period"])

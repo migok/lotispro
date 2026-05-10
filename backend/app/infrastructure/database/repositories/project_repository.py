@@ -5,6 +5,7 @@ from sqlalchemy import and_, func, or_, select
 from app.infrastructure.database.models import (
     AssignmentModel,
     LotModel,
+    ProjectFinancingPlanModel,
     ProjectModel,
     UserModel,
 )
@@ -25,10 +26,13 @@ class ProjectRepository(BaseRepository[ProjectModel]):
         Returns:
             Project with accurate sold_lots and total_lots counts
         """
-        # Subquery to count sold lots
+        # Subquery to count completed lots (chez_proprietaire = fully closed)
         sold_lots_subquery = (
             select(func.count(LotModel.id))
-            .where(LotModel.project_id == id, LotModel.status == "sold")
+            .where(
+                LotModel.project_id == id,
+                LotModel.status.in_(("reservation_soldee", "chez_notaire", "chez_proprietaire")),
+            )
             .scalar_subquery()
         )
 
@@ -72,13 +76,13 @@ class ProjectRepository(BaseRepository[ProjectModel]):
         Returns:
             List of accessible projects with accurate sold_lots counts
         """
-        # Subquery to count sold lots per project
+        # Subquery to count completed lots per project
         sold_lots_subquery = (
             select(
                 LotModel.project_id,
                 func.count(LotModel.id).label("sold_count"),
             )
-            .where(LotModel.status == "sold")
+            .where(LotModel.status.in_(("reservation_soldee", "chez_notaire", "chez_proprietaire")))
             .group_by(LotModel.project_id)
             .subquery()
         )
@@ -268,6 +272,67 @@ class ProjectRepository(BaseRepository[ProjectModel]):
             return await self.is_user_assigned(project_id, user_id)
 
         return False
+
+    async def get_current_financing_plan(
+        self,
+        project_id: int,
+    ) -> ProjectFinancingPlanModel | None:
+        """Return the latest financing plan for a project, or None.
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            Most recently created financing plan, or None if none exists
+        """
+        result = await self.session.execute(
+            select(ProjectFinancingPlanModel)
+            .where(ProjectFinancingPlanModel.project_id == project_id)
+            .order_by(ProjectFinancingPlanModel.id.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def save_financing_plan(
+        self,
+        project_id: int,
+        deposit_pct: float,
+        deposit_count: int,
+        deposit_periodicity: int,
+        balance_delay_months: int,
+        balance_count: int,
+        balance_periodicity: int,
+        created_by: int,
+    ) -> ProjectFinancingPlanModel:
+        """Persist a new financing plan for a project.
+
+        Args:
+            project_id: Project ID
+            deposit_pct: Deposit percentage
+            deposit_count: Number of deposit installments
+            deposit_periodicity: Months between deposit payments
+            balance_delay_months: Delay before first balance payment
+            balance_count: Number of balance installments
+            balance_periodicity: Months between balance payments
+            created_by: User who created the plan
+
+        Returns:
+            Newly created ProjectFinancingPlanModel
+        """
+        plan = ProjectFinancingPlanModel(
+            project_id=project_id,
+            deposit_pct=deposit_pct,
+            deposit_count=deposit_count,
+            deposit_periodicity=deposit_periodicity,
+            balance_delay_months=balance_delay_months,
+            balance_count=balance_count,
+            balance_periodicity=balance_periodicity,
+            created_by=created_by,
+        )
+        self.session.add(plan)
+        await self.session.flush()
+        await self.session.refresh(plan)
+        return plan
 
     async def update_lot_counts(
         self,
