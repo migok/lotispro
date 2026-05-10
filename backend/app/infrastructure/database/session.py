@@ -31,6 +31,13 @@ logger = get_logger(__name__)
 
 database_url = str(settings.DATABASE_URL)
 
+_connect_args: dict = {}
+if "postgresql" in database_url:
+    import ssl as _ssl
+
+    _ssl_ctx = _ssl.create_default_context()
+    _connect_args = {"statement_cache_size": 0, "ssl": _ssl_ctx}
+
 # Engine configuration
 engine_kwargs = {
     "echo": settings.DEBUG,
@@ -39,6 +46,7 @@ engine_kwargs = {
     "max_overflow": settings.DATABASE_MAX_OVERFLOW,
     "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
     "pool_pre_ping": True,
+    "connect_args": _connect_args,
 }
 
 # Create async engine
