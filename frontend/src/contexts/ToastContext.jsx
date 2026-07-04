@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 const ToastContext = createContext(null);
 
@@ -12,6 +13,23 @@ export const useToast = () => {
 
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
+  const [fullscreenTarget, setFullscreenTarget] = useState(null);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setFullscreenTarget(document.fullscreenElement || null);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('msfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   const addToast = useCallback((message, type = 'info', duration = 5000) => {
     const id = Date.now() + Math.random();
@@ -40,7 +58,10 @@ export const ToastProvider = ({ children }) => {
   return (
     <ToastContext.Provider value={{ toasts, addToast, removeToast, success, error, warning, info }}>
       {children}
-      <ToastContainer toasts={toasts} onClose={removeToast} />
+      {createPortal(
+        <ToastContainer toasts={toasts} onClose={removeToast} />,
+        fullscreenTarget || document.body
+      )}
     </ToastContext.Provider>
   );
 };
