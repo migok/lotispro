@@ -35,10 +35,12 @@ _is_postgres = "postgresql" in database_url
 
 _connect_args: dict = {}
 if _is_postgres:
-    import ssl as _ssl
+    _connect_args = {"statement_cache_size": 0}
+    if not settings.is_development:
+        import ssl as _ssl
 
-    _ssl_ctx = _ssl.create_default_context()
-    _connect_args = {"statement_cache_size": 0, "ssl": _ssl_ctx}
+        _ssl_ctx = _ssl.create_default_context()
+        _connect_args["ssl"] = _ssl_ctx
 
 # Engine configuration
 engine_kwargs = {
