@@ -19,6 +19,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import ProjectsPage from "./components/ProjectsPage";
 import ProjectDetailPage from "./components/ProjectDetailPage";
 import LandingPage from "./components/LandingPage";
+import ContactPage from "./components/ContactPage";
 import GlobalDashboard from "./components/GlobalDashboard";
 
 // Dashboard icon
@@ -328,6 +329,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/contact" element={<ContactPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/set-password" element={<SetPassword />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />

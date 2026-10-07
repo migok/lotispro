@@ -26,11 +26,6 @@ const IconCheck = ({ className = "" }) => (
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
-const IconX = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-  </svg>
-);
 const IconShield = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -246,7 +241,8 @@ export default function LandingPage() {
           <li><a href="#fonctionnalites">Fonctionnalités</a></li>
           <li><a href="#roles">Équipes</a></li>
           <li><a href="#carte">Cartographie</a></li>
-          <li><a href="#tarifs">Tarifs</a></li>
+          <li><a href="#services-ia">Services IA</a></li>
+          <li><Link to="/contact">Contact</Link></li>
           <li><Link to="/login" className="lp-nav-cta">Connexion</Link></li>
           <li>
             <button className="lp-theme-toggle" onClick={toggleTheme} title={lpTheme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"} aria-label="Changer le thème">
@@ -283,7 +279,7 @@ export default function LandingPage() {
           LotisPro centralise vos lots, réservations, équipes commerciales et plannings de paiement. Visualisez chaque parcelle sur carte. Prenez des décisions en temps réel.
         </p>
         <div className="lp-hero-actions" id="lp-hero-actions">
-          <a href="#demo" className="lp-btn-primary">Demander une démo gratuite</a>
+          <Link to="/contact" className="lp-btn-primary">Demander une démo gratuite</Link>
           <a href="#fonctionnalites" className="lp-btn-ghost">Découvrir les fonctionnalités</a>
         </div>
 
@@ -439,7 +435,7 @@ export default function LandingPage() {
             Tout ce dont un promoteur<br /><em>a besoin, dans un seul outil</em>
           </h2>
         </div>
-        <div className="lp-features-grid lp-reveal">
+        <div className="lp-features-grid">
           {[
             {
               num: "01", title: "Cartographie interactive", tag: "GeoJSON · Leaflet",
@@ -471,8 +467,8 @@ export default function LandingPage() {
               text: "Chaque création, modification et suppression est enregistrée. Journal d'audit intégral pour la conformité réglementaire France / Maroc.",
               icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>,
             },
-          ].map(({ num, title, tag, text, icon }) => (
-            <div key={num} className="lp-feature-card">
+          ].map(({ num, title, tag, text, icon }, i) => (
+            <div key={num} className={`lp-feature-card lp-reveal lp-reveal-d${(i % 3) + 1}`}>
               <div className="lp-feature-num">{num}</div>
               <div className="lp-feature-icon">{icon}</div>
               <div className="lp-feature-title">{title}</div>
@@ -573,7 +569,7 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
-            <a href="#demo" className="lp-btn-primary">Voir une démo cartographique</a>
+            <Link to="/contact" className="lp-btn-primary">Voir une démo cartographique</Link>
           </div>
           <div className="lp-map-visual lp-reveal lp-reveal-d2">
             <div className="lp-map-visual-bg" />
@@ -647,64 +643,274 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── PRICING ──────────────────────────────────────────────────── */}
-      <section className="lp-section-pricing lp-section" id="tarifs">
-        <div className="lp-pricing-header">
-          <div className="lp-eyebrow lp-reveal">Tarifs</div>
-          <h2 className="lp-section-title lp-reveal lp-reveal-d1">
-            Simple, transparent,<br /><em>sans mauvaises surprises</em>
-          </h2>
-          <p className="lp-section-sub lp-reveal lp-reveal-d2">
-            Tous les plans incluent l'onboarding, la migration de données et le support technique.
-          </p>
+      {/* ── ENTERPRISE FEATURES ──────────────────────────────────────── */}
+      <section className="lp-section-enterprise lp-section" id="entreprise">
+        <div className="lp-enterprise-inner">
+          <div className="lp-enterprise-header">
+            <div className="lp-eyebrow lp-reveal">Solution Entreprise</div>
+            <h2 className="lp-section-title lp-reveal lp-reveal-d1">
+              Tout ce dont vous avez besoin,<br /><em>sans rien laisser de côté</em>
+            </h2>
+            <p className="lp-section-sub lp-reveal lp-reveal-d2">
+              LotisPro est conçu pour les promoteurs immobiliers professionnels. Chaque fonctionnalité est disponible dès le départ — projets, équipes et lots illimités.
+            </p>
+          </div>
+
+          <div className="lp-enterprise-grid">
+            {[
+              {
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11" /></svg>,
+                category: "Gestion foncière",
+                color: "brass",
+                features: [
+                  "Cartographie interactive GeoJSON / Leaflet",
+                  "Lots et projets illimités",
+                  "Importation CSV des lots",
+                  "Statuts en temps réel — disponible, réservé, validé, vendu",
+                  "Zones et surfaces configurables",
+                ],
+              },
+              {
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>,
+                category: "Pipeline commercial",
+                color: "violet",
+                features: [
+                  "Réservations avec expiration automatique",
+                  "Validation multi-niveaux (directeur → vente)",
+                  "Conversion réservation → vente directe",
+                  "Gestion du portefeuille client complet",
+                  "Alertes réservations expirant bientôt",
+                ],
+              },
+              {
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>,
+                category: "Finances & paiements",
+                color: "green",
+                features: [
+                  "Plans de paiement échelonnés automatiques",
+                  "Génération automatique des échéances",
+                  "Alertes et suivi des retards",
+                  "Vue client — ce qui est dû, quand et combien",
+                  "Suivi multi-devise MAD / EUR",
+                ],
+              },
+              {
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>,
+                category: "Équipe & sécurité",
+                color: "red",
+                features: [
+                  "RBAC 3 niveaux — directeur, commercial, client",
+                  "Assignation des commerciaux par projet",
+                  "Invitation par e-mail avec accès contrôlé",
+                  "Journal d'audit intégral de chaque action",
+                  "Conformité réglementaire France / Maroc",
+                ],
+              },
+              {
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>,
+                category: "Analytics & reporting",
+                color: "amber",
+                features: [
+                  "KPIs temps réel par commercial et par projet",
+                  "Dashboard multi-projets centralisé",
+                  "CA objectif vs. réalisé en continu",
+                  "Vélocité des ventes et taux de réservation",
+                  "Classement et performance des commerciaux",
+                ],
+              },
+              {
+                icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.07 4.93l-1.41 1.41M5.34 18.66l-1.41 1.41M2 12h2M20 12h2M19.07 19.07l-1.41-1.41M5.34 5.34L3.93 3.93" /></svg>,
+                category: "Déploiement & support",
+                color: "brass",
+                features: [
+                  "API REST complète documentée",
+                  "Déploiement cloud ou on-premise",
+                  "SLA garanti 99.9% de disponibilité",
+                  "Manager de compte dédié",
+                  "Onboarding et migration de données inclus",
+                ],
+              },
+            ].map(({ icon, category, color, features }) => (
+              <div key={category} className={`lp-ent-card lp-reveal lp-ent-card--${color}`}>
+                <div className={`lp-ent-icon lp-ent-icon--${color}`}>{icon}</div>
+                <div className="lp-ent-category">{category}</div>
+                <ul className="lp-ent-features">
+                  {features.map((f) => (
+                    <li key={f}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+
+          {/* Contact CTA */}
+          <div className="lp-ent-cta lp-reveal">
+            <div className="lp-ent-cta-glow" />
+            <div className="lp-ent-cta-tag">Tarification sur mesure</div>
+            <h3 className="lp-ent-cta-title">Prêt à transformer votre organisation ?</h3>
+            <p className="lp-ent-cta-sub">
+              Discutons de vos besoins. Démo personnalisée en 30 minutes,<br />migration de données et onboarding inclus.
+            </p>
+            <div className="lp-ent-cta-actions">
+              <Link to="/contact" className="lp-btn-primary">Contacter notre équipe</Link>
+              <Link to="/login" className="lp-btn-ghost">Accéder à l'application</Link>
+            </div>
+            <div className="lp-ent-cta-badges">
+              {["Démo gratuite 30 min", "Migration incluse", "Déploiement rapide", "SLA 99.9%"].map((b) => (
+                <span key={b} className="lp-ent-badge">{b}</span>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="lp-pricing-grid">
-          {/* Starter */}
-          <div className="lp-pricing-card lp-reveal">
-            <div className="lp-plan-name">Starter</div>
-            <div className="lp-plan-price"><sup>€</sup>149</div>
-            <div className="lp-plan-period">par mois, facturé annuellement</div>
-            <div className="lp-plan-desc">Pour les petits promoteurs qui démarrent leur digitalisation.</div>
-            <div className="lp-plan-divider" />
-            <ul className="lp-plan-features">
-              {["3 projets actifs","200 lots par projet","5 utilisateurs commerciaux","Carte interactive","Pipeline réservation / vente"].map((f) => (
-                <li key={f}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--lp-green)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>{f}</li>
-              ))}
-              {["Plans de paiement avancés","API accès"].map((f) => (
-                <li key={f} className="muted"><IconX />{f}</li>
-              ))}
-            </ul>
-            <a href="#demo" className="lp-btn-plan outline">Essayer gratuitement</a>
+      </section>
+
+      {/* ── IA & MIGRATION ───────────────────────────────────────────── */}
+      <section className="lp-section-ia lp-section" id="services-ia">
+        <div className="lp-ia-inner">
+          <div className="lp-ia-header">
+            <div className="lp-eyebrow lp-reveal">Services avancés</div>
+            <h2 className="lp-section-title lp-reveal lp-reveal-d1">
+              Migration de données<br /><em>et intelligence artificielle</em>
+            </h2>
+            <p className="lp-section-sub lp-reveal lp-reveal-d2">
+              LotisPro vous accompagne au-delà du logiciel : conversion de vos plans existants et analyse intelligente de vos données en temps réel.
+            </p>
           </div>
-          {/* Pro */}
-          <div className="lp-pricing-card popular lp-reveal lp-reveal-d1">
-            <div className="lp-popular-badge">Le plus populaire</div>
-            <div className="lp-plan-name gold">Professionnel</div>
-            <div className="lp-plan-price"><sup>€</sup>349</div>
-            <div className="lp-plan-period">par mois, facturé annuellement</div>
-            <div className="lp-plan-desc">Pour les promoteurs en croissance gérant plusieurs projets et équipes.</div>
-            <div className="lp-plan-divider" />
-            <ul className="lp-plan-features">
-              {["Projets illimités","Lots illimités","20 utilisateurs commerciaux","Plans de paiement échelonnés","Analytics avancées & KPIs","Journal d'audit complet"].map((f) => (
-                <li key={f}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--lp-green)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>{f}</li>
-              ))}
-              <li className="muted"><IconX />API accès</li>
-            </ul>
-            <a href="#demo" className="lp-btn-plan primary">Commencer maintenant</a>
-          </div>
-          {/* Enterprise */}
-          <div className="lp-pricing-card lp-reveal lp-reveal-d2">
-            <div className="lp-plan-name">Entreprise</div>
-            <div className="lp-plan-price" style={{ fontSize: 36, paddingTop: 8 }}>Sur mesure</div>
-            <div className="lp-plan-period">tarification personnalisée</div>
-            <div className="lp-plan-desc">Pour les grands groupes immobiliers avec des besoins spécifiques.</div>
-            <div className="lp-plan-divider" />
-            <ul className="lp-plan-features">
-              {["Tout du plan Professionnel","Utilisateurs illimités","Accès API complet","Intégrations sur mesure","SLA garanti 99.9%","Manager de compte dédié","Déploiement on-premise disponible"].map((f) => (
-                <li key={f}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--lp-green)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>{f}</li>
-              ))}
-            </ul>
-            <a href="#demo" className="lp-btn-plan outline">Contacter l'équipe commerciale</a>
+
+          <div className="lp-ia-grid">
+
+            {/* Bloc PDF → GeoJSON */}
+            <div className="lp-ia-block lp-ia-block--pdf lp-reveal">
+              <div className="lp-ia-block-content">
+                <div className="lp-ia-block-eyebrow">Service d'onboarding</div>
+                <h3 className="lp-ia-block-title">
+                  Convertissez vos plans PDF<br /><em>en carte interactive</em>
+                </h3>
+                <p className="lp-ia-block-desc">
+                  Vous avez des plans cadastraux, des fichiers d'architecte ou des tableaux Excel ? Notre équipe prend en charge la conversion complète vers GeoJSON. Vos lots apparaissent sur la carte en quelques jours.
+                </p>
+                <ul className="lp-ia-checklist">
+                  {["Plans PDF, DWG, cadastre numérique", "Détection et vectorisation des polygones", "Validation géométrique et nommage des lots", "Import direct dans LotisPro"].map((item) => (
+                    <li key={item}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--lp-amber)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="lp-ia-visual lp-reveal lp-reveal-d2">
+                <div className="lp-pdf-mockup">
+                  {/* PDF simulé */}
+                  <div className="lp-pdf-side">
+                    <div className="lp-pdf-doc">
+                      <div className="lp-pdf-topbar">
+                        <div className="lp-pdf-dot" /><div className="lp-pdf-dot" /><div className="lp-pdf-dot" />
+                        <span className="lp-pdf-name">plan_cadastral.pdf</span>
+                      </div>
+                      <div className="lp-pdf-body">
+                        <div className="lp-pdf-rect--lg" />
+                        <div className="lp-pdf-lines">
+                          <div className="lp-pdf-line" />
+                          <div className="lp-pdf-line lp-pdf-line--short" />
+                          <div className="lp-pdf-line lp-pdf-line--med" />
+                        </div>
+                        <div className="lp-pdf-plan-grid">
+                          {Array.from({ length: 9 }).map((_, i) => <div key={i} className="lp-pdf-plan-cell" />)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Flèche */}
+                  <div className="lp-pdf-arrow">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--lp-brass)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+                    </svg>
+                    <span className="lp-pdf-arrow-label">Conversion</span>
+                  </div>
+                  {/* GeoJSON coloré */}
+                  <div className="lp-pdf-side">
+                    <div className="lp-pdf-doc lp-pdf-doc--geo">
+                      <div className="lp-pdf-topbar lp-pdf-topbar--geo">
+                        <div className="lp-pdf-dot" /><div className="lp-pdf-dot" /><div className="lp-pdf-dot" />
+                        <span className="lp-pdf-name">projet.geojson</span>
+                      </div>
+                      <div className="lp-pdf-body">
+                        <div className="lp-geo-lot-grid">
+                          {[["av","span2"],["rs"],["av"],["sd"],["vl"],["rs","span2"],["av"],["av"],["sd"],["vl"],["rs"]].map((cls, i) => (
+                            <div key={i} className={`lp-geo-lot ${cls.join(" ")}`} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bloc Assistant IA */}
+            <div className="lp-ia-block lp-ia-block--ai lp-reveal lp-reveal-d1">
+              <div className="lp-ia-visual lp-reveal lp-reveal-d2">
+                <div className="lp-chat-mockup">
+                  <div className="lp-chat-topbar">
+                    <div className="lp-chat-avatar">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="lp-chat-title">Assistant LotisPro</div>
+                      <div className="lp-chat-status"><span className="lp-chat-dot" />En ligne</div>
+                    </div>
+                  </div>
+                  <div className="lp-chat-messages">
+                    <div className="lp-chat-msg lp-chat-msg--user">
+                      Quel est le taux de réservation du projet Résidence Atlas ce mois-ci ?
+                    </div>
+                    <div className="lp-chat-msg lp-chat-msg--ai">
+                      <span className="lp-chat-ai-label">IA</span>
+                      Résidence Atlas — <strong>73 %</strong> de réservation. Sur 124 lots, 91 sont réservés ou vendus. +8 % vs le mois dernier. Zones B et C les plus demandées.
+                    </div>
+                    <div className="lp-chat-msg lp-chat-msg--user">
+                      Quels commerciaux ont le plus de réservations en attente ?
+                    </div>
+                    <div className="lp-chat-msg lp-chat-msg--ai">
+                      <span className="lp-chat-ai-label">IA</span>
+                      <strong>Karim B.</strong> — 7 en attente · <strong>Sofia M.</strong> — 5 · <strong>Youssef A.</strong> — 4. Délai moyen de validation : 2,3 jours.
+                    </div>
+                  </div>
+                  <div className="lp-chat-input">
+                    <span className="lp-chat-placeholder">Posez votre question...</span>
+                    <div className="lp-chat-send">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="lp-ia-block-content">
+                <div className="lp-ia-block-eyebrow lp-ia-block-eyebrow--violet">Fonctionnalité intégrée</div>
+                <h3 className="lp-ia-block-title">
+                  Posez vos questions,<br /><em>obtenez des analyses</em>
+                </h3>
+                <p className="lp-ia-block-desc">
+                  L'assistant IA de LotisPro accède à toutes vos données en temps réel. Demandez des comparatifs de performance, des projections ou une synthèse de vos lots — la réponse arrive en secondes.
+                </p>
+                <ul className="lp-ia-checklist lp-ia-checklist--violet">
+                  {["Requêtes en langage naturel", "Analyse des KPIs et tendances", "Anomalies détectées automatiquement", "Résumés exécutifs sur demande"].map((item) => (
+                    <li key={item}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--lp-violet)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
           </div>
         </div>
       </section>
@@ -720,9 +926,9 @@ export default function LandingPage() {
           Démo personnalisée en 30 minutes, migration incluse.
         </p>
         <div className="lp-hero-actions lp-reveal lp-reveal-d3" style={{ justifyContent: "center" }}>
-          <a href="mailto:contact@lotispro.com" className="lp-btn-primary" style={{ fontSize: 16, padding: "18px 44px" }}>
+          <Link to="/contact" className="lp-btn-primary" style={{ fontSize: 16, padding: "18px 44px" }}>
             Demander une démo gratuite
-          </a>
+          </Link>
           <Link to="/login" className="lp-btn-ghost" style={{ fontSize: 16, padding: "17px 36px" }}>
             Accéder à l'application
           </Link>
@@ -739,7 +945,8 @@ export default function LandingPage() {
           <div>
             <div className="lp-footer-col-title">Produit</div>
             <ul className="lp-footer-links">
-              {["Fonctionnalités","Tarifs","Démo","Roadmap","Nouveautés"].map((l) => <li key={l}><a href="#">{l}</a></li>)}
+              {["Fonctionnalités","Démo","Roadmap","Nouveautés"].map((l) => <li key={l}><a href="#">{l}</a></li>)}
+              <li><Link to="/contact">Contact</Link></li>
             </ul>
           </div>
           <div>

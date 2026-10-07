@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     audit,
     auth,
     clients,
+    contact,
     dashboard,
     documents,
     health,
@@ -110,4 +111,9 @@ api_router.include_router(
     lot_pricing_configs.router,
     prefix="/projects",
     tags=["Pricing Config"],
+)
+
+api_router.include_router(
+    contact.router,
+    tags=["Contact"],
 )
