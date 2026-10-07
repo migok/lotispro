@@ -250,6 +250,7 @@ class LotRepository(BaseRepository[LotModel]):
                             f"{notaire.prenom} {notaire.nom}" if notaire else reservation.notary_name
                         ),
                         "notary_date": reservation.notary_date,
+                        "closed_at": reservation.closed_at,
                     }
                 )
 

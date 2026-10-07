@@ -1058,6 +1058,12 @@ class ReservationService:
 
         await self.lot_repo.update(lot_id, status="chez_proprietaire")
 
+        if lot.current_reservation_id:
+            await self.reservation_repo.update(
+                lot.current_reservation_id,
+                closed_at=datetime.now(timezone.utc),
+            )
+
         logger.info("Lot confirmed chez_proprietaire", lot_id=lot_id)
         updated_lot = await self.lot_repo.get_by_id(lot_id)
         return LotResponse.model_validate(updated_lot)
@@ -1088,7 +1094,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
 
-        await self.lot_repo.update(lot_id, status="blocked")
+        await self.lot_repo.update(lot_id, status="blocked", blocked_reason=data.reason or "")
 
         logger.info("Lot blocked", lot_id=lot_id, reason=data.reason)
         updated_lot = await self.lot_repo.get_by_id(lot_id)
@@ -1116,7 +1122,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
 
-        await self.lot_repo.update(lot_id, status="available")
+        await self.lot_repo.update(lot_id, status="available", blocked_reason="")
 
         logger.info("Lot unblocked", lot_id=lot_id)
         updated_lot = await self.lot_repo.get_by_id(lot_id)

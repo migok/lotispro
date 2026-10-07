@@ -104,6 +104,7 @@ class LotResponse(BaseSchema):
     price_per_sqm: float | None = None
     price_per_sqm_acte: float | None = None
     status: str
+    blocked_reason: str | None = None
     current_reservation_id: int | None
     geometry: dict[str, Any] | None = None
     # Metadata fields
@@ -155,6 +156,9 @@ class LotWithDetails(LotResponse):
     # Commercial who created the reservation
     reserved_by_user_id: int | None = None
     reserved_by_name: str | None = None
+
+    # Clôture définitive
+    closed_at: datetime | None = None
 
     # Computed fields
     days_in_status: int | None = None

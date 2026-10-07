@@ -225,6 +225,7 @@ class LotModel(Base):
     price_per_sqm: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_per_sqm_acte: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="creation")
+    blocked_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     current_reservation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     geometry: Mapped[str | None] = mapped_column(Text, nullable=True)  # GeoJSON geometry
     # Metadata fields from CSV import
@@ -425,6 +426,10 @@ class ReservationModel(Base):
     # Réservation soldée — intention de passage chez le notaire
     wants_notaire: Mapped[bool] = mapped_column(
         nullable=False, default=False, server_default="false"
+    )
+    # Clôture définitive (chez_notaire → chez_proprietaire)
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

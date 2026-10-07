@@ -304,5 +304,7 @@ class ReservationResponse(BaseSchema):
     promotion_received: bool = False
     # Réservation soldée — intention notaire
     wants_notaire: bool = False
+    # Clôture définitive (chez_notaire → chez_proprietaire)
+    closed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

@@ -1359,6 +1359,21 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
               ))}
             </div>
 
+            {lot.status === 'blocked' && (
+              <div className="ldm-reservation-info">
+                <div className="ldm-ri-header">
+                  <IcLock />
+                  <span>Lot bloqué</span>
+                </div>
+                <div className="ldm-ri-rows">
+                  <div className="ldm-ri-row">
+                    <span className="ldm-ri-key">Motif</span>
+                    <span className="ldm-ri-val">{lot.blocked_reason || '—'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire'].includes(lot.status) && lot.client_name && (
               <div className="ldm-reservation-info">
                 <div className="ldm-ri-header">
@@ -1703,7 +1718,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                 </button>
               </>
             )}
-            {lot.status === 'blocked' && (
+            {lot.status === 'blocked' && isManager && (
               <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                 onClick={() => handleSetMode('unblock')}>
                 <IcUnlock /> Libérer

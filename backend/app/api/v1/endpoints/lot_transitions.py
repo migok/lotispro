@@ -334,15 +334,15 @@ async def block_lot(
     "/{lot_id}/transitions/unblock",
     response_model=LotResponse,
     summary="Débloquer le lot",
-    description="Libère un lot bloqué → disponible.",
+    description="Libère un lot bloqué → disponible (manager uniquement).",
 )
 async def unblock_lot(
     lot_id: int,
-    current_user: CurrentUser,
+    current_user: ManagerUser,
     reservation_service: ReservationServiceDep,
     data: UnblockLotData | None = None,
 ) -> LotResponse:
-    """Unblock a lot."""
+    """Unblock a lot (manager only)."""
     return await reservation_service.unblock_lot(
         lot_id=lot_id,
         data=data,
