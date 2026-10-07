@@ -144,8 +144,11 @@ class PaymentService:
             )
 
         balance_pct = round(100.0 - data.deposit_pct, 4)
-        deposit_total = round(data.lot_price * data.deposit_pct / 100, 2)
-        balance_total = round(data.lot_price - deposit_total, 2)
+        promo = max(0.0, data.promotion_amount or 0.0)
+        catalogue_price = round(data.lot_price + promo, 2)
+        deposit_gross = round(catalogue_price * data.deposit_pct / 100, 2)
+        deposit_total = max(0.0, round(deposit_gross - promo, 2))
+        balance_total = max(0.0, round(data.lot_price - deposit_total, 2))
 
         schedule = await self.payment_repo.create(
             reservation_id=data.reservation_id,

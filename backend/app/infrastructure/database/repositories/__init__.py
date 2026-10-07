@@ -3,6 +3,9 @@
 from app.infrastructure.database.repositories.audit_repository import AuditLogRepository
 from app.infrastructure.database.repositories.base import BaseRepository
 from app.infrastructure.database.repositories.client_repository import ClientRepository
+from app.infrastructure.database.repositories.notaire_repository import NotaireRepository
+from app.infrastructure.database.repositories.lot_document_repository import LotDocumentRepository
+from app.infrastructure.database.repositories.lot_pricing_repository import LotPricingConfigRepository
 from app.infrastructure.database.repositories.lot_repository import LotRepository
 from app.infrastructure.database.repositories.payment_repository import PaymentRepository
 from app.infrastructure.database.repositories.project_repository import ProjectRepository
@@ -17,8 +20,11 @@ __all__ = [
     "BaseRepository",
     "UserRepository",
     "ProjectRepository",
+    "LotPricingConfigRepository",
     "LotRepository",
+    "LotDocumentRepository",
     "ClientRepository",
+    "NotaireRepository",
     "ReservationRepository",
     "SaleRepository",
     "PaymentRepository",

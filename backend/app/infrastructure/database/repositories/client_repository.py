@@ -144,10 +144,14 @@ class ClientRepository(BaseRepository[ClientModel]):
                     "lot_surface": lot.surface,
                     "lot_zone": lot.zone,
                     "lot_price": lot.price,
+                    "lot_status": lot.status,
                     "project_id": project.id,
                     "project_name": project.name,
                     "reserved_by_user_id": reservation.reserved_by_user_id,
                     "reserved_by_name": reserver.name if reserver else None,
+                    "sale_price": reservation.sale_price,
+                    "promotion_amount": reservation.promotion_amount,
+                    "promotion_received": reservation.promotion_received,
                 }
             )
 

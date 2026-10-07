@@ -16,7 +16,10 @@ from app.services import (
     CertificateService,
     ClientService,
     DashboardService,
+    DocumentService,
+    LotPricingService,
     LotService,
+    NotaireService,
     PaymentService,
     ProjectService,
     ReservationService,
@@ -175,6 +178,21 @@ def get_certificate_service() -> CertificateService:
     return CertificateService()
 
 
+def get_document_service(session: DBSession) -> DocumentService:
+    """Get document service instance."""
+    return DocumentService(session)
+
+
+def get_notaire_service(session: DBSession) -> NotaireService:
+    """Get notaire service instance."""
+    return NotaireService(session)
+
+
+def get_lot_pricing_service(session: DBSession) -> LotPricingService:
+    """Get lot pricing config service instance."""
+    return LotPricingService(session)
+
+
 # Typed service dependencies
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
@@ -187,3 +205,6 @@ DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
 PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
 CertificateServiceDep = Annotated[CertificateService, Depends(get_certificate_service)]
+DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
+NotaireServiceDep = Annotated[NotaireService, Depends(get_notaire_service)]
+LotPricingServiceDep = Annotated[LotPricingService, Depends(get_lot_pricing_service)]

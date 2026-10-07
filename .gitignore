@@ -21,6 +21,9 @@ build/
 .DS_Store
 .claude
 
+# Superpowers scratch state
+.superpowers/
+
 #bdb
 *.bdb
 *.db

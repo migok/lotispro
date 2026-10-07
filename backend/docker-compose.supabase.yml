@@ -34,7 +34,7 @@ services:
       # URLs Supabase via Kong (API Gateway)
       - SUPABASE_URL=http://supabase_kong_lot_webapp:8000
       # External URL for browser-accessible public file links (images, etc.)
-      - SUPABASE_PUBLIC_URL=http://127.0.0.1:54321
+      - SUPABASE_PUBLIC_URL=http://127.0.0.1:55400
       - SUPABASE_REST_URL=http://supabase_kong_lot_webapp:8000/rest/v1
       - SUPABASE_GRAPHQL_URL=http://supabase_kong_lot_webapp:8000/graphql/v1
       - SUPABASE_STORAGE_URL=http://supabase_kong_lot_webapp:8000/storage/v1
