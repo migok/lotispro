@@ -7,13 +7,15 @@ import logging
 import sys
 from contextvars import ContextVar
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import structlog
-from structlog.types import Processor
 
 from app.core.config import settings
+
+if TYPE_CHECKING:
+    from structlog.types import Processor
 
 # Context variable for request-scoped data
 request_id_ctx: ContextVar[str | None] = ContextVar("request_id", default=None)

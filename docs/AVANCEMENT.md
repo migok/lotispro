@@ -30,7 +30,7 @@ _Dernière mise à jour : 2026-10-22_
 | E0-T1 | Réconcilier `main` → `dev` (hors IA) ; deploy strict | ⬜ | [#9](https://github.com/migok/lotispro/issues/9) | | |
 | E0-T2 | Isolation tests backend + fabriques | ✅ | [#10](https://github.com/migok/lotispro/issues/10) | | 2026-10-22 |
 | E0-T3 | Tests de caractérisation des transitions | ✅ | [#11](https://github.com/migok/lotispro/issues/11) | | 2026-10-22 |
-| E0-T4 | Backend ruff à 0 (dont `F821`) | ⬜ | [#12](https://github.com/migok/lotispro/issues/12) | | |
+| E0-T4 | Backend ruff à 0 (dont `F821`) | ✅ | [#12](https://github.com/migok/lotispro/issues/12) | | 2026-10-22 |
 | E0-T5 | ESLint à 0 + Vitest | ⬜ | [#13](https://github.com/migok/lotispro/issues/13) | | |
 | E0-T6 | CI GitHub Actions + `CLAUDE.md` | ⬜ | [#14](https://github.com/migok/lotispro/issues/14) | | |
 | E1-T1 | Carte flexible en plein écran | ⬜ | [#16](https://github.com/migok/lotispro/issues/16) | | |
@@ -78,7 +78,24 @@ _Dernière mise à jour : 2026-10-22_
 
 ## Dette technique suivie
 
-_À compléter par E0-T4 (fonctions `PLR0912` / `PLR0915` à découper quand un epic les touche)._
+Fonctions backend qui dépassent les seuils `PLR0912` (> 12 branches) / `PLR0915` (> 50 instructions). Ces règles sont désactivées dans `backend/pyproject.toml` ; à découper quand un epic touche la fonction. Liste issue de `ruff check . --isolated --select PLR0912,PLR0915` (E0-T4, 2026-10-22).
+
+| Fichier | Fonction | Dépassement |
+| --- | --- | --- |
+| `app/services/certificate_service.py` | `generate_reservation_certificate` | PLR0915 82/50 |
+| `app/services/certificate_service.py` | `generate_payment_receipt` | PLR0915 59/50 |
+| `app/services/dashboard_service.py` | `get_dashboard_stats` | PLR0912 38/12, PLR0915 121/50 |
+| `app/services/dashboard_service.py` | `get_clients_pipeline` | PLR0912 16/12, PLR0915 62/50 |
+| `app/services/dashboard_service.py` | `get_lots_dashboard` | PLR0912 18/12, PLR0915 65/50 |
+| `app/services/lot_service.py` | `bulk_update_lot_metadata` | PLR0912 13/12 |
+| `app/services/project_service.py` | `get_project_kpis` | PLR0915 67/50 |
+| `app/services/project_service.py` | `_get_user_filtered_kpis` | PLR0915 64/50 |
+| `app/services/project_service.py` | `upload_geojson` | PLR0912 16/12, PLR0915 63/50 |
+| `app/services/project_service.py` | `export_geojson` | PLR0912 20/12, PLR0915 62/50 |
+| `app/services/project_service.py` | `import_csv_metadata` | PLR0912 20/12, PLR0915 74/50 |
+| `app/services/reservation_service.py` | `finaliser_engage` | PLR0912 19/12 |
+
+Autres règles ruff désactivées par choix (E0-T4) : `PLC0415` (45 imports différés dans les services, repositories et schémas, probablement pour éviter des dépendances circulaires ; à revoir) et `ARG001` limité aux endpoints FastAPI, handlers d'erreur, logging, lifespan (signatures imposées par le framework).
 
 ## Anomalies constatées
 

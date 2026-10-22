@@ -294,15 +294,18 @@ class LotService:
             raise NotFoundError("Lot", lot_id)
 
         # Check numero uniqueness if changed
-        if data.numero and data.numero != lot.numero:
-            if await self.lot_repo.numero_exists(
+        if (
+            data.numero
+            and data.numero != lot.numero
+            and await self.lot_repo.numero_exists(
                 lot.project_id, data.numero, exclude_id=lot_id
-            ):
-                raise AlreadyExistsError(
-                    resource="Lot",
-                    field="numero",
-                    value=data.numero,
-                )
+            )
+        ):
+            raise AlreadyExistsError(
+                resource="Lot",
+                field="numero",
+                value=data.numero,
+            )
 
         # Direct status updates are limited to creation/available/blocked
         # Workflow transitions must use dedicated transition endpoints

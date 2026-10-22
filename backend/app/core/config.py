@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
 
-    # Email (Resend)
+    # Resend email settings
     RESEND_API_KEY: str | None = None
     EMAIL_FROM: str = "LotisPro <contact@lotispro.com>"
     CONTACT_EMAIL: str = (

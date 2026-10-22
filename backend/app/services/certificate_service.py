@@ -180,7 +180,7 @@ class CertificateService:
         pdf.multi_cell(w, 5.5, txt_balance, align="J", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
-        # Conditions (static)
+        # Static conditions list
         conditions = [
             (
                 "Après achèvement des travaux du lotissement, le réservant avise le "

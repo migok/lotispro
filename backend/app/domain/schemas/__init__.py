@@ -31,7 +31,8 @@ from app.domain.schemas.user import (
     UserResponse,
 )
 
-__all__ = [
+# Grouped by domain on purpose, not alphabetically.
+__all__ = [  # noqa: RUF022
     # Common
     "PaginationParams",
     "PaginatedResponse",

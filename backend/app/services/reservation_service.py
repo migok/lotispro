@@ -671,15 +671,15 @@ class ReservationService:
             current_reservation = await self.reservation_repo.get_by_id(
                 lot.current_reservation_id
             )
-            if current_reservation:
-                if (
-                    user_role != "manager"
-                    and current_reservation.reserved_by_user_id != user_id
-                ):
-                    raise BusinessRuleError(
-                        message="Insufficient permissions",
-                        rule="insufficient_permissions",
-                    )
+            if (
+                current_reservation
+                and user_role != "manager"
+                and current_reservation.reserved_by_user_id != user_id
+            ):
+                raise BusinessRuleError(
+                    message="Insufficient permissions",
+                    rule="insufficient_permissions",
+                )
 
         guarantee_action = data.guarantee_action if data else "deduct"
 
@@ -1127,7 +1127,7 @@ class ReservationService:
         return LotResponse.model_validate(updated_lot)
 
     # ------------------------------------------------------------------
-    # Transitions: block / unblock
+    # Block and unblock transitions
     # ------------------------------------------------------------------
 
     async def block_lot(

@@ -1,5 +1,6 @@
 """Project service - Project management operations."""
 
+import contextlib
 from datetime import UTC, datetime
 
 from fastapi import UploadFile
@@ -1471,12 +1472,11 @@ class ProjectService:
             raise AuthorizationError(message="Only managers can upload GeoJSON")
 
         # Validate file type
-        if not file.filename or not file.filename.endswith(".geojson"):
-            if not file.filename or not file.filename.endswith(".json"):
-                raise BusinessRuleError(
-                    message="Invalid file type: must be a .geojson or .json file",
-                    rule="invalid_file_type",
-                )
+        if not file.filename or not file.filename.endswith((".geojson", ".json")):
+            raise BusinessRuleError(
+                message="Invalid file type: must be a .geojson or .json file",
+                rule="invalid_file_type",
+            )
 
         # Read file content
         content = await file.read()
@@ -1488,7 +1488,7 @@ class ProjectService:
             raise BusinessRuleError(
                 message=f"Invalid JSON format: {e}",
                 rule="invalid_json",
-            )
+            ) from e
 
         # Upload to Supabase Storage
         storage_client = get_storage_client()
@@ -1505,7 +1505,7 @@ class ProjectService:
             raise StorageError(
                 message=f"Failed to upload file to storage: {e}",
                 storage_path=file_path,
-            )
+            ) from e
 
         # Update project with file URL
         await self.project_repo.update(
@@ -1636,10 +1636,8 @@ class ProjectService:
             # Parse geometry from string
             geometry = None
             if lot.get("geometry"):
-                try:
+                with contextlib.suppress(json.JSONDecodeError, TypeError):
                     geometry = json.loads(lot["geometry"])
-                except (json.JSONDecodeError, TypeError):
-                    pass
 
             # Build properties (include aliases for frontend compatibility)
             properties = {
