@@ -20,8 +20,10 @@ lot_webapp/
 │   │   ├── domain/             # Schemas (Pydantic) + interfaces
 │   │   ├── infrastructure/     # DB models, repositories, Supabase storage
 │   │   └── services/           # Business logic (16 services)
-│   ├── alembic/      # DB migrations (0001 → 0010)
+│   ├── alembic/      # DB migrations (0001 → 0016)
 │   └── scripts/      # Utility scripts (seed_users.py)
+├── .github/workflows/ci.yml   # CI (backend ruff + pytest, frontend eslint + vitest + build)
+├── docs/AVANCEMENT.md         # Suivi de la roadmap (epic → tâche → statut → issue → PR)
 ├── frontend/         # React SPA
 │   └── src/
 │       ├── components/         # React components + useTheme.js hook
@@ -75,10 +77,12 @@ npm run dev   # Starts at http://localhost:5173
 ### Backend
 
 ```bash
-# Tests (requires 80% coverage)
+# Tests (pytest, in-memory SQLite per test, no DB service needed;
+# factories in app/tests/factories.py). CI runs: python -m pytest -q
+# `SECRET_KEY` must be set (via .env or environment) for Settings to load.
 pytest
 
-# Linting
+# Linting (CI runs ruff check . and ruff format --check .)
 ruff check .
 ruff format .
 
@@ -99,6 +103,7 @@ python scripts/seed_users.py
 npm run dev       # Dev server
 npm run build     # Production build
 npm run lint      # ESLint
+npm test          # Vitest (jsdom) + Testing Library; helper renderWithProviders
 npm run preview   # Preview production build
 ```
 
@@ -177,6 +182,37 @@ Endpoint → Service → Repository → DB Model
 
 ---
 
+## Workflow de statuts
+
+Les transitions de statut d'un lot sont exposées par `backend/app/api/v1/endpoints/lot_transitions.py`
+(16 routes, préfixe `POST /api/lots/{lot_id}/transitions/…`, sauf mention `PUT`). Elles sont épinglées
+par des tests de caractérisation : `backend/app/tests/integration/test_api/test_lot_transitions.py`
+(comportement actuel, y compris les anomalies listées dans `docs/AVANCEMENT.md`).
+
+| # | Route | De | Vers |
+|---|-------|----|------|
+| 1 | `activate` | `creation` | `available` |
+| 2 | `start-option` | `available` | `option` |
+| 3 | `cancel-option` | `option` | `available` |
+| 4 | `extend-option` | `option` ou `reservation_a_finaliser` | inchangé (prolonge l'expiration) |
+| 5 | `direct-reservation` | `available` | `reservation_a_finaliser` |
+| 6 | `to-reservation` | `option` | `reservation_a_finaliser` |
+| 7 | `refund` | `reservation_a_finaliser` | `available` |
+| 8 | `direct-engage` | `available` | `reservation_engagee` |
+| 9 | `engage` | `reservation_a_finaliser` | `reservation_engagee` |
+| 10 | `solde` | `reservation_engagee` | `reservation_soldee` (crée la vente) |
+| 11 | `set-notaire-intent` | `reservation_soldee` | inchangé (tag `wants_notaire`) |
+| 12 | `notaire` (POST) | `reservation_soldee` | `chez_notaire` |
+| 13 | `notaire` (PUT) | `chez_notaire` | inchangé (met à jour les infos notaire) |
+| 14 | `proprietaire` | `chez_notaire` | `chez_proprietaire` (manager uniquement, renseigne `closed_at`) |
+| 15 | `block` | tout statut sauf `blocked` et `chez_proprietaire` | `blocked` (motif dans `blocked_reason`) |
+| 16 | `unblock` | `blocked` | `available` (manager uniquement) |
+
+Une transition appelée depuis un autre statut est refusée (HTTP 400, règle `invalid_lot_status` ou
+`lot_not_available`).
+
+---
+
 ## API Endpoints
 
 Base prefix: `/api/v1`
@@ -197,6 +233,27 @@ Base prefix: `/api/v1`
 | Dashboard | `/dashboard` | KPIs and analytics |
 | Audit | `/audit-logs` | Manager only |
 | Health | `/health` | No auth required |
+
+---
+
+## Définition de Terminé
+
+Niveau senior — pour chaque tâche :
+
+1. Test écrit avant le code (superpowers:test-driven-development), il échoue puis passe.
+2. ruff + eslint propres sur les fichiers touchés ; CI verte.
+3. Revue de code avant merge (code-review / pr-review-toolkit) ; les remarques sont traitées ou
+   justifiées.
+4. Vérification dans l'application lancée (superpowers:verification-before-completion) contre les
+   critères d'acceptance du ticket.
+5. Migration testée en `upgrade` **et** `downgrade` sur une copie des données.
+
+**Branches** : une branche par epic `feature/eN-<slug>` depuis `dev`, une PR par epic (ou par tâche
+si l'epic est gros), merge dans `dev` ; `dev → main` à la fin de chaque epic validé.
+
+**Suivi** : `docs/AVANCEMENT.md` (tableau epic → tâche → statut → issue → PR → date) est mis à jour
+dans le même commit que la tâche ; le GitHub Project « LotisPro — Roadmap » fait foi en cas d'écart.
+Design de référence : `docs/superpowers/specs/2026-10-22-roadmap-lotispro-design.md` (§6).
 
 ---
 
