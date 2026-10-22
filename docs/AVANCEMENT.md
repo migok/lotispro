@@ -29,7 +29,7 @@ _Dernière mise à jour : 2026-10-22_
 |---|---|---|---|---|---|
 | E0-T1 | Réconcilier `main` → `dev` (hors IA) ; deploy strict | ⬜ | [#9](https://github.com/migok/lotispro/issues/9) | | |
 | E0-T2 | Isolation tests backend + fabriques | ✅ | [#10](https://github.com/migok/lotispro/issues/10) | | 2026-10-22 |
-| E0-T3 | Tests de caractérisation des transitions | ⬜ | [#11](https://github.com/migok/lotispro/issues/11) | | |
+| E0-T3 | Tests de caractérisation des transitions | ✅ | [#11](https://github.com/migok/lotispro/issues/11) | | 2026-10-22 |
 | E0-T4 | Backend ruff à 0 (dont `F821`) | ⬜ | [#12](https://github.com/migok/lotispro/issues/12) | | |
 | E0-T5 | ESLint à 0 + Vitest | ⬜ | [#13](https://github.com/migok/lotispro/issues/13) | | |
 | E0-T6 | CI GitHub Actions + `CLAUDE.md` | ⬜ | [#14](https://github.com/migok/lotispro/issues/14) | | |
@@ -83,6 +83,17 @@ _À compléter par E0-T4 (fonctions `PLR0912` / `PLR0915` à découper quand un 
 ## Anomalies constatées
 
 _Comportements suspects relevés pendant les tests de caractérisation, en attente de décision._
+
+Relevés lors de E0-T3 (`test_lot_transitions.py`) ; le code applicatif n'a pas été modifié, les tests décrivent le comportement actuel.
+
+- **Aucun contrôle d'accès projet sur les transitions** : `lot_transitions.py` n'utilise que `CurrentUser` ; un commercial non affecté au projet peut activer, bloquer, prolonger ou faire avancer n'importe quel lot (seuls `proprietaire` et `unblock` exigent `manager`).
+- **`extend-option` sans contrôle de propriétaire** : n'importe quel utilisateur connecté peut prolonger l'option d'un autre commercial (contrairement à `cancel-option`, `to-reservation`, `refund`, `engage`, `solde`). De plus `additional_days` est un paramètre de requête, pas un corps JSON, contrairement aux autres transitions.
+- **`block` / `unblock` perdent l'état du lot** : bloquer un lot en `option` (ou autre statut avec réservation) puis le débloquer le remet en `available` tout en conservant `current_reservation_id` vers une réservation encore `active` (couvert par `test_unblock_returns_to_available_and_keeps_reservation_link`). Le statut précédent n'est pas mémorisé.
+- **Tout utilisateur connecté peut bloquer n'importe quel lot** (y compris `reservation_engagee`, `reservation_soldee`, `chez_notaire`), sans restriction de rôle ni de propriétaire.
+- **`closed_at` jamais exposé par l'API** : `_reservation_to_response` ne renseigne pas `closed_at` (le champ existe dans `ReservationResponse`), il est donc toujours `null` côté client alors qu'il est bien écrit en base par `proprietaire`.
+- **`unblock` écrit `blocked_reason = ""`** (chaîne vide) au lieu de `NULL`, et `block` sans motif stocke aussi `""`.
+- **`engage` en mode `guarantee_action=refund`** fait quand même avancer le lot en `reservation_engagee` (documenté dans le schéma, mais à confirmer côté métier).
+- **`solde` accepte un `price` libre** : le prix de la vente n'est pas rapproché de `sale_price` / `price` du lot ni du total de l'échéancier.
 
 ## Recette E1 (plein écran)
 
