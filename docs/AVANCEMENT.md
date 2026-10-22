@@ -28,7 +28,7 @@ _Dernière mise à jour : 2026-10-22_
 | ID | Tâche | Statut | Issue | PR | Terminé le |
 |---|---|---|---|---|---|
 | E0-T1 | Réconcilier `main` → `dev` (hors IA) ; deploy strict | ⬜ | [#9](https://github.com/migok/lotispro/issues/9) | | |
-| E0-T2 | Isolation tests backend + fabriques | ⬜ | [#10](https://github.com/migok/lotispro/issues/10) | | |
+| E0-T2 | Isolation tests backend + fabriques | ✅ | [#10](https://github.com/migok/lotispro/issues/10) | | 2026-10-22 |
 | E0-T3 | Tests de caractérisation des transitions | ⬜ | [#11](https://github.com/migok/lotispro/issues/11) | | |
 | E0-T4 | Backend ruff à 0 (dont `F821`) | ⬜ | [#12](https://github.com/migok/lotispro/issues/12) | | |
 | E0-T5 | ESLint à 0 + Vitest | ⬜ | [#13](https://github.com/migok/lotispro/issues/13) | | |
