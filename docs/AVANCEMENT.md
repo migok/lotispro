@@ -31,7 +31,7 @@ _Dernière mise à jour : 2026-10-22_
 | E0-T2 | Isolation tests backend + fabriques | ✅ | [#10](https://github.com/migok/lotispro/issues/10) | | 2026-10-22 |
 | E0-T3 | Tests de caractérisation des transitions | ✅ | [#11](https://github.com/migok/lotispro/issues/11) | | 2026-10-22 |
 | E0-T4 | Backend ruff à 0 (dont `F821`) | ✅ | [#12](https://github.com/migok/lotispro/issues/12) | | 2026-10-22 |
-| E0-T5 | ESLint à 0 + Vitest | ⬜ | [#13](https://github.com/migok/lotispro/issues/13) | | |
+| E0-T5 | ESLint à 0 + Vitest | ✅ | [#13](https://github.com/migok/lotispro/issues/13) | | 2026-10-23 |
 | E0-T6 | CI GitHub Actions + `CLAUDE.md` | ⬜ | [#14](https://github.com/migok/lotispro/issues/14) | | |
 | E1-T1 | Carte flexible en plein écran | ⬜ | [#16](https://github.com/migok/lotispro/issues/16) | | |
 | E1-T2 | Recette multi-navigateurs | ⬜ | [#17](https://github.com/migok/lotispro/issues/17) | | |
