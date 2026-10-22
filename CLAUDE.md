@@ -15,11 +15,11 @@ Full-stack web application for managing real estate projects, lots, reservations
 lot_webapp/
 ├── backend/          # FastAPI REST API (Python 3.13)
 │   ├── app/
-│   │   ├── api/v1/endpoints/   # Route handlers (15 modules)
+│   │   ├── api/v1/endpoints/   # Route handlers (16 modules)
 │   │   ├── core/               # Config, security, logging, middlewares
 │   │   ├── domain/             # Schemas (Pydantic) + interfaces
 │   │   ├── infrastructure/     # DB models, repositories, Supabase storage
-│   │   └── services/           # Business logic (16 services)
+│   │   └── services/           # Business logic (15 services)
 │   ├── alembic/      # DB migrations (0001 → 0016)
 │   └── scripts/      # Utility scripts (seed_users.py)
 ├── .github/workflows/ci.yml   # CI (backend ruff + pytest, frontend eslint + vitest + build)
@@ -208,14 +208,15 @@ par des tests de caractérisation : `backend/app/tests/integration/test_api/test
 | 15 | `block` | tout statut sauf `blocked` et `chez_proprietaire` | `blocked` (motif dans `blocked_reason`) |
 | 16 | `unblock` | `blocked` | `available` (manager uniquement) |
 
-Une transition appelée depuis un autre statut est refusée (HTTP 400, règle `invalid_lot_status` ou
-`lot_not_available`).
+Refus : une transition appelée depuis un autre statut est refusée en HTTP 400 (règle
+`invalid_lot_status` ou `lot_not_available` ; `activate` utilise `lot_must_be_in_creation`). Un lot
+inexistant donne 404, un rôle non autorisé 403.
 
 ---
 
 ## API Endpoints
 
-Base prefix: `/api/v1`
+Base prefix: `/api` (`API_V1_PREFIX` in `app/core/config.py`)
 
 | Module | Prefix | Notes |
 |--------|--------|-------|

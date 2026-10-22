@@ -314,7 +314,7 @@ git commit -m "chore: add Vitest smoke tests and fix all ESLint errors"
 
 - [ ] **Step 1: Écrire `ci.yml`** — déclenché sur `pull_request` vers `dev` et `main` et `push` sur `dev` ; deux jobs :
   - `backend` (ubuntu-latest, Python 3.13, `working-directory: backend`) : `pip install -e ".[dev]"`, `ruff check .`, `ruff format --check .`, `pytest -q`.
-  - `frontend` (Node 20, `working-directory: frontend`) : `npm ci`, `npm run lint`, `npm test`, `npm run build`.
+  - `frontend` (Node 22, `working-directory: frontend`) : `npm ci`, `npm run lint`, `npm test`, `npm run build`.
 
 - [ ] **Step 2: Mettre à jour `CLAUDE.md`** : migrations `0001 → 0016` ; commandes `npm test` ; section « Workflow de statuts » (tableau des 16 transitions, renvoi vers `test_lot_transitions.py`) ; section « Définition de Terminé » copiée du design §6 ; renvoi vers `docs/AVANCEMENT.md`.
 
