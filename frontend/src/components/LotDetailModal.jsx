@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { apiGet, apiPost, apiPatch, apiPut, apiFetch, apiUploadFile } from '../utils/api';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/authHooks';
+import { useToast } from '../contexts/toastHooks';
 import { formatPrice, formatDate } from '../utils/formatters';
 import { CLIENT_TYPES, STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
 

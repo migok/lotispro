@@ -6,7 +6,7 @@ import { apiFetch, apiGet, apiPost, apiPut, apiDelete, apiUploadFile, apiPatch }
 import LotDetailModal from './LotDetailModal';
 import Dashboard from './Dashboard';
 import LotPricingConfigPanel from './LotPricingConfigPanel';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/authHooks';
 
 const STATUS_COLORS = {
   creation:               '#6b7280',
