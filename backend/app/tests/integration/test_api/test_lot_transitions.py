@@ -19,7 +19,7 @@ from typing import Any, get_args
 
 import pytest
 from httpx import AsyncClient, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.schemas.reservation import PAYMENT_TYPE
@@ -421,8 +421,11 @@ class TestSolde:
         )
 
         assert response.status_code == 400
+        assert response.json()["details"][0]["rule"] == "insufficient_permissions"
         await db_session.refresh(lot)
         assert lot.status == "reservation_engagee"
+        reservation = await _reservation_of(db_session, lot)
+        assert reservation.status == "active"
 
 
 class TestNotaire:
@@ -571,9 +574,10 @@ class TestBlock:
         manager: UserModel,
         auth_headers: Headers,
     ) -> None:
-        await post_transition(
+        blocked = await post_transition(
             client, auth_headers(commercial), lot.id, "block", {"reason": "test"}
         )
+        assert blocked.status_code == 200
 
         refused = await post_transition(
             client, auth_headers(commercial), lot.id, "unblock", {}
@@ -651,3 +655,274 @@ class TestInvalidTransitions:
         assert response.status_code == 400
         await db_session.refresh(creation_lot)
         assert creation_lot.status == "creation"
+
+
+def _refund_payload() -> dict[str, Any]:
+    return {"refund_amount": 10000, "refund_date": _today()}
+
+
+def _notaire_payload(notaire_id: int) -> dict[str, Any]:
+    return {"notaire_id": notaire_id, "notary_date": _today()}
+
+
+# (transition, payload or builder(ids), query params, lot status
+# the transition does NOT accept, business rule reported by the API)
+WRONG_STATUS_CASES = [
+    pytest.param(
+        "cancel-option",
+        None,
+        None,
+        "available",
+        "invalid_lot_status",
+        id="cancel-option",
+    ),
+    pytest.param(
+        "extend-option",
+        None,
+        {"additional_days": 5},
+        "available",
+        "invalid_lot_status",
+        id="extend-option",
+    ),
+    pytest.param(
+        "direct-reservation",
+        lambda ids: _direct_reservation_payload(ids["buyer"]),
+        None,
+        "blocked",
+        "lot_not_available",
+        id="direct-reservation",
+    ),
+    pytest.param(
+        "to-reservation",
+        _to_reservation_payload(),
+        None,
+        "available",
+        "invalid_lot_status",
+        id="to-reservation",
+    ),
+    pytest.param(
+        "refund",
+        _refund_payload(),
+        None,
+        "available",
+        "invalid_lot_status",
+        id="refund",
+    ),
+    pytest.param(
+        "direct-engage",
+        lambda ids: _direct_engage_payload(ids["buyer"]),
+        None,
+        "blocked",
+        "lot_not_available",
+        id="direct-engage",
+    ),
+    pytest.param(
+        "engage",
+        {"guarantee_action": "deduct"},
+        None,
+        "available",
+        "invalid_lot_status",
+        id="engage",
+    ),
+    pytest.param(
+        "solde",
+        {"price": 500000},
+        None,
+        "available",
+        "invalid_lot_status",
+        id="solde",
+    ),
+    pytest.param(
+        "set-notaire-intent",
+        {"wants_notaire": True},
+        None,
+        "reservation_engagee",
+        "invalid_lot_status",
+        id="set-notaire-intent",
+    ),
+    pytest.param(
+        "notaire",
+        lambda ids: _notaire_payload(ids["notaire"]),
+        None,
+        "available",
+        "invalid_lot_status",
+        id="notaire",
+    ),
+    pytest.param(
+        "proprietaire",
+        None,
+        None,
+        "available",
+        "invalid_lot_status",
+        id="proprietaire",
+    ),
+    pytest.param(
+        "block",
+        {"reason": "test"},
+        None,
+        "blocked",
+        "invalid_lot_status",
+        id="block-on-blocked",
+    ),
+    pytest.param(
+        "block",
+        {"reason": "test"},
+        None,
+        "chez_proprietaire",
+        "invalid_lot_status",
+        id="block-on-chez-proprietaire",
+    ),
+    pytest.param(
+        "unblock",
+        {},
+        None,
+        "available",
+        "invalid_lot_status",
+        id="unblock-on-available",
+    ),
+]
+
+
+class TestRefusedFromWrongStatus:
+    """Every transition refuses a lot that is not in its source status."""
+
+    @pytest.mark.parametrize(
+        ("name", "payload", "params", "lot_status", "rule"), WRONG_STATUS_CASES
+    )
+    async def test_transition_refused_from_wrong_status(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        buyer: ClientModel,
+        auth_headers: Headers,
+        name: str,
+        payload: dict | Callable[[dict[str, int]], dict] | None,
+        params: dict | None,
+        lot_status: str,
+        rule: str,
+    ) -> None:
+        # The manager is used so that only the status can explain the refusal.
+        project = await make_project(db_session, manager)
+        wrong_lot = await make_lot(db_session, project, status=lot_status)
+        notaire = await make_notaire(db_session)
+
+        response = await post_transition(
+            client,
+            auth_headers(manager),
+            wrong_lot.id,
+            name,
+            payload({"buyer": buyer.id, "notaire": notaire.id})
+            if callable(payload)
+            else payload,
+            params,
+        )
+
+        assert response.status_code == 400
+        assert response.json()["details"][0]["rule"] == rule
+        await db_session.refresh(wrong_lot)
+        assert wrong_lot.status == lot_status
+        reservations = (
+            await db_session.execute(select(func.count()).select_from(ReservationModel))
+        ).scalar_one()
+        assert reservations == 0
+
+    async def test_update_notaire_info_refused_from_wrong_status(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        lot: LotModel,
+        manager: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        """``PUT /transitions/notaire`` only works on a ``chez_notaire`` lot."""
+        notaire = await make_notaire(db_session)
+
+        response = await client.put(
+            f"/api/lots/{lot.id}/transitions/notaire",
+            headers=auth_headers(manager),
+            json=_notaire_payload(notaire.id),
+        )
+
+        assert response.status_code == 400
+        assert response.json()["details"][0]["rule"] == "invalid_lot_status"
+        await db_session.refresh(lot)
+        assert lot.status == "available"
+
+
+class TestRefusedForOtherCommercial:
+    """Transitions guarded by an owner check refuse another commercial."""
+
+    @pytest.mark.parametrize(
+        ("setup", "name", "payload", "params", "lot_status"),
+        [
+            pytest.param(
+                "start-option",
+                "cancel-option",
+                None,
+                None,
+                "option",
+                id="cancel-option",
+            ),
+            pytest.param(
+                "start-option",
+                "to-reservation",
+                _to_reservation_payload(),
+                None,
+                "option",
+                id="to-reservation",
+            ),
+            pytest.param(
+                "direct-reservation",
+                "refund",
+                _refund_payload(),
+                None,
+                "reservation_a_finaliser",
+                id="refund",
+            ),
+            pytest.param(
+                "direct-reservation",
+                "engage",
+                {"guarantee_action": "deduct"},
+                None,
+                "reservation_a_finaliser",
+                id="engage",
+            ),
+        ],
+    )
+    async def test_transition_refused_for_other_commercial(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        lot: LotModel,
+        buyer: ClientModel,
+        commercial: UserModel,
+        other_commercial: UserModel,
+        auth_headers: Headers,
+        setup: str,
+        name: str,
+        payload: dict | None,
+        params: dict | None,
+        lot_status: str,
+    ) -> None:
+        setup_payload = (
+            _option_payload(buyer.id)
+            if setup == "start-option"
+            else _direct_reservation_payload(buyer.id)
+        )
+        prepared = await post_transition(
+            client, auth_headers(commercial), lot.id, setup, setup_payload
+        )
+        assert prepared.status_code == 200
+
+        response = await post_transition(
+            client, auth_headers(other_commercial), lot.id, name, payload, params
+        )
+
+        assert response.status_code == 400
+        assert response.json()["details"][0]["rule"] == "insufficient_permissions"
+        await db_session.refresh(lot)
+        assert lot.status == lot_status
+        reservation = await _reservation_of(db_session, lot)
+        assert reservation.status == "active"
+        assert reservation.reserved_by_user_id == commercial.id
