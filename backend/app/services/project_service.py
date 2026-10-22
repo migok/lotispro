@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
+from fastapi import UploadFile
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -769,16 +770,6 @@ class ProjectService:
 
         project_id = project.id
 
-        # Get lots associated with this user (via reservations or sales)
-        user_reserved_lots = select(ReservationModel.lot_id).where(
-            ReservationModel.project_id == project_id,
-            ReservationModel.reserved_by_user_id == filter_user_id,
-        )
-        user_sold_lots = select(SaleModel.lot_id).where(
-            SaleModel.project_id == project_id,
-            SaleModel.sold_by_user_id == filter_user_id,
-        )
-
         # Count user's reservations (active)
         reserved_count_result = await self.session.execute(
             select(func.count()).where(
@@ -1423,7 +1414,7 @@ class ProjectService:
         project_id: int,
         user_id: int,
         user_role: str,
-        file: "UploadFile",
+        file: UploadFile,
     ) -> dict:
         """Upload GeoJSON file to Supabase Storage and create/update lots.
 
@@ -1443,7 +1434,6 @@ class ProjectService:
             StorageError: If file upload to Supabase Storage fails
         """
         import json
-        from fastapi import UploadFile
 
         from app.infrastructure.storage.supabase_storage import get_storage_client
 

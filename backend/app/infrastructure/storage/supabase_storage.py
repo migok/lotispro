@@ -81,7 +81,7 @@ class SupabaseStorageClient:
             self.ensure_bucket_exists()
 
             # Upload file
-            response = self.client.storage.from_(self.bucket_name).upload(
+            self.client.storage.from_(self.bucket_name).upload(
                 path=file_path,
                 file=file_content,
                 file_options={"content-type": content_type, "upsert": "true"},
