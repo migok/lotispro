@@ -1,6 +1,6 @@
 """Reservation repository implementation."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import and_, select
 
@@ -67,7 +67,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
         Note: In the new workflow, use LotRepository.get_expired_options() /
         get_expired_finalisations() instead. These return alert data without mutations.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         result = await self.session.execute(
             select(ReservationModel).where(

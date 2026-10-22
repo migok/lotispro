@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Query, status
 
-from app.api.dependencies import ClientServiceDep, CurrentUser, OptionalUser
+from app.api.dependencies import ClientServiceDep, CurrentUser
 from app.domain.schemas.client import (
     ClientCreate,
     ClientDetails,
@@ -22,7 +22,9 @@ router = APIRouter()
 async def list_clients(
     current_user: CurrentUser,
     client_service: ClientServiceDep,
-    search: str | None = Query(default=None, description="Search by name, phone, or CIN"),
+    search: str | None = Query(
+        default=None, description="Search by name, phone, or CIN"
+    ),
 ) -> list[ClientResponse]:
     """List all clients with optional search."""
     return await client_service.get_clients(search=search)

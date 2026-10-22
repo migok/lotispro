@@ -1,10 +1,10 @@
 """Lot repository implementation."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, func, select, update
 
-from app.domain.schemas.lot import ACTIVE_LOT_STATUSES, LotFilter
+from app.domain.schemas.lot import LotFilter
 from app.infrastructure.database.models import LotModel
 from app.infrastructure.database.repositories.base import BaseRepository
 
@@ -173,7 +173,7 @@ class LotRepository(BaseRepository[LotModel]):
             UserModel,
         )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Join via current_reservation_id — lot status is the source of truth
         query = (
@@ -208,7 +208,7 @@ class LotRepository(BaseRepository[LotModel]):
                 lot_updated = lot.updated_at
                 # Handle timezone-naive datetimes
                 if lot_updated.tzinfo is None:
-                    lot_updated = lot_updated.replace(tzinfo=timezone.utc)
+                    lot_updated = lot_updated.replace(tzinfo=UTC)
                 days_in_status = (now - lot_updated).days
             else:
                 days_in_status = 0
@@ -241,13 +241,17 @@ class LotRepository(BaseRepository[LotModel]):
                         "deposit": reservation.deposit,
                         "reservation_status": reservation.status,
                         "reserved_by_user_id": reservation.reserved_by_user_id,
-                        "reserved_by_name": reserved_by_user.name if reserved_by_user else None,
+                        "reserved_by_name": reserved_by_user.name
+                        if reserved_by_user
+                        else None,
                         # New workflow fields
                         "guarantee_amount": reservation.guarantee_amount,
                         "payment_type": reservation.payment_type,
                         "notaire_id": reservation.notaire_id,
                         "notary_name": (
-                            f"{notaire.prenom} {notaire.nom}" if notaire else reservation.notary_name
+                            f"{notaire.prenom} {notaire.nom}"
+                            if notaire
+                            else reservation.notary_name
                         ),
                         "notary_date": reservation.notary_date,
                         "closed_at": reservation.closed_at,
@@ -306,11 +310,13 @@ class LotRepository(BaseRepository[LotModel]):
         """
         from app.infrastructure.database.models import ClientModel, ReservationModel
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         query = (
             select(LotModel, ReservationModel, ClientModel)
-            .join(ReservationModel, ReservationModel.id == LotModel.current_reservation_id)
+            .join(
+                ReservationModel, ReservationModel.id == LotModel.current_reservation_id
+            )
             .join(ClientModel, ClientModel.id == ReservationModel.client_id)
             .where(
                 and_(
@@ -326,7 +332,7 @@ class LotRepository(BaseRepository[LotModel]):
         for lot, reservation, client in result.all():
             exp_date = reservation.expiration_date
             if exp_date.tzinfo is None:
-                exp_date = exp_date.replace(tzinfo=timezone.utc)
+                exp_date = exp_date.replace(tzinfo=UTC)
             alerts.append(
                 {
                     "lot_id": lot.id,
@@ -349,11 +355,13 @@ class LotRepository(BaseRepository[LotModel]):
         """
         from app.infrastructure.database.models import ClientModel, ReservationModel
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         query = (
             select(LotModel, ReservationModel, ClientModel)
-            .join(ReservationModel, ReservationModel.id == LotModel.current_reservation_id)
+            .join(
+                ReservationModel, ReservationModel.id == LotModel.current_reservation_id
+            )
             .join(ClientModel, ClientModel.id == ReservationModel.client_id)
             .where(
                 and_(
@@ -369,7 +377,7 @@ class LotRepository(BaseRepository[LotModel]):
         for lot, reservation, client in result.all():
             exp_date = reservation.expiration_date
             if exp_date.tzinfo is None:
-                exp_date = exp_date.replace(tzinfo=timezone.utc)
+                exp_date = exp_date.replace(tzinfo=UTC)
             alerts.append(
                 {
                     "lot_id": lot.id,
@@ -391,14 +399,20 @@ class LotRepository(BaseRepository[LotModel]):
 
         Returns alert data only — does NOT change any status.
         """
-        from app.infrastructure.database.models import ClientModel, ReservationModel, UserModel
+        from app.infrastructure.database.models import (
+            ClientModel,
+            ReservationModel,
+            UserModel,
+        )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         threshold_date = now + timedelta(days=days_threshold)
 
         query = (
             select(LotModel, ReservationModel, ClientModel, UserModel)
-            .join(ReservationModel, ReservationModel.id == LotModel.current_reservation_id)
+            .join(
+                ReservationModel, ReservationModel.id == LotModel.current_reservation_id
+            )
             .join(ClientModel, ClientModel.id == ReservationModel.client_id)
             .outerjoin(UserModel, UserModel.id == ReservationModel.reserved_by_user_id)
             .where(
@@ -419,7 +433,7 @@ class LotRepository(BaseRepository[LotModel]):
                 days_remaining = 9999
             else:
                 if exp_date.tzinfo is None:
-                    exp_date = exp_date.replace(tzinfo=timezone.utc)
+                    exp_date = exp_date.replace(tzinfo=UTC)
                 days_remaining = (exp_date - now).days
 
             at_risk.append(
@@ -452,13 +466,20 @@ class LotRepository(BaseRepository[LotModel]):
         Returns every active option/RAF regardless of expiration date,
         sorted by urgency: expired first (most overdue), then ascending expiration.
         """
-        from app.infrastructure.database.models import ClientModel, ProjectModel, ReservationModel, UserModel
+        from app.infrastructure.database.models import (
+            ClientModel,
+            ProjectModel,
+            ReservationModel,
+            UserModel,
+        )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         query = (
             select(LotModel, ReservationModel, ClientModel, UserModel, ProjectModel)
-            .join(ReservationModel, ReservationModel.id == LotModel.current_reservation_id)
+            .join(
+                ReservationModel, ReservationModel.id == LotModel.current_reservation_id
+            )
             .join(ClientModel, ClientModel.id == ReservationModel.client_id)
             .outerjoin(UserModel, UserModel.id == ReservationModel.reserved_by_user_id)
             .join(ProjectModel, ProjectModel.id == LotModel.project_id)
@@ -481,7 +502,7 @@ class LotRepository(BaseRepository[LotModel]):
                 days_remaining = 9999.0
             else:
                 if exp_date.tzinfo is None:
-                    exp_date = exp_date.replace(tzinfo=timezone.utc)
+                    exp_date = exp_date.replace(tzinfo=UTC)
                 days_remaining = (exp_date - now).total_seconds() / 86400
 
             rows.append(

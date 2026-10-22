@@ -17,7 +17,9 @@ router = APIRouter()
 async def list_notaires(
     current_user: CurrentUser,
     notaire_service: NotaireServiceDep,
-    search: str | None = Query(default=None, description="Recherche par nom, prénom ou téléphone"),
+    search: str | None = Query(
+        default=None, description="Recherche par nom, prénom ou téléphone"
+    ),
 ) -> list[NotaireResponse]:
     """List notaires with optional search."""
     return await notaire_service.get_notaires(search=search)

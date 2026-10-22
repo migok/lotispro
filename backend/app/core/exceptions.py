@@ -56,7 +56,12 @@ class AlreadyExistsError(AppException):
         super().__init__(
             message=message,
             code="ALREADY_EXISTS",
-            details={"resource": resource, "field": field, "value": value, **(details or {})},
+            details={
+                "resource": resource,
+                "field": field,
+                "value": value,
+                **(details or {}),
+            },
         )
         self.resource = resource
         self.field = field

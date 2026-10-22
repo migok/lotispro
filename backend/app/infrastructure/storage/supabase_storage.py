@@ -1,7 +1,6 @@
 """Supabase Storage client for file management."""
 
 import logging
-from pathlib import Path
 from typing import BinaryIO
 
 from supabase import Client, create_client
@@ -30,7 +29,9 @@ class SupabaseStorageClient:
             settings.SUPABASE_SECRET_KEY,
         )
         self.bucket_name = settings.SUPABASE_STORAGE_BUCKET
-        logger.info(f"Initialized Supabase Storage client for bucket: {self.bucket_name}")
+        logger.info(
+            f"Initialized Supabase Storage client for bucket: {self.bucket_name}"
+        )
 
     def ensure_bucket_exists(self) -> None:
         """Create the storage bucket if it doesn't exist.
@@ -47,7 +48,7 @@ class SupabaseStorageClient:
                 # Create bucket with public access
                 self.client.storage.create_bucket(
                     self.bucket_name,
-                    options={"public": False}  # Private bucket for security
+                    options={"public": False},  # Private bucket for security
                 )
                 logger.info(f"Created storage bucket: {self.bucket_name}")
             else:
@@ -201,8 +202,11 @@ class SupabaseStorageClient:
                         images_bucket,
                         options={"public": True},
                     )
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("update_bucket skipped (not supported by this Supabase version)", exc=str(exc))
+                except Exception as exc:
+                    logger.debug(
+                        "update_bucket skipped (not supported by this Supabase version)",
+                        exc=str(exc),
+                    )
 
             self.client.storage.from_(images_bucket).upload(
                 path=file_path,
@@ -232,7 +236,9 @@ class SupabaseStorageClient:
             StorageError: If deletion fails
         """
         try:
-            self.client.storage.from_(settings.SUPABASE_IMAGES_BUCKET).remove([file_path])
+            self.client.storage.from_(settings.SUPABASE_IMAGES_BUCKET).remove(
+                [file_path]
+            )
             logger.info(f"Deleted image {file_path}")
         except Exception as e:
             logger.error(f"Failed to delete image {file_path}: {e}")

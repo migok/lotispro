@@ -1,8 +1,8 @@
 """Repository for lot pricing configurations."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import and_, distinct, func, select
+from sqlalchemy import and_, func, select
 
 from app.infrastructure.database.models import LotModel, LotPricingConfigModel
 from app.infrastructure.database.repositories.base import BaseRepository
@@ -59,7 +59,7 @@ class LotPricingConfigRepository(BaseRepository[LotPricingConfigModel]):
         if existing:
             existing.prix_m2_acte = prix_m2_acte
             existing.prix_m2_catalogue = prix_m2_catalogue
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             self.session.add(existing)
             await self.session.flush()
             await self.session.refresh(existing)
@@ -75,9 +75,7 @@ class LotPricingConfigRepository(BaseRepository[LotPricingConfigModel]):
             created_by=user_id,
         )
 
-    async def get_distinct_combinations(
-        self, project_id: int
-    ) -> list[dict]:
+    async def get_distinct_combinations(self, project_id: int) -> list[dict]:
         """Return all distinct categorical combinations present in lots of the project."""
         result = await self.session.execute(
             select(

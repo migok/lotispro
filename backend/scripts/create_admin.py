@@ -48,7 +48,9 @@ async def create_admin_user() -> None:
         existing_user = result.scalar_one_or_none()
 
         if existing_user:
-            print(f"[INFO] User {admin_email} already exists (role: {existing_user.role}). Skipping.")
+            print(
+                f"[INFO] User {admin_email} already exists (role: {existing_user.role}). Skipping."
+            )
             return
 
         # Create new admin user

@@ -12,7 +12,11 @@ from app.domain.schemas.lot_pricing import (
     LotPricingConfigsListResponse,
 )
 from app.infrastructure.database.models import LotModel, LotPricingConfigModel
-from app.infrastructure.database.repositories import LotPricingConfigRepository, LotRepository, ProjectRepository
+from app.infrastructure.database.repositories import (
+    LotPricingConfigRepository,
+    LotRepository,
+    ProjectRepository,
+)
 
 logger = get_logger(__name__)
 
@@ -58,6 +62,7 @@ class LotPricingService:
             return
         # Commercials must be assigned to the project
         from app.infrastructure.database.models import AssignmentModel
+
         result = await self.session.execute(
             select(AssignmentModel).where(
                 and_(
@@ -100,7 +105,12 @@ class LotPricingService:
                 lot_count=combo["lot_count"],
             )
             for combo in all_combos
-            if (combo["zone"], combo["type_lot"], combo["type_maison"], combo["emplacement"])
+            if (
+                combo["zone"],
+                combo["type_lot"],
+                combo["type_maison"],
+                combo["emplacement"],
+            )
             not in configured_keys
         ]
 
@@ -178,7 +188,9 @@ class LotPricingService:
         )
         lots = lots_result.scalars().all()
         for lot in lots:
-            new_price = round(prix_m2_catalogue * lot.surface, 2) if lot.surface else None
+            new_price = (
+                round(prix_m2_catalogue * lot.surface, 2) if lot.surface else None
+            )
             new_values: dict = {
                 "price": new_price,
                 "price_per_sqm": prix_m2_catalogue,
@@ -193,9 +205,7 @@ class LotPricingService:
                     project_id=project_id,
                 )
             await self.session.execute(
-                update(LotModel)
-                .where(LotModel.id == lot.id)
-                .values(**new_values)
+                update(LotModel).where(LotModel.id == lot.id).values(**new_values)
             )
 
     async def apply_configs_to_existing_lots(
@@ -230,7 +240,11 @@ class LotPricingService:
             )
             lots = lots_result.scalars().all()
             for lot in lots:
-                new_price = round(cfg.prix_m2_catalogue * lot.surface, 2) if lot.surface else None
+                new_price = (
+                    round(cfg.prix_m2_catalogue * lot.surface, 2)
+                    if lot.surface
+                    else None
+                )
                 new_values: dict = {
                     "price": new_price,
                     "price_per_sqm": cfg.prix_m2_catalogue,
@@ -281,6 +295,10 @@ class LotPricingService:
         return {
             "prix_m2_acte": config.prix_m2_acte,
             "prix_m2_catalogue": config.prix_m2_catalogue,
-            "sale_price_computed": round(config.prix_m2_acte * lot.surface, 2) if lot.surface else None,
-            "catalogue_price_computed": round(config.prix_m2_catalogue * lot.surface, 2) if lot.surface else None,
+            "sale_price_computed": round(config.prix_m2_acte * lot.surface, 2)
+            if lot.surface
+            else None,
+            "catalogue_price_computed": round(config.prix_m2_catalogue * lot.surface, 2)
+            if lot.surface
+            else None,
         }

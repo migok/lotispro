@@ -2,7 +2,12 @@
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from app.api.dependencies import CertificateServiceDep, CurrentUser, PaymentServiceDep, ReservationServiceDep
+from app.api.dependencies import (
+    CertificateServiceDep,
+    CurrentUser,
+    PaymentServiceDep,
+    ReservationServiceDep,
+)
 from app.domain.schemas.reservation import (
     MarkPromotionReceivedData,
     ReservationCreate,
@@ -160,7 +165,10 @@ async def check_expirations(
 ) -> dict:
     """Deprecated: returns alert count only, no mutations."""
     count = await reservation_service.check_expirations()
-    return {"processed": count, "message": f"{count} lots with expired dates (no status changes)"}
+    return {
+        "processed": count,
+        "message": f"{count} lots with expired dates (no status changes)",
+    }
 
 
 @router.get(
@@ -216,7 +224,9 @@ async def download_reservation_certificate(
 
     # Require promotion to be received when a promotion amount was applied.
     # If the promotion has not been collected yet, only the receipt is available.
-    if (details.get("promotion_amount") or 0) > 0 and not details.get("promotion_received"):
+    if (details.get("promotion_amount") or 0) > 0 and not details.get(
+        "promotion_received"
+    ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
@@ -300,7 +310,9 @@ async def send_reservation_certificate_email(
     except Exception:
         pass  # no schedule — fall back to reservation values
 
-    if (details.get("promotion_amount") or 0) > 0 and not details.get("promotion_received"):
+    if (details.get("promotion_amount") or 0) > 0 and not details.get(
+        "promotion_received"
+    ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
@@ -341,7 +353,10 @@ async def send_reservation_certificate_email(
             detail="Impossible d'envoyer l'email. Vérifiez la configuration RESEND_API_KEY.",
         )
 
-    return {"message": f"Acte de réservation envoyé à {client_email}", "email": client_email}
+    return {
+        "message": f"Acte de réservation envoyé à {client_email}",
+        "email": client_email,
+    }
 
 
 @router.get(
@@ -362,7 +377,6 @@ async def download_payment_receipt(
     payment_service: PaymentServiceDep,
 ) -> Response:
     """Generate PDF Reçu de Paiement for a reservation (first deposit receipt)."""
-    from datetime import datetime, timezone
 
     details = await reservation_service.get_reservation_details(reservation_id)
     if not details:
@@ -395,7 +409,11 @@ async def download_payment_receipt(
                 )
             deposit_for_receipt = first.amount
             if first.paid_date:
-                deposit_date_for_receipt = first.paid_date.date() if hasattr(first.paid_date, "date") else first.paid_date
+                deposit_date_for_receipt = (
+                    first.paid_date.date()
+                    if hasattr(first.paid_date, "date")
+                    else first.paid_date
+                )
     except HTTPException:
         raise
     except Exception:

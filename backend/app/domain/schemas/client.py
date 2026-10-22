@@ -14,13 +14,19 @@ class ClientCreate(BaseSchema):
     name: str = Field(min_length=1, max_length=200, description="Client full name")
     phone: str | None = Field(default=None, max_length=20, description="Phone number")
     email: EmailStr | None = Field(default=None, description="Email address")
-    cin: str | None = Field(default=None, max_length=20, description="National ID (CIN)")
-    address: str | None = Field(default=None, max_length=500, description="Client address")
+    cin: str | None = Field(
+        default=None, max_length=20, description="National ID (CIN)"
+    )
+    address: str | None = Field(
+        default=None, max_length=500, description="Client address"
+    )
     client_type: Literal["proprietaire", "revendeur", "investisseur", "autre"] = Field(
         default="autre",
         description="Client type",
     )
-    notes: str | None = Field(default=None, max_length=2000, description="Additional notes")
+    notes: str | None = Field(
+        default=None, max_length=2000, description="Additional notes"
+    )
 
 
 class ClientUpdate(BaseSchema):
@@ -31,7 +37,9 @@ class ClientUpdate(BaseSchema):
     email: EmailStr | None = None
     cin: str | None = Field(default=None, max_length=20)
     address: str | None = Field(default=None, max_length=500)
-    client_type: Literal["proprietaire", "revendeur", "investisseur", "autre"] | None = None
+    client_type: (
+        Literal["proprietaire", "revendeur", "investisseur", "autre"] | None
+    ) = None
     notes: str | None = Field(default=None, max_length=2000)
 
 

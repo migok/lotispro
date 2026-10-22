@@ -27,7 +27,10 @@ class DashboardCounts(BaseSchema):
         description="Active lots in workflow (option + raf + engagee + soldee + notaire + proprietaire)",
     )
     # Legacy fields kept for backward compatibility
-    reserved: int = Field(default=0, description="Legacy: option + reservation_a_finaliser + reservation_engagee")
+    reserved: int = Field(
+        default=0,
+        description="Legacy: option + reservation_a_finaliser + reservation_engagee",
+    )
     sold: int = Field(default=0, description="Legacy: chez_proprietaire")
 
 
@@ -37,7 +40,9 @@ class DashboardSurfaces(BaseSchema):
     total: float = Field(default=0, description="Total surface in m²")
     available: float = Field(default=0, description="Available surface in m²")
     en_cours: float = Field(default=0, description="Active workflow surface in m²")
-    chez_proprietaire: float = Field(default=0, description="Completed sales surface in m²")
+    chez_proprietaire: float = Field(
+        default=0, description="Completed sales surface in m²"
+    )
     blocked: float = Field(default=0, description="Blocked surface in m²")
     # Legacy
     reserved: float = Field(default=0, description="Legacy reserved surface in m²")
@@ -76,10 +81,16 @@ class DashboardStats(BaseSchema):
     )
     ca_realise: float = Field(description="Revenue realized from sales")
     ca_potentiel: float = Field(description="Potential revenue from reserved lots")
-    ca_total: float = Field(default=0, description="Total project value (sum of all lot prices)")
+    ca_total: float = Field(
+        default=0, description="Total project value (sum of all lot prices)"
+    )
     taux_vente: float = Field(description="Sales rate percentage")
-    taux_transformation: float = Field(description="Reservation to sale conversion rate")
-    lots_liberes: int = Field(default=0, description="Count of released/expired reservations (lots freed up)")
+    taux_transformation: float = Field(
+        description="Reservation to sale conversion rate"
+    )
+    lots_liberes: int = Field(
+        default=0, description="Count of released/expired reservations (lots freed up)"
+    )
     by_type_lot: dict[str, CategoryStats] = Field(
         default_factory=dict,
         description="Statistics grouped by lot type",

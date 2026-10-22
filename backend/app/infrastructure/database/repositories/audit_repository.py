@@ -44,7 +44,9 @@ class AuditLogRepository(BaseRepository[AuditLogModel]):
         if action:
             query = query.where(AuditLogModel.action == action)
 
-        query = query.order_by(AuditLogModel.created_at.desc()).offset(offset).limit(limit)
+        query = (
+            query.order_by(AuditLogModel.created_at.desc()).offset(offset).limit(limit)
+        )
 
         result = await self.session.execute(query)
         return list(result.scalars().all())

@@ -14,6 +14,8 @@ from app.core.exceptions import (
     DatabaseError,
     NotFoundError,
     RateLimitError,
+)
+from app.core.exceptions import (
     ValidationError as AppValidationError,
 )
 from app.core.logging import get_logger, get_request_id
@@ -167,9 +169,7 @@ async def business_rule_error_handler(
     )
 
 
-async def database_error_handler(
-    request: Request, exc: DatabaseError
-) -> JSONResponse:
+async def database_error_handler(request: Request, exc: DatabaseError) -> JSONResponse:
     """Handle database errors."""
     logger.error(
         "Database error",

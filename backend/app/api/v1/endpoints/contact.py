@@ -37,7 +37,9 @@ class ContactRequest(BaseModel):
 async def submit_contact(payload: ContactRequest) -> None:
     """Send contact form submission to the team via Resend."""
     if not settings.RESEND_API_KEY:
-        logger.warning("RESEND_API_KEY not configured — contact form dropped", email=payload.email)
+        logger.warning(
+            "RESEND_API_KEY not configured — contact form dropped", email=payload.email
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Le service d'envoi d'email n'est pas configuré.",
@@ -94,13 +96,15 @@ async def submit_contact(payload: ContactRequest) -> None:
     """
 
     try:
-        resend.Emails.send({
-            "from": settings.EMAIL_FROM,
-            "to": [settings.CONTACT_EMAIL],
-            "reply_to": payload.email,
-            "subject": f"[LotisPro] Demande de démo — {payload.company} ({payload.name})",
-            "html": html_body,
-        })
+        resend.Emails.send(
+            {
+                "from": settings.EMAIL_FROM,
+                "to": [settings.CONTACT_EMAIL],
+                "reply_to": payload.email,
+                "subject": f"[LotisPro] Demande de démo — {payload.company} ({payload.name})",
+                "html": html_body,
+            }
+        )
         logger.info(
             "Contact form submitted",
             company=payload.company,
@@ -108,7 +112,9 @@ async def submit_contact(payload: ContactRequest) -> None:
             scale=payload.scale,
         )
     except Exception as exc:
-        logger.error("Failed to send contact email", error=str(exc), email=payload.email)
+        logger.error(
+            "Failed to send contact email", error=str(exc), email=payload.email
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="L'envoi de l'email a échoué. Veuillez réessayer ou nous contacter directement.",

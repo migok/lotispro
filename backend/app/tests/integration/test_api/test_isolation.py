@@ -12,7 +12,7 @@ from app.tests.factories import make_user
 @pytest.mark.parametrize("run", [1, 2])
 async def test_isolation_users_table_empty_at_start(
     db_session: AsyncSession,
-    run: int,  # noqa: ARG001
+    run: int,
 ) -> None:
     """Each test starts on a fresh database and may reuse the same email."""
     count = (

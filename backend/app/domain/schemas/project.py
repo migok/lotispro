@@ -98,18 +98,32 @@ class ProjectKPIs(BaseSchema):
     prix_moyen_m2: float = Field(default=0, description="Average price per m²")
     # Rates
     taux_vente: float = Field(description="Sales rate percentage")
-    taux_reservation: float = Field(default=0, description="Reservation rate percentage")
-    taux_transformation: float = Field(description="Reservation to sale conversion rate")
-    taux_conversion: float = Field(default=0, description="Alias for taux_transformation")
+    taux_reservation: float = Field(
+        default=0, description="Reservation rate percentage"
+    )
+    taux_transformation: float = Field(
+        description="Reservation to sale conversion rate"
+    )
+    taux_conversion: float = Field(
+        default=0, description="Alias for taux_transformation"
+    )
     # Lots libérés
-    lots_liberes: int = Field(default=0, description="Count of released/expired reservations (lots freed up)")
+    lots_liberes: int = Field(
+        default=0, description="Count of released/expired reservations (lots freed up)"
+    )
     # Deposits
-    total_deposits: float = Field(default=0, description="Total deposits from active reservations")
+    total_deposits: float = Field(
+        default=0, description="Total deposits from active reservations"
+    )
     # Monthly stats
     ventes_mois: int = Field(default=0, description="Sales count this month")
     ca_mois: float = Field(default=0, description="Revenue this month")
-    tendance_ventes: float = Field(default=0, description="Sales trend vs previous month (%)")
-    tendance_ca: float = Field(default=0, description="Revenue trend vs previous month (%)")
+    tendance_ventes: float = Field(
+        default=0, description="Sales trend vs previous month (%)"
+    )
+    tendance_ca: float = Field(
+        default=0, description="Revenue trend vs previous month (%)"
+    )
 
 
 class ProjectPerformance(BaseSchema):

@@ -222,7 +222,9 @@ async def get_options_tracking(
     current_user: CurrentUser,
     dashboard_service: DashboardServiceDep,
     project_id: int | None = Query(default=None, description="Filter by project"),
-    user_id: int | None = Query(default=None, description="Filter by commercial (manager only)"),
+    user_id: int | None = Query(
+        default=None, description="Filter by commercial (manager only)"
+    ),
 ) -> list[dict]:
     """Get all active options sorted by urgency.
 

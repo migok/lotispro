@@ -4,7 +4,7 @@ Provides secure authentication primitives for the application.
 """
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt
@@ -91,10 +91,9 @@ def create_access_token(
     Returns:
         Encoded JWT token string
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + (
-        expires_delta
-        or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     payload = {
@@ -159,7 +158,7 @@ def decode_access_token(token: str) -> TokenData:
 
         return TokenData(
             user_id=int(user_id_str),
-            expires_at=datetime.fromtimestamp(exp, tz=timezone.utc),
+            expires_at=datetime.fromtimestamp(exp, tz=UTC),
         )
 
     except jwt.ExpiredSignatureError:

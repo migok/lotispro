@@ -19,7 +19,10 @@ from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
 from app.domain.schemas.document import LotDocumentResponse
 from app.infrastructure.database.models import LotDocumentModel
-from app.infrastructure.database.repositories import LotDocumentRepository, LotRepository
+from app.infrastructure.database.repositories import (
+    LotDocumentRepository,
+    LotRepository,
+)
 from app.infrastructure.storage.supabase_storage import get_storage_client
 
 logger = get_logger(__name__)
@@ -191,7 +194,7 @@ class DocumentService:
                 bucket=settings.SUPABASE_DOCUMENTS_BUCKET,
                 path=doc.file_path,
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             # File missing in storage should not block DB cleanup
             logger.warning(
                 "Supabase file deletion failed — proceeding with DB cleanup",

@@ -6,7 +6,9 @@ from app.core.exceptions import NotFoundError
 from app.core.logging import get_logger
 from app.domain.schemas.notaire import NotaireCreate, NotaireResponse, NotaireUpdate
 from app.infrastructure.database.models import NotaireModel
-from app.infrastructure.database.repositories.notaire_repository import NotaireRepository
+from app.infrastructure.database.repositories.notaire_repository import (
+    NotaireRepository,
+)
 
 logger = get_logger(__name__)
 
@@ -61,7 +63,9 @@ class NotaireService:
         logger.info("Notaire created", notaire_id=n.id, nom=n.nom, prenom=n.prenom)
         return _to_response(n)
 
-    async def update_notaire(self, notaire_id: int, data: NotaireUpdate) -> NotaireResponse:
+    async def update_notaire(
+        self, notaire_id: int, data: NotaireUpdate
+    ) -> NotaireResponse:
         """Update a notaire.
 
         Raises:

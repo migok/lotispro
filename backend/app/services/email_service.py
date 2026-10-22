@@ -11,7 +11,9 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _build_invitation_html(first_name: str, last_name: str, role: str, set_password_url: str) -> str:
+def _build_invitation_html(
+    first_name: str, last_name: str, role: str, set_password_url: str
+) -> str:
     """Build the HTML body for a staff invitation email."""
     role_label = "Manager" if role == "manager" else "Commercial"
     full_name = f"{first_name} {last_name}"
@@ -459,7 +461,9 @@ class EmailService:
             )
             return False
 
-        set_password_url = f"{frontend_url.rstrip('/')}/set-password?token={invitation_token}"
+        set_password_url = (
+            f"{frontend_url.rstrip('/')}/set-password?token={invitation_token}"
+        )
         html = _build_invitation_html(
             first_name=first_name,
             last_name=last_name,
@@ -499,7 +503,9 @@ class EmailService:
             )
             return False
 
-        reset_url = f"{frontend_url.rstrip('/')}/set-password?token={reset_token}&mode=reset"
+        reset_url = (
+            f"{frontend_url.rstrip('/')}/set-password?token={reset_token}&mode=reset"
+        )
         html = _build_password_reset_html(reset_url=reset_url)
 
         params: resend.Emails.SendParams = {
