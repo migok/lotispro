@@ -693,7 +693,7 @@ export default function GlobalDashboard() {
       if (notaireRes.status === "fulfilled") {
         setNotaireAlerts(Array.isArray(notaireRes.value) ? notaireRes.value : []);
       }
-    } catch (err) {
+    } catch {
       showToast("Erreur lors du chargement du tableau de bord", "error");
     } finally {
       setLoading(false);

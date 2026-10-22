@@ -249,6 +249,7 @@ export default function CommercialsPage() {
       loadProjects();
       loadMonthlyData();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loaders are recreated every render; fetch once when the token becomes available
   }, [token]);
 
   useEffect(() => {

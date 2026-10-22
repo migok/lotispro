@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { apiFetch, apiGet, apiPost, apiPut, apiDelete, apiUploadFile, apiPatch } from '../utils/api';
+import { apiFetch, apiGet, apiPost, apiPut, apiUploadFile, apiPatch } from '../utils/api';
 import LotDetailModal from './LotDetailModal';
 import Dashboard from './Dashboard';
 import LotPricingConfigPanel from './LotPricingConfigPanel';
@@ -94,6 +94,7 @@ export default function ProjectDetailPage() {
 
   // Map state
   const mapRef = useRef(null);
+  const [mapInstance, setMapInstance] = useState(null); // mirrors mapRef.current so effects can react to map creation
   const geoRef = useRef(null);
   const labelsLayerRef = useRef(null);
   const mapContainerRef = useRef(null);
@@ -125,6 +126,7 @@ export default function ProjectDetailPage() {
   // Load project data
   useEffect(() => {
     loadProject();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadProject is recreated every render; reload only when projectId changes
   }, [projectId]);
 
   // Initialize map when carte tab is active
@@ -142,6 +144,7 @@ export default function ProjectDetailPage() {
         // Première initialisation de la carte
         const map = L.map(mapContainerRef.current, { minZoom: 2, maxZoom: 22 });
         mapRef.current = map;
+        setMapInstance(map);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           maxZoom: 22,
@@ -170,6 +173,7 @@ export default function ProjectDetailPage() {
 
     // Petit délai pour laisser le DOM se mettre à jour
     setTimeout(initializeMap, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadLots is recreated every render; map init runs only on tab/project change
   }, [activeTab, project]);
 
   // Sync selection refs (so Leaflet click closures always see current state)
@@ -181,6 +185,7 @@ export default function ProjectDetailPage() {
     if (activeTab === 'carte' && mapRef.current) {
       loadLots();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadLots is recreated every render; reload only when a filter changes (tab switch is handled by map init; adding activeTab would double-fetch)
   }, [filterStatus, surfaceMin, surfaceMax, priceMin, priceMax, filterTypeLot, filterEmplacement, filterTypeMaison]);
 
   // Clean up map when leaving
@@ -223,7 +228,7 @@ export default function ProjectDetailPage() {
 
       features.forEach((f) => {
         const status = f.properties?.status || 'available';
-        if (newStats.hasOwnProperty(status)) {
+        if (Object.hasOwn(newStats, status)) {
           newStats[status]++;
         }
         // Collect unique metadata values
@@ -480,7 +485,7 @@ export default function ProjectDetailPage() {
 
       try {
         mapRef.current.fitBounds(layer.getBounds());
-      } catch (e) {
+      } catch {
         // if bounds invalid, keep default view
       }
     } catch (error) {
@@ -624,6 +629,7 @@ export default function ProjectDetailPage() {
           <CarteTab
             mapContainerRef={mapContainerRef}
             mapRef={mapRef}
+            mapInstance={mapInstance}
             stats={stats}
             filterStatus={filterStatus}
             setFilterStatus={setFilterStatus}
@@ -706,6 +712,7 @@ function CarteTab({
   priceMax,
   setPriceMax,
   mapRef,
+  mapInstance,
   filterTypeLot,
   setFilterTypeLot,
   filterEmplacement,
@@ -744,7 +751,7 @@ function CarteTab({
     }, 150);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [mapRef]);
 
   // Redimensionner la carte quand on toggle les filtres
   useEffect(() => {
@@ -755,7 +762,7 @@ function CarteTab({
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [showFilters]);
+  }, [mapRef, showFilters]);
 
   // Fermer le bulk edit quand on quitte le mode sélection
   useEffect(() => {
@@ -830,7 +837,7 @@ function CarteTab({
 
   // Double-clic sur la carte pour passer en plein écran
   useEffect(() => {
-    if (!mapRef?.current) return;
+    if (!mapInstance) return;
 
     const handleMapDblClick = () => {
       if (!isFullscreen) {
@@ -838,14 +845,14 @@ function CarteTab({
       }
     };
 
-    mapRef.current.on('dblclick', handleMapDblClick);
+    mapInstance.on('dblclick', handleMapDblClick);
 
     return () => {
-      if (mapRef?.current) {
-        mapRef.current.off('dblclick', handleMapDblClick);
-      }
+      mapInstance.off('dblclick', handleMapDblClick);
     };
-  }, [mapRef?.current, isFullscreen]);
+    // toggleFullscreen is recreated each render but only depends on state already tracked here (isFullscreen)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapInstance, isFullscreen]);
 
   const hasActiveFilters = filterStatus || surfaceMin || surfaceMax || priceMin || priceMax || filterTypeLot || filterEmplacement || filterTypeMaison;
 
@@ -1356,6 +1363,7 @@ function KPIsTab({ project }) {
 
   useEffect(() => {
     loadKPIs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadKPIs is recreated every render; reload only when the project changes
   }, [project.id]);
 
   const loadKPIs = async () => {
@@ -1842,6 +1850,7 @@ function PerformanceTab({ project }) {
 
   useEffect(() => {
     loadPerformance();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadPerformance is recreated every render; reload only when the project changes
   }, [project.id]);
 
   const loadPerformance = async () => {
@@ -2175,6 +2184,7 @@ function HistoriqueTab({ projectId, userId, isCommercial }) {
 
   useEffect(() => {
     loadHistory();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadHistory is recreated every render; reload only when its filters change
   }, [projectId, userId, isCommercial, dateDebut, dateFin]);
 
   const loadHistory = async () => {
@@ -2280,23 +2290,6 @@ function HistoriqueTab({ projectId, userId, isCommercial }) {
       bg: 'var(--bg-tertiary)',
       label: 'Action'
     };
-  };
-
-  const formatDate = (dateStr) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now - date;
-    const diffDays = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      return `Aujourd'hui à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
-    } else if (diffDays === 1) {
-      return `Hier à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
-    } else if (diffDays < 7) {
-      return `${date.toLocaleDateString('fr-FR', { weekday: 'long' })} à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
-    } else {
-      return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    }
   };
 
   // Grouper par date
@@ -2469,6 +2462,7 @@ function ParametresTab({ project, onUpdate }) {
 
   useEffect(() => {
     loadFinancingPlan();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFinancingPlan is recreated every render; reload only when the project changes
   }, [project.id]);
 
   const loadFinancingPlan = async () => {
@@ -2476,7 +2470,7 @@ function ParametresTab({ project, onUpdate }) {
     try {
       const data = await apiGet(`/api/projects/${project.id}/financing-plan`);
       if (data) setPlan({ deposit_pct: data.deposit_pct });
-    } catch (_) {
+    } catch {
       // No plan yet — keep default 50%
     } finally {
       setPlanLoading(false);

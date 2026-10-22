@@ -10,6 +10,7 @@ export default function AssignCommercialsModal({ project, onClose, onAssigned })
 
   useEffect(() => {
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData is recreated every render; reload only when the project changes
   }, [project.id]);
 
   const loadData = async () => {

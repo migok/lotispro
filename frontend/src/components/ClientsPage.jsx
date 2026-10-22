@@ -94,6 +94,7 @@ export default function ClientsPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadClients is recreated every render; fetch only when the token becomes available
   useEffect(() => { if (token) loadClients(); }, [token]);
 
   const loadClients = async () => {

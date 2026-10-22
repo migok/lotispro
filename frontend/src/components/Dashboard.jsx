@@ -16,14 +16,14 @@ const getDaysRemaining = (expirationDate) => {
 };
 
 export default function Dashboard({ onSelectLot, onNavigate, projectId: propsProjectId }) {
-  const { user, isManager, isCommercial, isClient } = useAuth();
+  const { user, isManager, isCommercial } = useAuth();
   const toast = useToast();
   const [stats, setStats] = useState(null);
   const [lots, setLots] = useState([]);        // lots filtrés par user (pour la table)
   const [allLots, setAllLots] = useState([]);  // tous les lots du projet (pour le graphe catégorie)
   const [alerts, setAlerts] = useState({ reservations: [], summary: {} });
   const [notaireAlerts, setNotaireAlerts] = useState([]);
-  const [performance, setPerformance] = useState(null);
+  const [, setPerformance] = useState(null);
   const [clientsPipeline, setClientsPipeline] = useState([]);
   const [latePayments, setLatePayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,16 +54,6 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [hoveredMonth, setHoveredMonth] = useState(null);
   const [chartMode, setChartMode] = useState('nombre'); // 'nombre' | 'montant'
 
-  // Modal de vente
-  const [showSaleModal, setShowSaleModal] = useState(false);
-  const [selectedLotForSale, setSelectedLotForSale] = useState(null);
-  const [clients, setClients] = useState([]);
-  const [saleData, setSaleData] = useState({
-    client_id: '',
-    price: '',
-    notes: ''
-  });
-
   // Utiliser le projectId passé en props ou celui sélectionné
   const effectiveProjectId = propsProjectId || selectedProjectId;
 
@@ -74,6 +64,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
     if (isManager()) {
       loadUsers();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- isManager (from AuthProvider) is recreated every render and the role is constant for the session; reload only when projectId changes
   }, [propsProjectId]);
 
   // Charger les KPIs du projet pour les managers
@@ -81,10 +72,12 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
     if (isManager() && propsProjectId) {
       loadProjectKpis();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- isManager is recreated every render and loadProjectKpis is not memoized; reload only when project/selected user change
   }, [propsProjectId, selectedUserId]);
 
   useEffect(() => {
     loadDashboardData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDashboardData is recreated every render; reload only when project/selected user change
   }, [effectiveProjectId, selectedUserId]);
 
   const loadProjects = async () => {
@@ -178,7 +171,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       try {
         const lateData = await apiGet(`/api/dashboard/late-payments${queryString}`);
         setLatePayments(lateData || []);
-      } catch (_) {
+      } catch {
         setLatePayments([]);
       }
 
@@ -186,7 +179,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       try {
         const notaireData = await apiGet(`/api/dashboard/notaire-alerts${queryString}`);
         setNotaireAlerts(notaireData || []);
-      } catch (_) {
+      } catch {
         setNotaireAlerts([]);
       }
 
@@ -207,119 +200,6 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       console.error('Error loading dashboard data:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Charger la liste des clients
-  const loadClients = async () => {
-    try {
-      const clientsData = await apiGet('/api/clients');
-      setClients(clientsData);
-    } catch (error) {
-      console.error('Error loading clients:', error);
-    }
-  };
-
-  // Ouvrir le modal de vente pour un lot disponible
-  const handleSellAvailableLot = (lot) => {
-    setSelectedLotForSale(lot);
-    setSaleData({
-      client_id: '',
-      price: lot.price || '',
-      notes: ''
-    });
-    setShowSaleModal(true);
-    loadClients();
-  };
-
-  // Vendre un lot réservé (convertir la réservation en vente)
-  const handleSellReservedLot = async (lot) => {
-    if (!lot.reservation_id) {
-      toast.error('Erreur: Aucune réservation associée à ce lot');
-      return;
-    }
-
-    const price = prompt('Prix de vente final:', lot.price || '');
-    if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
-      return;
-    }
-
-    const notes = prompt('Notes (optionnel):') || '';
-
-    try {
-      await apiPost(`/api/reservations/${lot.reservation_id}/convert-to-sale`, {
-        price: parseFloat(price),
-        notes: notes
-      });
-      toast.success('Lot vendu avec succès');
-      loadDashboardData();
-    } catch (error) {
-      toast.error(error.message || 'Erreur lors de la vente du lot');
-    }
-  };
-
-  // Soumettre la vente d'un lot disponible
-  const handleSubmitSale = async () => {
-    if (!saleData.client_id || !saleData.price) {
-      toast.warning('Veuillez remplir tous les champs obligatoires');
-      return;
-    }
-
-    try {
-      await apiPost('/api/sales', {
-        lot_id: selectedLotForSale.id,
-        client_id: parseInt(saleData.client_id),
-        price: parseFloat(saleData.price),
-        notes: saleData.notes || null
-      });
-      toast.success('Lot vendu avec succès');
-      setShowSaleModal(false);
-      setSelectedLotForSale(null);
-      setSaleData({ client_id: '', price: '', notes: '' });
-      loadDashboardData();
-    } catch (error) {
-      toast.error(error.message || 'Erreur lors de la vente du lot');
-    }
-  };
-
-  // Libérer une réservation
-  const handleReleaseLot = async (lot) => {
-    if (!lot.reservation_id) {
-      toast.error('Erreur: Aucune réservation associée à ce lot');
-      return;
-    }
-
-    if (!confirm(`Êtes-vous sûr de vouloir libérer le lot ${lot.numero} ?`)) {
-      return;
-    }
-
-    try {
-      await apiPost(`/api/reservations/${lot.reservation_id}/release`, {});
-      toast.success('Réservation libérée avec succès');
-      loadDashboardData();
-    } catch (error) {
-      toast.error(error.message || 'Erreur lors de la libération du lot');
-    }
-  };
-
-  // Convertir une alerte (réservation) en vente
-  const handleConvertAlertToSale = async (alertItem) => {
-    const price = prompt('Prix de vente final:', alertItem.lot_price || '');
-    if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
-      return;
-    }
-
-    const notes = prompt('Notes (optionnel):') || '';
-
-    try {
-      await apiPost(`/api/reservations/${alertItem.id}/convert-to-sale`, {
-        price: parseFloat(price),
-        notes: notes
-      });
-      toast.success('Réservation convertie en vente avec succès');
-      loadDashboardData();
-    } catch (error) {
-      toast.error(error.message || 'Erreur lors de la conversion en vente');
     }
   };
 
@@ -1870,94 +1750,6 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           )}
         </div>
       </div>
-      )}
-
-      {/* Modal de vente */}
-      {showSaleModal && selectedLotForSale && (
-        <div className="modal-overlay" onClick={() => setShowSaleModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Vendre le lot {selectedLotForSale.numero}</h2>
-              <button className="modal-close" onClick={() => setShowSaleModal(false)}>×</button>
-            </div>
-
-            <div className="modal-body">
-              <div className="form-group">
-                <label>Client *</label>
-                <select
-                  value={saleData.client_id}
-                  onChange={(e) => setSaleData({ ...saleData, client_id: e.target.value })}
-                  className="form-input"
-                >
-                  <option value="">Sélectionnez un client</option>
-                  {clients.map(client => (
-                    <option key={client.id} value={client.id}>
-                      {client.name} {client.phone ? `(${client.phone})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Prix de vente *</label>
-                <input
-                  type="number"
-                  value={saleData.price}
-                  onChange={(e) => setSaleData({ ...saleData, price: e.target.value })}
-                  className="form-input"
-                  placeholder="Prix de vente"
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Notes</label>
-                <textarea
-                  value={saleData.notes}
-                  onChange={(e) => setSaleData({ ...saleData, notes: e.target.value })}
-                  className="form-input"
-                  placeholder="Notes additionnelles (optionnel)"
-                  rows="3"
-                />
-              </div>
-
-              <div className="lot-info-summary" style={{
-                background: 'var(--bg-secondary)',
-                padding: 'var(--spacing-md)',
-                borderRadius: 'var(--radius-md)',
-                marginTop: 'var(--spacing-md)'
-              }}>
-                <h4 style={{ marginBottom: 'var(--spacing-sm)', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                  Informations du lot
-                </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-sm)', fontSize: '0.875rem' }}>
-                  <div>
-                    <strong>Numéro:</strong> {selectedLotForSale.numero}
-                  </div>
-                  <div>
-                    <strong>Zone:</strong> {selectedLotForSale.zone || '-'}
-                  </div>
-                  <div>
-                    <strong>Surface:</strong> {selectedLotForSale.surface ? `${Math.round(parseFloat(selectedLotForSale.surface))} m²` : '-'}
-                  </div>
-                  <div>
-                    <strong>Prix catalogue:</strong> {formatPrice(selectedLotForSale.price)}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setShowSaleModal(false)}>
-                Annuler
-              </button>
-              <button className="btn btn-success" onClick={handleSubmitSale}>
-                Confirmer la vente
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

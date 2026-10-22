@@ -31,7 +31,7 @@ export default class ErrorBoundary extends Component {
               L'application a rencontré un problème inattendu. Veuillez rafraîchir la page ou revenir à l'accueil.
             </p>
 
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <details className="error-details">
                 <summary>Détails de l'erreur (développement)</summary>
                 <pre className="error-stack">
