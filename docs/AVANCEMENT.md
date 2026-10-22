@@ -71,7 +71,10 @@ _Dernière mise à jour : 2026-10-22_
 
 ## Branches
 
-_À compléter par E0-T1 (état de `feature/marketing_landing_page`)._
+- `main` a été réconcilié dans `dev` (merge `--no-ff`) ; `git log HEAD..origin/main` est vide. Les fichiers de l'assistant IA (`PromptLibrary.jsx`, `prompts.js`) vivent uniquement sur `feature/ai_assistant`.
+- `feature/marketing_landing_page` : un seul commit non mergé dans `dev` (`git log --oneline dev..origin/feature/marketing_landing_page` après réconciliation) :
+  - `b237c02 feat: update Contact and Landing pages with new messaging and styling for demo booking` (touche `ContactPage.jsx`, `LandingPage.jsx`, `landing.css`, ajoute `frontend/public/launch-strategy.md`).
+- Pas de merge effectué (décision reportée).
 
 ## Dette technique suivie
 
