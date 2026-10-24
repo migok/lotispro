@@ -196,3 +196,24 @@ class TestClientProfile:
         )
 
         assert response.status_code == 422
+
+    @pytest.mark.integration
+    async def test_update_rejects_composed_name_too_long(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        existing = await make_client(db_session, last_name="Benali")
+
+        response = await client.put(
+            f"/api/clients/{existing.id}",
+            json={"first_name": "A" * 100, "last_name": "B" * 150},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        detail = response.json()["details"][0]
+        assert detail["field"].endswith("first_name")
+        assert "Nom complet trop long (200 caractères max)" in detail["message"]

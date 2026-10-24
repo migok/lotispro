@@ -44,7 +44,7 @@ class UserModel(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    last_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     company: Mapped[str | None] = mapped_column(String(150), nullable=True)
     role: Mapped[str] = mapped_column(
@@ -292,7 +292,7 @@ class ClientModel(Base):
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cin: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     maiden_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     whatsapp: Mapped[str | None] = mapped_column(String(20), nullable=True)
