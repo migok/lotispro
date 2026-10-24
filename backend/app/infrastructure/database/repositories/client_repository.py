@@ -54,6 +54,29 @@ class ClientRepository(BaseRepository[ClientModel]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
+    async def find_duplicates(
+        self,
+        cin: str | None,
+        email: str | None,
+        exclude_id: int | None = None,
+    ) -> list[ClientModel]:
+        """Find clients sharing a CIN (normalised) or an email (case-insensitive)."""
+        conditions = []
+        if cin and cin.strip():
+            normalized = "".join(cin.split()).upper()
+            conditions.append(
+                func.upper(func.replace(ClientModel.cin, " ", "")) == normalized
+            )
+        if email and email.strip():
+            conditions.append(func.lower(ClientModel.email) == email.strip().lower())
+        if not conditions:
+            return []
+        query = select(ClientModel).where(or_(*conditions))
+        if exclude_id is not None:
+            query = query.where(ClientModel.id != exclude_id)
+        result = await self.session.execute(query.order_by(ClientModel.id))
+        return list(result.scalars().all())
+
     async def update_fields(self, client_id: int, fields: dict) -> ClientModel:
         """Update the given fields, writing explicit None values too.
 

@@ -31,6 +31,23 @@ async def list_clients(
 
 
 @router.get(
+    "/duplicates",
+    response_model=list[ClientResponse],
+    summary="Find duplicate clients",
+    description="Clients sharing the given CIN or email",
+)
+async def find_duplicates(
+    current_user: CurrentUser,
+    client_service: ClientServiceDep,
+    cin: str | None = Query(default=None),
+    email: str | None = Query(default=None),
+    exclude_id: int | None = Query(default=None),
+) -> list[ClientResponse]:
+    """Find potential duplicates by CIN or email."""
+    return await client_service.find_duplicates(cin, email, exclude_id)
+
+
+@router.get(
     "/{client_id}",
     response_model=ClientResponse,
     summary="Get client",

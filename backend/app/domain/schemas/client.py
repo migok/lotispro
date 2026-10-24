@@ -3,12 +3,14 @@
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, EmailStr, Field
+from pydantic import AfterValidator, EmailStr, Field, field_validator
 
 from app.domain.client_profile import (
     ACQUISITION_CHANNELS,
     ACTE_ADDRESS_CHOICES,
     NOTIFICATION_CHANNELS,
+    normalize_cin,
+    normalize_phone,
 )
 from app.domain.schemas.common import BaseSchema
 
@@ -47,7 +49,21 @@ OptionalNotificationChannels = Annotated[
 ClientType = Literal["proprietaire", "revendeur", "investisseur", "autre"]
 
 
-class ClientCreate(BaseSchema):
+class _ClientNormalizationMixin(BaseSchema):
+    """Normalise CIN and phone numbers on input."""
+
+    @field_validator("cin", check_fields=False)
+    @classmethod
+    def _normalize_cin(cls, value: str | None) -> str | None:
+        return normalize_cin(value)
+
+    @field_validator("phone", "whatsapp", check_fields=False)
+    @classmethod
+    def _normalize_phone(cls, value: str | None) -> str | None:
+        return normalize_phone(value)
+
+
+class ClientCreate(_ClientNormalizationMixin):
     """Schema for creating a new client."""
 
     last_name: str = Field(min_length=1, max_length=200, description="Last name")
@@ -72,7 +88,7 @@ class ClientCreate(BaseSchema):
     )
 
 
-class ClientUpdate(BaseSchema):
+class ClientUpdate(_ClientNormalizationMixin):
     """Schema for updating a client (all fields optional)."""
 
     last_name: str | None = Field(default=None, min_length=1, max_length=200)

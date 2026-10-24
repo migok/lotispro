@@ -4,7 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.logging import get_logger
-from app.domain.client_profile import compose_client_name
+from app.domain.client_profile import (
+    compose_client_name,
+    validate_client_profile,
+)
 from app.domain.schemas.client import (
     ClientCreate,
     ClientDetails,
@@ -24,6 +27,19 @@ class ClientService:
     # Columns that cannot be cleared: an explicit null in an update is ignored.
     _NOT_NULLABLE_FIELDS = frozenset(
         {"last_name", "first_name", "phone", "acquisition_channel", "client_type"}
+    )
+
+    # Fields checked by validate_client_profile on the merged state.
+    _PROFILE_FIELDS = (
+        "last_name",
+        "first_name",
+        "phone",
+        "acquisition_channel",
+        "acquisition_referrer",
+        "acquisition_date",
+        "address_morocco",
+        "address_abroad",
+        "acte_address",
     )
 
     @staticmethod
@@ -114,6 +130,16 @@ class ClientService:
             stats=ClientStats(**details["stats"]),
         )
 
+    async def find_duplicates(
+        self,
+        cin: str | None,
+        email: str | None,
+        exclude_id: int | None = None,
+    ) -> list[ClientResponse]:
+        """Find clients sharing the given CIN or email."""
+        clients = await self.client_repo.find_duplicates(cin, email, exclude_id)
+        return [self._to_response(c) for c in clients]
+
     async def create_client(
         self,
         data: ClientCreate,
@@ -128,7 +154,7 @@ class ClientService:
         Returns:
             Created client response
         """
-        fields = data.model_dump()
+        fields = validate_client_profile(data.model_dump())
         fields["name"] = self._compose_name(data.first_name, data.last_name)
         client = await self.client_repo.create(**fields, created_by_user_id=user_id)
 
@@ -167,6 +193,14 @@ class ClientService:
             for key, value in data.model_dump(exclude_unset=True).items()
             if value is not None or key not in self._NOT_NULLABLE_FIELDS
         }
+        # Validate the merged state (stored row + changes), legacy-name aware.
+        state = {key: getattr(client, key, None) for key in self._PROFILE_FIELDS}
+        state["last_name"] = client.last_name or client.name
+        state.update(fields)
+        validated = validate_client_profile(state)
+        if validated.get("acte_address") != state.get("acte_address"):
+            fields["acte_address"] = validated["acte_address"]
+
         if "first_name" in fields or "last_name" in fields:
             name = self._compose_name(
                 fields.get("first_name", client.first_name),

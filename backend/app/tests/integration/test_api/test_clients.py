@@ -1,6 +1,7 @@
 """Integration tests for the client profile (fiche client) endpoints."""
 
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 from httpx import AsyncClient
@@ -24,6 +25,14 @@ FULL_PAYLOAD = {
     "acquisition_date": "2026-10-01",
     "notification_channels": ["email", "whatsapp"],
 }
+
+
+async def make_complete_client(db_session: AsyncSession, **overrides: Any):
+    """A client satisfying every required-field rule (valid to edit)."""
+    return await make_client(
+        db_session,
+        **{"first_name": "Fatima", "acquisition_channel": "smap", **overrides},
+    )
 
 
 class TestClientProfile:
@@ -105,7 +114,7 @@ class TestClientProfile:
         commercial: UserModel,
         auth_headers: Callable[[UserModel], dict[str, str]],
     ) -> None:
-        existing = await make_client(db_session, last_name="Benali")
+        existing = await make_complete_client(db_session, last_name="Benali")
 
         response = await client.put(
             f"/api/clients/{existing.id}",
@@ -124,7 +133,7 @@ class TestClientProfile:
         commercial: UserModel,
         auth_headers: Callable[[UserModel], dict[str, str]],
     ) -> None:
-        existing = await make_client(db_session, maiden_name="X")
+        existing = await make_complete_client(db_session, maiden_name="X")
 
         put = await client.put(
             f"/api/clients/{existing.id}",
@@ -175,7 +184,7 @@ class TestClientProfile:
 
         response = await client.put(
             f"/api/clients/{legacy.id}",
-            json={"first_name": "Amine"},
+            json={"first_name": "Amine", "acquisition_channel": "smap"},
             headers=auth_headers(commercial),
         )
 
@@ -205,7 +214,7 @@ class TestClientProfile:
         commercial: UserModel,
         auth_headers: Callable[[UserModel], dict[str, str]],
     ) -> None:
-        existing = await make_client(db_session, last_name="Benali")
+        existing = await make_complete_client(db_session, last_name="Benali")
 
         response = await client.put(
             f"/api/clients/{existing.id}",
@@ -217,3 +226,160 @@ class TestClientProfile:
         detail = response.json()["details"][0]
         assert detail["field"].endswith("first_name")
         assert "Nom complet trop long (200 caractères max)" in detail["message"]
+
+
+class TestClientValidation:
+    """Normalisation, profile rules and duplicate detection."""
+
+    @pytest.mark.integration
+    async def test_create_normalizes_cin(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "cin": "ab 123456"},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["cin"] == "AB123456"
+
+    @pytest.mark.integration
+    async def test_create_rejects_invalid_phone(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "phone": "12345"},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        assert response.json()["details"][0]["field"].endswith("phone")
+
+    @pytest.mark.integration
+    async def test_create_samsar_requires_date(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        payload = {k: v for k, v in FULL_PAYLOAD.items() if k != "acquisition_date"}
+        response = await client.post(
+            "/api/clients", json=payload, headers=auth_headers(commercial)
+        )
+
+        assert response.status_code == 422
+        assert response.json()["details"][0]["field"].endswith("acquisition_date")
+
+    @pytest.mark.integration
+    async def test_create_two_addresses_require_acte_address(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        payload = {k: v for k, v in FULL_PAYLOAD.items() if k != "acte_address"}
+        response = await client.post(
+            "/api/clients", json=payload, headers=auth_headers(commercial)
+        )
+
+        assert response.status_code == 422
+        assert response.json()["details"][0]["field"].endswith("acte_address")
+
+    @pytest.mark.integration
+    async def test_create_infers_acte_address_from_single_address(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        payload = {**FULL_PAYLOAD, "address_abroad": None, "acte_address": None}
+        response = await client.post(
+            "/api/clients", json=payload, headers=auth_headers(commercial)
+        )
+
+        assert response.status_code == 201
+        assert response.json()["acte_address"] == "morocco"
+
+    @pytest.mark.integration
+    async def test_update_legacy_client_requires_first_name(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        legacy = await make_client(db_session, name="Ancien Client", last_name=None)
+
+        response = await client.put(
+            f"/api/clients/{legacy.id}",
+            json={"notes": "x"},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        assert response.json()["details"][0]["field"] == "first_name"
+
+    @pytest.mark.integration
+    async def test_duplicates_by_cin_and_email(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        by_cin = await make_client(db_session, cin="AB123456")
+        by_email = await make_client(db_session, email="Jean@Example.com")
+        await make_client(db_session, cin="ZZ999999", email="autre@example.com")
+
+        response = await client.get(
+            "/api/clients/duplicates",
+            params={"cin": "ab 123456", "email": " jean@example.COM "},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 200
+        assert {c["id"] for c in response.json()} == {by_cin.id, by_email.id}
+
+    @pytest.mark.integration
+    async def test_duplicates_excludes_given_id(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        own = await make_client(db_session, cin="AB123456")
+        other = await make_client(db_session, cin="AB123456")
+
+        response = await client.get(
+            "/api/clients/duplicates",
+            params={"cin": "AB123456", "exclude_id": own.id},
+            headers=auth_headers(commercial),
+        )
+
+        assert [c["id"] for c in response.json()] == [other.id]
+
+    @pytest.mark.integration
+    async def test_duplicates_without_criteria_is_empty(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        await make_client(db_session)
+
+        response = await client.get(
+            "/api/clients/duplicates", headers=auth_headers(commercial)
+        )
+
+        assert response.status_code == 200
+        assert response.json() == []
