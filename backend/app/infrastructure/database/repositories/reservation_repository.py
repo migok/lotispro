@@ -138,7 +138,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             "client_phone": client.phone,
             "client_email": client.email,
             "client_cin": client.cin,
-            "client_address": client.address,
+            "client_address": client.address_morocco,
             "reserved_by_name": reserver.name if reserver else None,
             "project_name": project.name,
         }

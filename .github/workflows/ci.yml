@@ -37,6 +37,52 @@ jobs:
       - name: Tests (pytest)
         run: python -m pytest -q
 
+  migrations:
+    name: Migrations (alembic upgrade / downgrade / upgrade)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: lotis
+          POSTGRES_PASSWORD: lotis
+          POSTGRES_DB: lotis
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lotis"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://lotis:lotis@localhost:5432/lotis
+      ENVIRONMENT: development
+      # Dummy value, required by Settings at import time.
+      SECRET_KEY: ci-only-dummy-secret-key-not-for-production-0123456789
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Upgrade to head
+        run: alembic upgrade head
+
+      - name: Downgrade one revision
+        run: alembic downgrade -1
+
+      - name: Upgrade to head again
+        run: alembic upgrade head
+
   frontend:
     name: Frontend (eslint + vitest + build)
     runs-on: ubuntu-latest

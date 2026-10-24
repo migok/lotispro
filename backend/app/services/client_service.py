@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.core.logging import get_logger
+from app.domain.client_profile import compose_client_name
 from app.domain.schemas.client import (
     ClientCreate,
     ClientDetails,
@@ -11,6 +12,7 @@ from app.domain.schemas.client import (
     ClientStats,
     ClientUpdate,
 )
+from app.infrastructure.database.models import ClientModel
 from app.infrastructure.database.repositories import ClientRepository
 
 logger = get_logger(__name__)
@@ -18,6 +20,16 @@ logger = get_logger(__name__)
 
 class ClientService:
     """Service for client management operations."""
+
+    # Columns that cannot be cleared: an explicit null in an update is ignored.
+    _NOT_NULLABLE_FIELDS = frozenset(
+        {"last_name", "first_name", "phone", "acquisition_channel", "client_type"}
+    )
+
+    @staticmethod
+    def _to_response(client: ClientModel) -> ClientResponse:
+        """Build the API response from a client model."""
+        return ClientResponse.model_validate(client)
 
     def __init__(self, session: AsyncSession):
         """Initialize with database session."""
@@ -49,21 +61,7 @@ class ClientService:
             limit=limit,
         )
 
-        return [
-            ClientResponse(
-                id=c.id,
-                name=c.name,
-                phone=c.phone,
-                email=c.email,
-                cin=c.cin,
-                client_type=c.client_type,
-                notes=c.notes,
-                created_by_user_id=c.created_by_user_id,
-                created_at=c.created_at,
-                updated_at=c.updated_at,
-            )
-            for c in clients
-        ]
+        return [self._to_response(c) for c in clients]
 
     async def get_client(self, client_id: int) -> ClientResponse:
         """Get client by ID.
@@ -82,19 +80,7 @@ class ClientService:
         if not client:
             raise NotFoundError("Client", client_id)
 
-        return ClientResponse(
-            id=client.id,
-            name=client.name,
-            phone=client.phone,
-            email=client.email,
-            cin=client.cin,
-            address=client.address,
-            client_type=client.client_type,
-            notes=client.notes,
-            created_by_user_id=client.created_by_user_id,
-            created_at=client.created_at,
-            updated_at=client.updated_at,
-        )
+        return self._to_response(client)
 
     async def get_client_details(self, client_id: int) -> ClientDetails:
         """Get detailed client information.
@@ -114,20 +100,7 @@ class ClientService:
             raise NotFoundError("Client", client_id)
 
         return ClientDetails(
-            id=details["id"],
-            name=details["name"],
-            phone=details["phone"],
-            email=details["email"],
-            cin=details["cin"],
-            address=details.get("address"),
-            client_type=details["client_type"],
-            notes=details["notes"],
-            created_by_user_id=details["created_by_user_id"],
-            created_at=details["created_at"],
-            updated_at=details["updated_at"],
-            created_by=details["created_by"],
-            sales_history=details["sales_history"],
-            reservations_history=details["reservations_history"],
+            **{k: v for k, v in details.items() if k != "stats"},
             stats=ClientStats(**details["stats"]),
         )
 
@@ -145,16 +118,9 @@ class ClientService:
         Returns:
             Created client response
         """
-        client = await self.client_repo.create(
-            name=data.name,
-            phone=data.phone,
-            email=data.email,
-            cin=data.cin,
-            address=data.address,
-            client_type=data.client_type,
-            notes=data.notes,
-            created_by_user_id=user_id,
-        )
+        fields = data.model_dump()
+        fields["name"] = compose_client_name(data.first_name, data.last_name)
+        client = await self.client_repo.create(**fields, created_by_user_id=user_id)
 
         logger.info(
             "Client created",
@@ -163,19 +129,7 @@ class ClientService:
             created_by=user_id,
         )
 
-        return ClientResponse(
-            id=client.id,
-            name=client.name,
-            phone=client.phone,
-            email=client.email,
-            cin=client.cin,
-            address=client.address,
-            client_type=client.client_type,
-            notes=client.notes,
-            created_by_user_id=client.created_by_user_id,
-            created_at=client.created_at,
-            updated_at=client.updated_at,
-        )
+        return self._to_response(client)
 
     async def update_client(
         self,
@@ -198,29 +152,21 @@ class ClientService:
         if not client:
             raise NotFoundError("Client", client_id)
 
-        updated = await self.client_repo.update(
-            client_id,
-            name=data.name,
-            phone=data.phone,
-            email=data.email,
-            cin=data.cin,
-            address=data.address,
-            client_type=data.client_type,
-            notes=data.notes,
-        )
+        fields = {
+            key: value
+            for key, value in data.model_dump(exclude_unset=True).items()
+            if value is not None or key not in self._NOT_NULLABLE_FIELDS
+        }
+        if "first_name" in fields or "last_name" in fields:
+            name = compose_client_name(
+                fields.get("first_name", client.first_name),
+                fields.get("last_name", client.last_name),
+            )
+            if name:
+                fields["name"] = name
+
+        updated = await self.client_repo.update_fields(client_id, fields)
 
         logger.info("Client updated", client_id=client_id)
 
-        return ClientResponse(
-            id=updated.id,
-            name=updated.name,
-            phone=updated.phone,
-            email=updated.email,
-            cin=updated.cin,
-            address=updated.address,
-            client_type=updated.client_type,
-            notes=updated.notes,
-            created_by_user_id=updated.created_by_user_id,
-            created_at=updated.created_at,
-            updated_at=updated.updated_at,
-        )
+        return self._to_response(updated)

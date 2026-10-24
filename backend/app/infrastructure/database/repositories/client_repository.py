@@ -54,6 +54,18 @@ class ClientRepository(BaseRepository[ClientModel]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
+    async def update_fields(self, client_id: int, fields: dict) -> ClientModel:
+        """Update the given fields, writing explicit None values too.
+
+        Unlike ``BaseRepository.update``, None is applied (clears the column).
+        """
+        client = await self.get_by_id(client_id)
+        for key, value in fields.items():
+            setattr(client, key, value)
+        await self.session.flush()
+        await self.session.refresh(client)
+        return client
+
     async def get_details(self, client_id: int) -> dict | None:
         """Get detailed client info with history and stats.
 
@@ -199,7 +211,17 @@ class ClientRepository(BaseRepository[ClientModel]):
             "phone": client.phone,
             "email": client.email,
             "cin": client.cin,
-            "address": client.address,
+            "address_morocco": client.address_morocco,
+            "last_name": client.last_name,
+            "first_name": client.first_name,
+            "maiden_name": client.maiden_name,
+            "whatsapp": client.whatsapp,
+            "address_abroad": client.address_abroad,
+            "acte_address": client.acte_address,
+            "acquisition_channel": client.acquisition_channel,
+            "acquisition_referrer": client.acquisition_referrer,
+            "acquisition_date": client.acquisition_date,
+            "notification_channels": client.notification_channels,
             "client_type": client.client_type,
             "notes": client.notes,
             "created_by_user_id": client.created_by_user_id,

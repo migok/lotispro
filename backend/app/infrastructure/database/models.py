@@ -6,6 +6,7 @@ These models map to database tables and provide the persistence layer.
 from datetime import UTC, date, datetime
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Date,
     DateTime,
@@ -291,7 +292,20 @@ class ClientModel(Base):
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cin: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    maiden_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    whatsapp: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Existing column "address" holds the Moroccan address.
+    address_morocco: Mapped[str | None] = mapped_column(
+        "address", String(500), nullable=True
+    )
+    address_abroad: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    acte_address: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    acquisition_channel: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    acquisition_referrer: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    acquisition_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notification_channels: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     client_type: Mapped[str] = mapped_column(
         String(20), nullable=False, default="autre"
     )
@@ -332,7 +346,17 @@ class ClientModel(Base):
             "client_type IN ('proprietaire', 'revendeur', 'investisseur', 'autre')",
             name="valid_client_type",
         ),
+        CheckConstraint(
+            "acte_address IS NULL OR acte_address IN ('morocco', 'abroad')",
+            name="valid_acte_address",
+        ),
+        CheckConstraint(
+            "acquisition_channel IS NULL OR acquisition_channel IN ("
+            "'smap', 'bureau_vente', 'reseaux_sociaux', 'recommandation', 'samsar')",
+            name="valid_acquisition_channel",
+        ),
         Index("ix_clients_name", "name"),
+        Index("ix_clients_last_name", "last_name"),
         Index("ix_clients_phone", "phone"),
         Index("ix_clients_cin", "cin"),
     )
