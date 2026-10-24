@@ -8,13 +8,13 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-22_
+_Dernière mise à jour : 2026-10-24_
 
 ## Vue d'ensemble
 
 | Epic | Statut | Tâches faites | Issue | PR |
 |---|---|---|---|---|
-| E0 Fondations & nettoyage | ⬜ | 0 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | |
+| E0 Fondations & nettoyage | 🟦 | 5 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | |
 | E1 🐛 #5 Plein écran | ⬜ | 0 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | |
 | E2 👤 #7 Fiche client | ⬜ | 0 / 4 | [#18](https://github.com/migok/lotispro/issues/18) | |
 | E3 Statuts par projet + états des lieux | ⬜ | 0 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
@@ -75,6 +75,7 @@ _Dernière mise à jour : 2026-10-22_
 - `feature/marketing_landing_page` : un seul commit non mergé dans `dev` (`git log --oneline dev..origin/feature/marketing_landing_page` après réconciliation) :
   - `b237c02 feat: update Contact and Landing pages with new messaging and styling for demo booking` (touche `ContactPage.jsx`, `LandingPage.jsx`, `landing.css`, ajoute `frontend/public/launch-strategy.md`).
 - Pas de merge effectué (décision reportée).
+- `backend/railway.toml` ligne 6 contient encore `|| alembic stamp 0001` : modification en attente (bloquée par le classifieur de permissions), à appliquer manuellement par l'utilisateur ; E0-T1 reste donc ⬜.
 
 ## Dette technique suivie
 
@@ -95,7 +96,14 @@ Fonctions backend qui dépassent les seuils `PLR0912` (> 12 branches) / `PLR0915
 | `app/services/project_service.py` | `import_csv_metadata` | PLR0912 20/12, PLR0915 74/50 |
 | `app/services/reservation_service.py` | `finaliser_engage` | PLR0912 19/12 |
 
-Autres règles ruff désactivées par choix (E0-T4) : `PLC0415` (45 imports différés dans les services, repositories et schémas, probablement pour éviter des dépendances circulaires ; à revoir) et `ARG001` limité aux endpoints FastAPI, handlers d'erreur, logging, lifespan (signatures imposées par le framework).
+Autres règles ruff désactivées par choix (E0-T4) : `PLC0415` (44 imports différés dans les services, repositories, schémas et tests, probablement pour éviter des dépendances circulaires ; à revoir, voir le détail ci-dessous) et `ARG001` limité aux endpoints FastAPI, handlers d'erreur, logging, lifespan (signatures imposées par le framework).
+
+Autre dette relevée en fin d'E0 (revue finale, 2026-10-24) :
+
+- **Tests manquants avant les refactors E3 / E4** : aucun test n'exerce `payment_plan` / les échéances ; l'effet de `engage` avec `guarantee_action=deduct` et les notes d'audit de `extend-option` ne sont pas assertés. À couvrir avant de toucher ces flux.
+- **`PLC0415` (imports différés)**, 44 occurrences, issues de `ruff check . --isolated --select PLC0415 --output-format concise` (depuis `backend/`) : `services/project_service.py` 14, `services/dashboard_service.py` 11, `repositories/lot_repository.py` 5, et 1 chacun dans `domain/schemas/lot.py`, `repositories/base.py`, `client_repository.py`, `project_repository.py`, `sale_repository.py`, `user_repository.py`, `database/session.py`, `services/email_service.py`, `lot_pricing_service.py`, `payment_service.py`, `reservation_service.py`, `user_service.py`, `tests/unit/test_domain/test_security.py`, `tests/unit/test_imports.py`.
+- **`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.
+- **`LotDetailModal.jsx`** : la formule du solde restant est dupliquée (imposée par l'ordre des hooks) ; à factoriser lors d'un refactor du composant.
 
 ## Anomalies constatées
 
@@ -111,6 +119,13 @@ Relevés lors de E0-T3 (`test_lot_transitions.py`) ; le code applicatif n'a pas 
 - **`unblock` écrit `blocked_reason = ""`** (chaîne vide) au lieu de `NULL`, et `block` sans motif stocke aussi `""`.
 - **`engage` en mode `guarantee_action=refund`** fait quand même avancer le lot en `reservation_engagee` (documenté dans le schéma, mais à confirmer côté métier).
 - **`solde` accepte un `price` libre** : le prix de la vente n'est pas rapproché de `sale_price` / `price` du lot ni du total de l'échéancier.
+- **`DELETE /api/lots/{id}/documents/{doc_id}` sans contrôle de rôle** : `documents.py:78` appelle `document_service.py:181` `delete_document(user_role)` mais l'argument `user_role` n'est jamais utilisé ; n'importe quel utilisateur connecté peut supprimer les documents de n'importe quel lot.
+- **Arguments inutilisés masqués par `ARG002`** (règle ignorée dans `pyproject.toml`, 10 occurrences via `ruff check . --isolated --select ARG002 --output-format concise` depuis `backend/`) :
+  - `certificate_service.py:48` `reservation_id`
+  - `document_service.py:181` `user_role` (voir anomalie ci-dessus)
+  - `reservation_service.py:1001`, `1058`, `1099`, `1137` `user_id`
+  - `reservation_service.py:1166` `data` et `1167` `user_id`
+  - `project_service.py:1256`, `1714` `user_id`
 
 ## Recette E1 (plein écran)
 

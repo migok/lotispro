@@ -8,12 +8,16 @@ function Trigger() {
 }
 
 describe('ToastContext', () => {
+  let fullscreenRoot
+
   afterEach(() => {
     delete document.fullscreenElement
+    fullscreenRoot?.remove()
+    fullscreenRoot = undefined
   })
 
   it('portals toasts into document.fullscreenElement after a fullscreenchange', () => {
-    const fullscreenRoot = document.createElement('div')
+    fullscreenRoot = document.createElement('div')
     document.body.appendChild(fullscreenRoot)
 
     render(
@@ -36,7 +40,5 @@ describe('ToastContext', () => {
 
     const toast = screen.getByText('ok')
     expect(fullscreenRoot).toContainElement(toast)
-
-    fullscreenRoot.remove()
   })
 })

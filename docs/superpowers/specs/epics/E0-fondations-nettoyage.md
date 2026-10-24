@@ -22,7 +22,7 @@ Rien ne peut être vérifié sans tests fiables ni CI, et les branches `main` / 
 - Les 15 tests existants passent (aujourd'hui 13 OK + 2 erreurs `UNIQUE constraint failed: users.email`).
 
 ### E0-T3 Tests de caractérisation du workflow de statuts
-Chaque transition existante testée via l'API (`/api/v1/lots/{id}/transitions/...`) : statut de départ, statut d'arrivée, refus (`BusinessRuleError` → 4xx) depuis un mauvais statut, refus du déblocage par un commercial.
+Chaque transition existante testée via l'API (`/api/lots/{id}/transitions/...`) : statut de départ, statut d'arrivée, refus (`BusinessRuleError` → 4xx) depuis un mauvais statut, refus du déblocage par un commercial.
 
 | Route | De → Vers |
 |---|---|

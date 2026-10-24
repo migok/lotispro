@@ -21,14 +21,13 @@ lot_webapp/
 │   │   ├── infrastructure/     # DB models, repositories, Supabase storage
 │   │   └── services/           # Business logic (15 services)
 │   ├── alembic/      # DB migrations (0001 → 0016)
-│   └── scripts/      # Utility scripts (seed_users.py)
+│   └── scripts/      # Utility scripts (create_admin.py)
 ├── .github/workflows/ci.yml   # CI (backend ruff + pytest, frontend eslint + vitest + build)
 ├── docs/AVANCEMENT.md         # Suivi de la roadmap (epic → tâche → statut → issue → PR)
 ├── frontend/         # React SPA
 │   └── src/
 │       ├── components/         # React components + useTheme.js hook
-│       │   └── ai_assistant/   # AI assistant widget (AIAssistant, ChatInterface, MessageBubble…)
-│       ├── contexts/           # AuthContext, ToastContext
+│       ├── contexts/           # AuthContext.jsx, ToastContext.jsx (providers only) + authHooks.js (useAuth), toastHooks.js (useToast)
 │       ├── services/           # API service layer
 │       └── utils/              # api.js, config.js, constants.js
 └── CLAUDE.md
@@ -93,8 +92,8 @@ mypy .
 alembic upgrade head
 alembic revision --autogenerate -m "description"
 
-# Seed admin user
-python scripts/seed_users.py
+# Create admin user
+python scripts/create_admin.py
 ```
 
 ### Frontend
@@ -127,8 +126,8 @@ Endpoint → Service → Repository → DB Model
 
 ### Frontend - Component Architecture
 
-- `AuthContext` manages JWT token (stored in localStorage)
-- `ToastContext` provides global notifications
+- `AuthContext` manages JWT token (stored in localStorage); `useAuth` lives in `contexts/authHooks.js`
+- `ToastContext` provides global notifications; `useToast` lives in `contexts/toastHooks.js`
 - `utils/api.js` is the central fetch wrapper — handles JWT headers and 401 errors
 - All API calls go through `utils/api.js`, not direct fetch
 - `useTheme.js` (in `components/`) manages dark/light theme via `localStorage` + `data-theme` on `<html>`
@@ -285,12 +284,12 @@ Design de référence : `docs/superpowers/specs/2026-10-22-roadmap-lotispro-desi
 - **Type hints required:** MyPy strict mode enabled
 - **Structured logging:** use `get_logger(__name__)`, log with context kwargs
 - **Custom exceptions:** raise from `app/core/exceptions.py`, not generic `HTTPException`
-- **Ruff rules:** E, W, F, I, B, C4, UP, ARG, SIM, PTH, PL, RUF
+- **Ruff rules:** E, W, F, I, B, C4, UP, ARG, SIM, TCH, PTH, ERA, PL, RUF (see `[tool.ruff.lint]` in `backend/pyproject.toml` for the ignored ones)
 
 ### Frontend
 
 - **No direct fetch:** always use `utils/api.js` wrapper
-- **Toast for feedback:** use `useToast()` from `ToastContext`
+- **Toast for feedback:** use `useToast()` from `contexts/toastHooks` (`ToastContext.jsx` only exports `ToastProvider`; likewise `useAuth` comes from `contexts/authHooks`, `AuthContext.jsx` only exports `AuthProvider`)
 - **Role checks:** use `ProtectedRoute` for route-level, check `user.role` in components
 - **Styling:** custom CSS in `styles.css`, no UI framework
 - **Theme:** `useTheme.js` in `components/` — reads/writes `localStorage('lotispro-theme')`, sets `data-theme` on `<html>`

@@ -850,8 +850,7 @@ function CarteTab({
     return () => {
       mapInstance.off('dblclick', handleMapDblClick);
     };
-    // toggleFullscreen is recreated each render but only depends on state already tracked here (isFullscreen)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- toggleFullscreen is recreated each render but only depends on state already tracked here (isFullscreen)
   }, [mapInstance, isFullscreen]);
 
   const hasActiveFilters = filterStatus || surfaceMin || surfaceMax || priceMin || priceMax || filterTypeLot || filterEmplacement || filterTypeMaison;
