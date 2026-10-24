@@ -83,7 +83,9 @@ class TestAuthMe:
         """Test getting current user without token."""
         response = await client.get("/api/auth/me")
 
-        assert response.status_code == 403  # HTTPBearer returns 403 when missing
+        # Recent FastAPI: HTTPBearer returns 401 when credentials are missing
+        # (older versions, e.g. 0.115, returned 403).
+        assert response.status_code == 401
 
     @pytest.mark.integration
     async def test_get_current_user_invalid_token(self, client: AsyncClient) -> None:
