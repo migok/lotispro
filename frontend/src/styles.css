@@ -872,6 +872,9 @@ body {
   overflow-y: auto;
 }
 
+/* `.carte-fullscreen` is always applied (also in native fullscreen); the
+   `.carte-tab:fullscreen` selectors below are only a safety net (effective for
+   ~1 frame before React adds the class). */
 .carte-fullscreen .map-filters-v2,
 .carte-fullscreen .selection-action-bar,
 .carte-fullscreen .bm-panel,
