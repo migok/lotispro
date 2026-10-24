@@ -93,3 +93,23 @@ def validate_client_profile(state: dict) -> dict:
             "L'adresse d'acte choisie n'est pas renseignée", field="acte_address"
         )
     return result
+
+
+def acte_address_of(client: object) -> str | None:
+    """Address printed on legal documents (actes) for a client.
+
+    The chosen address when ``acte_address`` is set and filled, otherwise the
+    only filled address, otherwise None.
+    """
+    morocco = getattr(client, "address_morocco", None)
+    abroad = getattr(client, "address_abroad", None)
+    choice = getattr(client, "acte_address", None)
+    if choice == "abroad" and _filled(abroad):
+        return abroad
+    if choice == "morocco" and _filled(morocco):
+        return morocco
+    if _filled(morocco) and not _filled(abroad):
+        return morocco
+    if _filled(abroad) and not _filled(morocco):
+        return abroad
+    return None

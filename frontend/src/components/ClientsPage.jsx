@@ -6,6 +6,7 @@ import { apiGet, apiPost } from '../utils/api';
 import { formatPrice, formatCompactPrice } from '../utils/formatters';
 import { CLIENT_TYPES, PIPELINE_LABELS } from '../utils/constants';
 import ClientForm from './clients/ClientForm';
+import { matchesClientSearch, shouldToastClientError } from '../utils/clientProfile';
 
 /* ── Icons ─────────────────────────────────────────────── */
 const IconSearch = () => (
@@ -112,7 +113,7 @@ export default function ClientsPage() {
     try {
       await apiPost('/api/clients', payload);
     } catch (err) {
-      if (!err.details?.length) toast.error(err.message || 'Erreur lors de la création');
+      if (shouldToastClientError(err)) toast.error(err.message || 'Erreur lors de la création');
       throw err;
     }
     toast.success('Client créé avec succès');
@@ -125,15 +126,7 @@ export default function ClientsPage() {
     let list = [...clients];
     if (typeFilter) list = list.filter(c => c.client_type === typeFilter);
     if (statusFilter) list = list.filter(c => c.pipeline_status === statusFilter);
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(c =>
-        (c.name || '').toLowerCase().includes(q) ||
-        (c.phone || '').includes(q) ||
-        (c.cin || '').toLowerCase().includes(q) ||
-        (c.email || '').toLowerCase().includes(q)
-      );
-    }
+    if (searchQuery) list = list.filter(c => matchesClientSearch(c, searchQuery));
     list.sort((a, b) => {
       if (sortBy === 'ca') return (b.total_purchases || 0) - (a.total_purchases || 0);
       if (sortBy === 'achats') return (b.total_sales || 0) - (a.total_sales || 0);

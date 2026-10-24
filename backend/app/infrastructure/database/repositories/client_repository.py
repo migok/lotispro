@@ -26,7 +26,7 @@ class ClientRepository(BaseRepository[ClientModel]):
         """Get clients with filtering.
 
         Args:
-            search: Search term for name, phone, or CIN
+            search: Search term for name parts, phone, WhatsApp, CIN or email
             client_type: Filter by client type
             offset: Pagination offset
             limit: Pagination limit
@@ -41,8 +41,13 @@ class ClientRepository(BaseRepository[ClientModel]):
             query = query.where(
                 or_(
                     ClientModel.name.ilike(search_term),
+                    ClientModel.first_name.ilike(search_term),
+                    ClientModel.last_name.ilike(search_term),
+                    ClientModel.maiden_name.ilike(search_term),
                     ClientModel.phone.ilike(search_term),
+                    ClientModel.whatsapp.ilike(search_term),
                     ClientModel.cin.ilike(search_term),
+                    ClientModel.email.ilike(search_term),
                 )
             )
 

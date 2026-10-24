@@ -4,6 +4,12 @@ import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiPut, apiPatch, apiFetch } from '../utils/api';
 import { formatPrice, formatDate } from '../utils/formatters';
 import ClientForm from './clients/ClientForm';
+import {
+  NOTIFICATION_CHANNEL_LABELS,
+  acteAddressOf,
+  describeAcquisition,
+  shouldToastClientError,
+} from '../utils/clientProfile';
 
 /* ── Label maps ─────────────────────────────────────────────── */
 const CLIENT_TYPE_LABELS = {
@@ -552,7 +558,7 @@ export default function ClientDetailPage() {
     try {
       await apiPut(`/api/clients/${clientId}`, payload);
     } catch (err) {
-      if (!err.details?.length) toast.error(err.message || 'Erreur lors de la mise à jour du client');
+      if (shouldToastClientError(err)) toast.error(err.message || 'Erreur lors de la mise à jour du client');
       throw err;
     }
     await loadClient();
@@ -837,6 +843,31 @@ export default function ClientDetailPage() {
             </div>
           ) : (
             <div className="cd-info-grid">
+              {/* Identité */}
+              <div className="card">
+                <h4 className="cd-subsection-title">Identité</h4>
+                <div className="cd-info-rows">
+                  <div className="cd-info-row">
+                    <span className="cd-info-val">
+                      {[client.first_name, client.last_name].filter(Boolean).join(' ') || client.name}
+                    </span>
+                  </div>
+                  {client.maiden_name && (
+                    <div className="cd-info-row">
+                      <span className="cd-info-val">Née {client.maiden_name}</span>
+                    </div>
+                  )}
+                  <div className="cd-info-row">
+                    <span className="cd-info-icon"><IconCard /></span>
+                    <span className="cd-info-val">{client.cin || '—'}</span>
+                  </div>
+                  <div className="cd-info-row">
+                    <span className="cd-info-icon"><IconCalendar /></span>
+                    <span className="cd-info-val">{formatDate(client.created_at)}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Coordonnées */}
               <div className="card">
                 <h4 className="cd-subsection-title">Coordonnées</h4>
@@ -845,23 +876,70 @@ export default function ClientDetailPage() {
                     <span className="cd-info-icon"><IconPhone /></span>
                     <span className="cd-info-val">{client.phone || '—'}</span>
                   </div>
+                  {client.whatsapp && (
+                    <div className="cd-info-row">
+                      <span className="cd-info-icon"><IconPhone /></span>
+                      <span className="cd-info-val">{client.whatsapp} (WhatsApp)</span>
+                    </div>
+                  )}
                   <div className="cd-info-row">
                     <span className="cd-info-icon"><IconMail /></span>
                     <span className="cd-info-val">{client.email || '—'}</span>
                   </div>
-                  <div className="cd-info-row">
-                    <span className="cd-info-icon"><IconCard /></span>
-                    <span className="cd-info-val">{client.cin || '—'}</span>
-                  </div>
-                  {client.address && (
-                    <div className="cd-info-row">
+                </div>
+              </div>
+
+              {/* Adresses */}
+              <div className="card">
+                <h4 className="cd-subsection-title">Adresses</h4>
+                <div className="cd-info-rows">
+                  {[
+                    ['morocco', 'Maroc', client.address_morocco],
+                    ['abroad', 'Étranger', client.address_abroad],
+                  ].filter(([, , value]) => value).map(([key, label, value]) => (
+                    <div className="cd-info-row" key={key}>
                       <span className="cd-info-icon"><IconNote /></span>
-                      <span className="cd-info-val">{client.address}</span>
+                      <span className="cd-info-val">
+                        {label} : {value}
+                        {value === acteAddressOf(client) && (
+                          <>
+                            {' '}<span className="badge badge-gold" title="Adresse utilisée pour les actes">Actes</span>
+                          </>
+                        )}
+                      </span>
                     </div>
+                  ))}
+                  {!client.address_morocco && !client.address_abroad && (
+                    <div className="cd-info-row"><span className="cd-info-val">—</span></div>
                   )}
+                </div>
+              </div>
+
+              {/* Canal d'acquisition */}
+              <div className="card">
+                <h4 className="cd-subsection-title">Canal d&apos;acquisition</h4>
+                <div className="cd-info-rows">
                   <div className="cd-info-row">
-                    <span className="cd-info-icon"><IconCalendar /></span>
-                    <span className="cd-info-val">{formatDate(client.created_at)}</span>
+                    <span className="cd-info-val">
+                      {describeAcquisition(client) ? `Canal : ${describeAcquisition(client)}` : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Préférences */}
+              <div className="card">
+                <h4 className="cd-subsection-title">Préférences</h4>
+                <div className="cd-info-rows">
+                  <div className="cd-info-row">
+                    <span className="cd-info-val">
+                      Notifications :{' '}
+                      {(client.notification_channels || []).length > 0
+                        ? client.notification_channels
+                            .map((c) => NOTIFICATION_CHANNEL_LABELS[c] || c)
+                            .join(', ')
+                        : 'aucune'}
+                    </span>
                   </div>
                 </div>
               </div>

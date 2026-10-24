@@ -1,9 +1,12 @@
 """Unit tests for client profile normalisation and validation."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from app.core.exceptions import ValidationError
 from app.domain.client_profile import (
+    acte_address_of,
     normalize_cin,
     normalize_phone,
     validate_client_profile,
@@ -103,3 +106,34 @@ class TestValidateClientProfile:
 
     def test_valid_state_without_addresses_is_returned_unchanged(self) -> None:
         assert validate_client_profile(VALID) == VALID
+
+
+class TestActeAddressOf:
+    @staticmethod
+    def _client(**fields: str | None) -> SimpleNamespace:
+        defaults = {
+            "address_morocco": None,
+            "address_abroad": None,
+            "acte_address": None,
+        }
+        return SimpleNamespace(**{**defaults, **fields})
+
+    def test_abroad_choice(self) -> None:
+        client = self._client(
+            address_morocco="Casa", address_abroad="Lyon", acte_address="abroad"
+        )
+        assert acte_address_of(client) == "Lyon"
+
+    def test_morocco_choice(self) -> None:
+        client = self._client(
+            address_morocco="Casa", address_abroad="Lyon", acte_address="morocco"
+        )
+        assert acte_address_of(client) == "Casa"
+
+    def test_single_address_without_choice(self) -> None:
+        assert acte_address_of(self._client(address_abroad="Lyon")) == "Lyon"
+        assert acte_address_of(self._client(address_morocco="Casa")) == "Casa"
+
+    def test_no_address(self) -> None:
+        assert acte_address_of(self._client()) is None
+        assert acte_address_of(self._client(address_morocco="  ")) is None

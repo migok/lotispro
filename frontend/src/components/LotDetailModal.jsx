@@ -5,6 +5,7 @@ import { useToast } from '../contexts/toastHooks';
 import { formatPrice, formatDate } from '../utils/formatters';
 import { STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
 import ClientForm from './clients/ClientForm';
+import { shouldToastClientError } from '../utils/clientProfile';
 
 /* ── Default payment plan ─────────────────────────────────── */
 const DEFAULT_PAYMENT_PLAN = {
@@ -774,7 +775,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     try {
       createdClient = await apiPost('/api/clients', payload);
     } catch (error) {
-      if (!error.details?.length) toast.error(error.message || 'Erreur lors de la création du client');
+      if (shouldToastClientError(error)) toast.error(error.message || 'Erreur lors de la création du client');
       throw error;
     }
     await loadClients();

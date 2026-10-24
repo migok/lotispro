@@ -98,3 +98,58 @@ export function fieldErrorsFromApi(error) {
   }
   return errors;
 }
+
+/** Champs que ClientForm sait afficher en erreur (clés des erreurs serveur). */
+const FORM_FIELDS = new Set([
+  'last_name', 'maiden_name', 'first_name', 'cin', 'phone', 'whatsapp', 'email',
+  'address_morocco', 'address_abroad', 'acte_address', 'acquisition_channel',
+  'acquisition_referrer', 'acquisition_date', 'client_type', 'notes',
+]);
+
+/**
+ * Faut-il un toast pour cette erreur d'enregistrement ? Oui, sauf si au moins
+ * un détail 422 est affiché sous un champ du formulaire (sinon l'erreur
+ * resterait invisible).
+ */
+export function shouldToastClientError(error) {
+  return !Object.keys(fieldErrorsFromApi(error)).some((field) => FORM_FIELDS.has(field));
+}
+
+/** Miroir de backend acte_address_of : l'adresse imprimée sur les actes. */
+export function acteAddressOf(client) {
+  const morocco = filled(client?.address_morocco) ? client.address_morocco : null;
+  const abroad = filled(client?.address_abroad) ? client.address_abroad : null;
+  if (client?.acte_address === 'abroad' && abroad) return abroad;
+  if (client?.acte_address === 'morocco' && morocco) return morocco;
+  if (morocco && !abroad) return morocco;
+  if (abroad && !morocco) return abroad;
+  return null;
+}
+
+/** 'AAAA-MM-JJ' -> 'JJ/MM/AAAA' (sans passer par Date : pas de décalage de fuseau). */
+export function formatIsoDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
+
+/** « Samsar — Karim (01/10/2026) » ; '' si aucun canal. */
+export function describeAcquisition(client) {
+  const label = ACQUISITION_CHANNEL_LABELS[client?.acquisition_channel];
+  if (!label) return '';
+  let text = label;
+  if (filled(client.acquisition_referrer)) text += ` — ${client.acquisition_referrer.trim()}`;
+  const date = formatIsoDate(client.acquisition_date);
+  if (date) text += ` (${date})`;
+  return text;
+}
+
+const SEARCH_FIELDS = [
+  'name', 'first_name', 'last_name', 'maiden_name', 'phone', 'whatsapp', 'cin', 'email',
+];
+
+/** Recherche locale (insensible à la casse) sur les mêmes champs que l'API. */
+export function matchesClientSearch(client, query) {
+  const q = String(query ?? '').trim().toLowerCase();
+  if (!q) return true;
+  return SEARCH_FIELDS.some((f) => String(client?.[f] ?? '').toLowerCase().includes(q));
+}

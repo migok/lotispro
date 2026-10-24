@@ -212,7 +212,11 @@ def _french_validation_message(error: dict) -> str:
         return f"Trop long ({max_length} caractères max)"
     if error_type in ("literal_error", "enum"):
         return "Valeur non autorisée"
-    return error["msg"].removeprefix("Value error, ")
+    message = error["msg"]
+    reason = str((error.get("ctx") or {}).get("reason", ""))
+    if error_type == "value_error" and "email" in f"{message} {reason}".lower():
+        return "Adresse email invalide"
+    return message.removeprefix("Value error, ")
 
 
 async def request_validation_handler(

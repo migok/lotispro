@@ -1,14 +1,18 @@
 """Integration tests for the client profile (fiche client) endpoints."""
 
 from collections.abc import Callable
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Any, get_args
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.database.models import UserModel
-from app.tests.factories import make_client
+from app.domain.schemas.reservation import PAYMENT_TYPE
+from app.infrastructure.database.models import ReservationModel, UserModel
+from app.infrastructure.database.repositories import ReservationRepository
+from app.tests.factories import make_client, make_lot, make_project
 
 FULL_PAYLOAD = {
     "last_name": "Benali",
@@ -506,3 +510,98 @@ class TestClientValidation:
         )
 
         assert [c["id"] for c in response.json()] == [legacy.id]
+
+    @pytest.mark.integration
+    async def test_search_by_first_name_and_email(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        fatima = await make_complete_client(
+            db_session,
+            first_name="Fatima",
+            last_name="Benali",
+            name="Fatima Benali",
+            email="fatima@exemple.ma",
+        )
+        await make_complete_client(
+            db_session, name="Karim Autre", first_name="Karim", last_name="Autre"
+        )
+
+        by_first_name = await client.get(
+            "/api/clients",
+            params={"search": "fatima"},
+            headers=auth_headers(commercial),
+        )
+        by_email = await client.get(
+            "/api/clients",
+            params={"search": "@exemple.ma"},
+            headers=auth_headers(commercial),
+        )
+
+        assert [c["id"] for c in by_first_name.json()] == [fatima.id]
+        assert [c["id"] for c in by_email.json()] == [fatima.id]
+
+    @pytest.mark.integration
+    async def test_create_rejects_invalid_email_in_french(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "email": "pas-un-email"},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        detail = response.json()["details"][0]
+        assert detail["field"].endswith("email")
+        assert detail["message"] == "Adresse email invalide"
+
+    @pytest.mark.integration
+    async def test_reservation_details_use_acte_address(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        buyer = await make_complete_client(
+            db_session,
+            address_morocco="12 rue des Orangers, Casablanca",
+            address_abroad="5 avenue de Paris, Lyon",
+            acte_address="abroad",
+        )
+        project = await make_project(db_session, manager)
+        lot = await make_lot(db_session, project, status="available")
+        headers = auth_headers(commercial)
+        response = await client.post(
+            f"/api/lots/{lot.id}/transitions/direct-reservation",
+            headers=headers,
+            json={
+                "client_id": buyer.id,
+                "guarantee_amount": 10000,
+                "payment_type": get_args(PAYMENT_TYPE)[0],
+                "finalization_date": (
+                    datetime.now(UTC) + timedelta(days=15)
+                ).isoformat(),
+            },
+        )
+        assert response.status_code == 200
+        reservation_id = (
+            await db_session.execute(
+                select(ReservationModel.id).where(ReservationModel.lot_id == lot.id)
+            )
+        ).scalar_one()
+
+        details = await ReservationRepository(db_session).get_with_details(
+            reservation_id
+        )
+
+        assert details is not None
+        assert details["client_address"] == "5 avenue de Paris, Lyon"

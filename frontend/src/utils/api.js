@@ -30,7 +30,7 @@ const getAuthHeaders = () => {
 /**
  * Construit l'Error levée pour une réponse non-OK (message + status + details).
  */
-const buildApiError = (body, status) => {
+export const buildApiError = (body, status) => {
   const error = new Error(body?.detail || body?.message || `Erreur ${status}`);
   error.status = status;
   error.details = Array.isArray(body?.details) ? body.details : [];
