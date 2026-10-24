@@ -754,7 +754,7 @@ function CarteTab({
     return () => clearTimeout(timer);
   }, [mapRef]);
 
-  // Redimensionner la carte quand on toggle les filtres
+  // Redimensionner la carte quand on toggle les filtres, la barre de sélection ou le panneau d'édition groupée
   useEffect(() => {
     const timer = setTimeout(() => {
       if (mapRef?.current) {
@@ -763,18 +763,7 @@ function CarteTab({
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [mapRef, showFilters]);
-
-  // Redimensionner la carte quand la barre de sélection ou le panneau d'édition groupée apparaît/disparaît
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (mapRef?.current) {
-        mapRef.current.invalidateSize();
-      }
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [selectionMode, showBulkEdit, mapRef]);
+  }, [mapRef, showFilters, selectionMode, showBulkEdit]);
 
   // Fermer le bulk edit quand on quitte le mode sélection
   useEffect(() => {

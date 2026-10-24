@@ -872,7 +872,11 @@ body {
   overflow-y: auto;
 }
 
-.carte-fullscreen .map-filters-v2 {
+.carte-fullscreen .map-filters-v2,
+.carte-fullscreen .selection-action-bar,
+.carte-fullscreen .bm-panel,
+.carte-tab:fullscreen .selection-action-bar,
+.carte-tab:fullscreen .bm-panel {
   flex-shrink: 0;
 }
 
@@ -881,7 +885,8 @@ body {
 .carte-fullscreen .carte-map-wrapper,
 .carte-tab:fullscreen .carte-map-wrapper {
   flex: 1;
-  min-height: 0;
+  /* Floor: when filters + bar + bulk-edit panel leave less room, the root scrolls (overflow-y: auto) instead of squeezing the map */
+  min-height: 300px;
   display: flex;
   flex-direction: column;
 }
