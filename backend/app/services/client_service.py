@@ -2,7 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.domain.client_profile import compose_client_name
 from app.domain.schemas.client import (
@@ -30,6 +30,16 @@ class ClientService:
     def _to_response(client: ClientModel) -> ClientResponse:
         """Build the API response from a client model."""
         return ClientResponse.model_validate(client)
+
+    @staticmethod
+    def _compose_name(first_name: str | None, last_name: str | None) -> str:
+        """Compose the display name, rejecting names that exceed the column."""
+        name = compose_client_name(first_name, last_name)
+        if len(name) > 200:
+            raise ValidationError(
+                "Nom complet trop long (200 caractères max)", field="first_name"
+            )
+        return name
 
     def __init__(self, session: AsyncSession):
         """Initialize with database session."""
@@ -119,7 +129,7 @@ class ClientService:
             Created client response
         """
         fields = data.model_dump()
-        fields["name"] = compose_client_name(data.first_name, data.last_name)
+        fields["name"] = self._compose_name(data.first_name, data.last_name)
         client = await self.client_repo.create(**fields, created_by_user_id=user_id)
 
         logger.info(
@@ -158,9 +168,9 @@ class ClientService:
             if value is not None or key not in self._NOT_NULLABLE_FIELDS
         }
         if "first_name" in fields or "last_name" in fields:
-            name = compose_client_name(
+            name = self._compose_name(
                 fields.get("first_name", client.first_name),
-                fields.get("last_name", client.last_name),
+                fields.get("last_name", client.last_name or client.name),
             )
             if name:
                 fields["name"] = name

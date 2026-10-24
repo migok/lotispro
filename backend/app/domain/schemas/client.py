@@ -50,7 +50,7 @@ ClientType = Literal["proprietaire", "revendeur", "investisseur", "autre"]
 class ClientCreate(BaseSchema):
     """Schema for creating a new client."""
 
-    last_name: str = Field(min_length=1, max_length=100, description="Last name")
+    last_name: str = Field(min_length=1, max_length=200, description="Last name")
     first_name: str = Field(min_length=1, max_length=100, description="First name")
     maiden_name: str | None = Field(default=None, max_length=100)
     phone: str = Field(min_length=1, max_length=20, description="Phone number")
@@ -75,7 +75,7 @@ class ClientCreate(BaseSchema):
 class ClientUpdate(BaseSchema):
     """Schema for updating a client (all fields optional)."""
 
-    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=200)
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     maiden_name: str | None = Field(default=None, max_length=100)
     phone: str | None = Field(default=None, min_length=1, max_length=20)

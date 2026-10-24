@@ -21,7 +21,7 @@ branch_labels = None
 depends_on = None
 
 NEW_COLUMNS = [
-    sa.Column("last_name", sa.String(length=100), nullable=True),
+    sa.Column("last_name", sa.String(length=200), nullable=True),
     sa.Column("first_name", sa.String(length=100), nullable=True),
     sa.Column("maiden_name", sa.String(length=100), nullable=True),
     sa.Column("whatsapp", sa.String(length=20), nullable=True),

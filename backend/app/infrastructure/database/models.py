@@ -44,7 +44,7 @@ class UserModel(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     company: Mapped[str | None] = mapped_column(String(150), nullable=True)
     role: Mapped[str] = mapped_column(

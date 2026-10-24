@@ -162,3 +162,37 @@ class TestClientProfile:
         assert data["acquisition_channel"] == "smap"
         assert data["address_abroad"] == "Lyon"
         assert data["acte_address"] == "abroad"
+
+    @pytest.mark.integration
+    async def test_update_legacy_client_keeps_name_as_last_name(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        legacy = await make_client(db_session, name="Ancien Client", last_name=None)
+
+        response = await client.put(
+            f"/api/clients/{legacy.id}",
+            json={"first_name": "Amine"},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == "Amine Ancien Client"
+
+    @pytest.mark.integration
+    async def test_create_rejects_composed_name_too_long(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "first_name": "A" * 100, "last_name": "B" * 150},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
