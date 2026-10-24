@@ -16,7 +16,7 @@ _Dernière mise à jour : 2026-10-24_
 |---|---|---|---|---|
 | E0 Fondations & nettoyage | ✅ | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | [#46](https://github.com/migok/lotispro/pull/46) |
 | E1 🐛 #5 Plein écran | 🟨 | 2 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | |
-| E2 👤 #7 Fiche client | ⬜ | 0 / 4 | [#18](https://github.com/migok/lotispro/issues/18) | |
+| E2 👤 #7 Fiche client | 🟨 | 4 / 4 | [#18](https://github.com/migok/lotispro/issues/18) | |
 | E3 Statuts par projet + états des lieux | ⬜ | 0 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
 | E4 🔄 #8 Réservation | ⬜ | 0 / 4 | [#29](https://github.com/migok/lotispro/issues/29) | |
 | E5 📊 #3 Vue projet | ⬜ | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | |
@@ -35,10 +35,10 @@ _Dernière mise à jour : 2026-10-24_
 | E0-T6 | CI GitHub Actions + `CLAUDE.md` | ✅ | [#14](https://github.com/migok/lotispro/issues/14) | | 2026-10-23 |
 | E1-T1 | Carte flexible en plein écran | ✅ | [#16](https://github.com/migok/lotispro/issues/16) | | 2026-10-24 |
 | E1-T2 | Recette multi-navigateurs | ✅ | [#17](https://github.com/migok/lotispro/issues/17) | | 2026-10-24 |
-| E2-T1 | Migration 0017 + modèle client | ⬜ | [#19](https://github.com/migok/lotispro/issues/19) | | |
-| E2-T2 | Validation + doublons | ⬜ | [#20](https://github.com/migok/lotispro/issues/20) | | |
-| E2-T3 | Formulaire client | ⬜ | [#21](https://github.com/migok/lotispro/issues/21) | | |
-| E2-T4 | Fiche / listes / PDF | ⬜ | [#22](https://github.com/migok/lotispro/issues/22) | | |
+| E2-T1 | Migration 0017 + modèle client | ✅ | [#19](https://github.com/migok/lotispro/issues/19) | | 2026-10-24 |
+| E2-T2 | Validation + doublons | ✅ | [#20](https://github.com/migok/lotispro/issues/20) | | 2026-10-24 |
+| E2-T3 | Formulaire client | ✅ | [#21](https://github.com/migok/lotispro/issues/21) | | 2026-10-24 |
+| E2-T4 | Fiche / listes / PDF | ✅ | [#22](https://github.com/migok/lotispro/issues/22) | | 2026-10-24 |
 | E3-T1 | `lot_workflow` + `lot_status_history` | ⬜ | [#24](https://github.com/migok/lotispro/issues/24) | | |
 | E3-T2 | Statuts optionnels par projet | ⬜ | [#25](https://github.com/migok/lotispro/issues/25) | | |
 | E3-T3 | Transition option → engagée | ⬜ | [#26](https://github.com/migok/lotispro/issues/26) | | |

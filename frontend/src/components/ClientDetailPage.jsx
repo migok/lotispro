@@ -3,7 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiPut, apiPatch, apiFetch } from '../utils/api';
 import { formatPrice, formatDate } from '../utils/formatters';
-import { CLIENT_TYPES } from '../utils/constants';
+import ClientForm from './clients/ClientForm';
+import {
+  NOTIFICATION_CHANNEL_LABELS,
+  acteAddressOf,
+  describeAcquisition,
+  shouldToastClientError,
+} from '../utils/clientProfile';
 
 /* ── Label maps ─────────────────────────────────────────────── */
 const CLIENT_TYPE_LABELS = {
@@ -421,8 +427,6 @@ export default function ClientDetailPage() {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('info');
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({});
-  const [saving, setSaving] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
   // Payment data
@@ -442,15 +446,6 @@ export default function ClientDetailPage() {
     try {
       const data = await apiGet(`/api/clients/${clientId}/details`);
       setClient(data);
-      setEditForm({
-        name:        data.name        || '',
-        phone:       data.phone       || '',
-        email:       data.email       || '',
-        cin:         data.cin         || '',
-        address:     data.address     || '',
-        client_type: data.client_type || 'autre',
-        notes:       data.notes       || '',
-      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -559,18 +554,16 @@ export default function ClientDetailPage() {
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  const handleSave = async (payload) => {
     try {
-      await apiPut(`/api/clients/${clientId}`, editForm);
-      await loadClient();
-      setIsEditing(false);
-      toast.success('Client mis à jour avec succès');
-    } catch {
-      toast.error('Erreur lors de la mise à jour du client');
-    } finally {
-      setSaving(false);
+      await apiPut(`/api/clients/${clientId}`, payload);
+    } catch (err) {
+      if (shouldToastClientError(err)) toast.error(err.message || 'Erreur lors de la mise à jour du client');
+      throw err;
     }
+    await loadClient();
+    setIsEditing(false);
+    toast.success('Client mis à jour');
   };
 
   /* ── Guards ─────────────────────────────────────────────── */
@@ -841,57 +834,40 @@ export default function ClientDetailPage() {
         {activeTab === 'info' && (
           isEditing ? (
             <div className="card">
-              <div className="form-2col">
-                <div className="field-group">
-                  <label className="field-label">Nom complet *</label>
-                  <input className="field-input" type="text" value={editForm.name}
-                    onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Téléphone</label>
-                  <input className="field-input" type="tel" value={editForm.phone}
-                    onChange={e => setEditForm({ ...editForm, phone: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Email</label>
-                  <input className="field-input" type="email" value={editForm.email}
-                    onChange={e => setEditForm({ ...editForm, email: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">CIN</label>
-                  <input className="field-input" type="text" value={editForm.cin}
-                    onChange={e => setEditForm({ ...editForm, cin: e.target.value })} />
-                </div>
-                <div className="field-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="field-label">Adresse</label>
-                  <input className="field-input" type="text" placeholder="Rue, ville, pays"
-                    value={editForm.address || ''}
-                    onChange={e => setEditForm({ ...editForm, address: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Type de client</label>
-                  <select className="field-input" value={editForm.client_type}
-                    onChange={e => setEditForm({ ...editForm, client_type: e.target.value })}>
-                    {CLIENT_TYPES.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="field-label">Notes</label>
-                  <textarea className="field-input" rows={3} value={editForm.notes}
-                    onChange={e => setEditForm({ ...editForm, notes: e.target.value })} />
-                </div>
-              </div>
-              <div className="flex gap-sm" style={{ marginTop: 'var(--spacing-lg)' }}>
-                <button className="btn btn-ghost" onClick={() => setIsEditing(false)}>Annuler</button>
-                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                  {saving ? 'Enregistrement…' : 'Enregistrer'}
-                </button>
-              </div>
+              <ClientForm
+                initialValues={client}
+                excludeId={client.id}
+                onSubmit={handleSave}
+                onCancel={() => setIsEditing(false)}
+              />
             </div>
           ) : (
             <div className="cd-info-grid">
+              {/* Identité */}
+              <div className="card">
+                <h4 className="cd-subsection-title">Identité</h4>
+                <div className="cd-info-rows">
+                  <div className="cd-info-row">
+                    <span className="cd-info-val">
+                      {[client.first_name, client.last_name].filter(Boolean).join(' ') || client.name}
+                    </span>
+                  </div>
+                  {client.maiden_name && (
+                    <div className="cd-info-row">
+                      <span className="cd-info-val">Née {client.maiden_name}</span>
+                    </div>
+                  )}
+                  <div className="cd-info-row">
+                    <span className="cd-info-icon"><IconCard /></span>
+                    <span className="cd-info-val">{client.cin || '—'}</span>
+                  </div>
+                  <div className="cd-info-row">
+                    <span className="cd-info-icon"><IconCalendar /></span>
+                    <span className="cd-info-val">{formatDate(client.created_at)}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Coordonnées */}
               <div className="card">
                 <h4 className="cd-subsection-title">Coordonnées</h4>
@@ -900,23 +876,70 @@ export default function ClientDetailPage() {
                     <span className="cd-info-icon"><IconPhone /></span>
                     <span className="cd-info-val">{client.phone || '—'}</span>
                   </div>
+                  {client.whatsapp && (
+                    <div className="cd-info-row">
+                      <span className="cd-info-icon"><IconPhone /></span>
+                      <span className="cd-info-val">{client.whatsapp} (WhatsApp)</span>
+                    </div>
+                  )}
                   <div className="cd-info-row">
                     <span className="cd-info-icon"><IconMail /></span>
                     <span className="cd-info-val">{client.email || '—'}</span>
                   </div>
-                  <div className="cd-info-row">
-                    <span className="cd-info-icon"><IconCard /></span>
-                    <span className="cd-info-val">{client.cin || '—'}</span>
-                  </div>
-                  {client.address && (
-                    <div className="cd-info-row">
+                </div>
+              </div>
+
+              {/* Adresses */}
+              <div className="card">
+                <h4 className="cd-subsection-title">Adresses</h4>
+                <div className="cd-info-rows">
+                  {[
+                    ['morocco', 'Maroc', client.address_morocco],
+                    ['abroad', 'Étranger', client.address_abroad],
+                  ].filter(([, , value]) => value).map(([key, label, value]) => (
+                    <div className="cd-info-row" key={key}>
                       <span className="cd-info-icon"><IconNote /></span>
-                      <span className="cd-info-val">{client.address}</span>
+                      <span className="cd-info-val">
+                        {label} : {value}
+                        {value === acteAddressOf(client) && (
+                          <>
+                            {' '}<span className="badge badge-gold" title="Adresse utilisée pour les actes">Actes</span>
+                          </>
+                        )}
+                      </span>
                     </div>
+                  ))}
+                  {!client.address_morocco && !client.address_abroad && (
+                    <div className="cd-info-row"><span className="cd-info-val">—</span></div>
                   )}
+                </div>
+              </div>
+
+              {/* Canal d'acquisition */}
+              <div className="card">
+                <h4 className="cd-subsection-title">Canal d&apos;acquisition</h4>
+                <div className="cd-info-rows">
                   <div className="cd-info-row">
-                    <span className="cd-info-icon"><IconCalendar /></span>
-                    <span className="cd-info-val">{formatDate(client.created_at)}</span>
+                    <span className="cd-info-val">
+                      {describeAcquisition(client) ? `Canal : ${describeAcquisition(client)}` : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Préférences */}
+              <div className="card">
+                <h4 className="cd-subsection-title">Préférences</h4>
+                <div className="cd-info-rows">
+                  <div className="cd-info-row">
+                    <span className="cd-info-val">
+                      Notifications :{' '}
+                      {(client.notification_channels || []).length > 0
+                        ? client.notification_channels
+                            .map((c) => NOTIFICATION_CHANNEL_LABELS[c] || c)
+                            .join(', ')
+                        : 'aucune'}
+                    </span>
                   </div>
                 </div>
               </div>

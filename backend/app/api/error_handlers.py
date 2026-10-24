@@ -202,6 +202,23 @@ async def rate_limit_error_handler(
     return response
 
 
+def _french_validation_message(error: dict) -> str:
+    """Translate common Pydantic messages to French; strip the ValueError prefix."""
+    error_type = error["type"]
+    if error_type in ("missing", "string_too_short"):
+        return "Champ obligatoire"
+    if error_type == "string_too_long":
+        max_length = (error.get("ctx") or {}).get("max_length")
+        return f"Trop long ({max_length} caractères max)"
+    if error_type in ("literal_error", "enum"):
+        return "Valeur non autorisée"
+    message = error["msg"]
+    reason = str((error.get("ctx") or {}).get("reason", ""))
+    if error_type == "value_error" and "email" in f"{message} {reason}".lower():
+        return "Adresse email invalide"
+    return message.removeprefix("Value error, ")
+
+
 async def request_validation_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
@@ -219,7 +236,7 @@ async def request_validation_handler(
         details.append(
             {
                 "field": field,
-                "message": error["msg"],
+                "message": _french_validation_message(error),
                 "type": error["type"],
             }
         )

@@ -26,7 +26,7 @@ class ClientRepository(BaseRepository[ClientModel]):
         """Get clients with filtering.
 
         Args:
-            search: Search term for name, phone, or CIN
+            search: Search term for name parts, phone, WhatsApp, CIN or email
             client_type: Filter by client type
             offset: Pagination offset
             limit: Pagination limit
@@ -41,8 +41,13 @@ class ClientRepository(BaseRepository[ClientModel]):
             query = query.where(
                 or_(
                     ClientModel.name.ilike(search_term),
+                    ClientModel.first_name.ilike(search_term),
+                    ClientModel.last_name.ilike(search_term),
+                    ClientModel.maiden_name.ilike(search_term),
                     ClientModel.phone.ilike(search_term),
+                    ClientModel.whatsapp.ilike(search_term),
                     ClientModel.cin.ilike(search_term),
+                    ClientModel.email.ilike(search_term),
                 )
             )
 
@@ -53,6 +58,41 @@ class ClientRepository(BaseRepository[ClientModel]):
 
         result = await self.session.execute(query)
         return list(result.scalars().all())
+
+    async def find_duplicates(
+        self,
+        cin: str | None,
+        email: str | None,
+        exclude_id: int | None = None,
+    ) -> list[ClientModel]:
+        """Find clients sharing a CIN (normalised) or an email (case-insensitive)."""
+        conditions = []
+        if cin and cin.strip():
+            normalized = "".join(cin.split()).upper()
+            conditions.append(
+                func.upper(func.replace(ClientModel.cin, " ", "")) == normalized
+            )
+        if email and email.strip():
+            conditions.append(func.lower(ClientModel.email) == email.strip().lower())
+        if not conditions:
+            return []
+        query = select(ClientModel).where(or_(*conditions))
+        if exclude_id is not None:
+            query = query.where(ClientModel.id != exclude_id)
+        result = await self.session.execute(query.order_by(ClientModel.id))
+        return list(result.scalars().all())
+
+    async def update_fields(self, client_id: int, fields: dict) -> ClientModel:
+        """Update the given fields, writing explicit None values too.
+
+        Unlike ``BaseRepository.update``, None is applied (clears the column).
+        """
+        client = await self.get_by_id(client_id)
+        for key, value in fields.items():
+            setattr(client, key, value)
+        await self.session.flush()
+        await self.session.refresh(client)
+        return client
 
     async def get_details(self, client_id: int) -> dict | None:
         """Get detailed client info with history and stats.
@@ -199,7 +239,17 @@ class ClientRepository(BaseRepository[ClientModel]):
             "phone": client.phone,
             "email": client.email,
             "cin": client.cin,
-            "address": client.address,
+            "address_morocco": client.address_morocco,
+            "last_name": client.last_name,
+            "first_name": client.first_name,
+            "maiden_name": client.maiden_name,
+            "whatsapp": client.whatsapp,
+            "address_abroad": client.address_abroad,
+            "acte_address": client.acte_address,
+            "acquisition_channel": client.acquisition_channel,
+            "acquisition_referrer": client.acquisition_referrer,
+            "acquisition_date": client.acquisition_date,
+            "notification_channels": client.notification_channels,
             "client_type": client.client_type,
             "notes": client.notes,
             "created_by_user_id": client.created_by_user_id,
