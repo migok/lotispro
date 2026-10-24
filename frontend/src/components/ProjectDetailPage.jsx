@@ -7,6 +7,8 @@ import LotDetailModal from './LotDetailModal';
 import Dashboard from './Dashboard';
 import LotPricingConfigPanel from './LotPricingConfigPanel';
 import { useAuth } from '../contexts/authHooks';
+import { getCarteMapContainerStyle } from './carteMapContainerStyle';
+import useLeafletAutoResize from './useLeafletAutoResize';
 
 const STATUS_COLORS = {
   creation:               '#6b7280',
@@ -742,27 +744,11 @@ function CarteTab({
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const carteTabRef = useRef(null);
 
-  // Force la carte à se redimensionner au montage du composant
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (mapRef?.current) {
-        mapRef.current.invalidateSize();
-      }
-    }, 150);
+  const bulkPanelVisible = selectionMode && showBulkEdit && selectedCount > 0;
 
-    return () => clearTimeout(timer);
-  }, [mapRef]);
-
-  // Redimensionner la carte quand on toggle les filtres
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (mapRef?.current) {
-        mapRef.current.invalidateSize();
-      }
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [mapRef, showFilters]);
+  // Toute variation de taille du conteneur de la carte (montage, filtres, barre de
+  // sélection, panneau d'édition groupée, erreurs, plein écran) redimensionne Leaflet.
+  useLeafletAutoResize(mapRef, mapContainerRef);
 
   // Fermer le bulk edit quand on quitte le mode sélection
   useEffect(() => {
@@ -1103,7 +1089,7 @@ function CarteTab({
       )}
 
       {/* Bulk Metadata — inline panel (same view as selection mode) */}
-      {selectionMode && showBulkEdit && selectedCount > 0 && (
+      {bulkPanelVisible && (
         <BulkMetadataModal
           projectId={projectId}
           selectedCount={selectedCount}
@@ -1118,15 +1104,10 @@ function CarteTab({
       )}
 
       {/* Map Container */}
-      <div style={{ position: 'relative' }}>
+      <div className="carte-map-wrapper" style={{ position: 'relative' }}>
         <div
           className="section-card carte-map-container"
-          style={{
-            padding: 0,
-            overflow: 'hidden',
-            height: isFullscreen ? 'calc(100vh - 120px)' : 'calc(100vh - 300px)',
-            minHeight: 500
-          }}
+          style={getCarteMapContainerStyle(isFullscreen)}
         >
           <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
         </div>

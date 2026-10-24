@@ -14,8 +14,8 @@ _Dernière mise à jour : 2026-10-24_
 
 | Epic | Statut | Tâches faites | Issue | PR |
 |---|---|---|---|---|
-| E0 Fondations & nettoyage | 🟨 | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | |
-| E1 🐛 #5 Plein écran | ⬜ | 0 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | |
+| E0 Fondations & nettoyage | ✅ | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | [#46](https://github.com/migok/lotispro/pull/46) |
+| E1 🐛 #5 Plein écran | 🟨 | 2 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | |
 | E2 👤 #7 Fiche client | ⬜ | 0 / 4 | [#18](https://github.com/migok/lotispro/issues/18) | |
 | E3 Statuts par projet + états des lieux | ⬜ | 0 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
 | E4 🔄 #8 Réservation | ⬜ | 0 / 4 | [#29](https://github.com/migok/lotispro/issues/29) | |
@@ -33,8 +33,8 @@ _Dernière mise à jour : 2026-10-24_
 | E0-T4 | Backend ruff à 0 (dont `F821`) | ✅ | [#12](https://github.com/migok/lotispro/issues/12) | | 2026-10-22 |
 | E0-T5 | ESLint à 0 + Vitest | ✅ | [#13](https://github.com/migok/lotispro/issues/13) | | 2026-10-23 |
 | E0-T6 | CI GitHub Actions + `CLAUDE.md` | ✅ | [#14](https://github.com/migok/lotispro/issues/14) | | 2026-10-23 |
-| E1-T1 | Carte flexible en plein écran | ⬜ | [#16](https://github.com/migok/lotispro/issues/16) | | |
-| E1-T2 | Recette multi-navigateurs | ⬜ | [#17](https://github.com/migok/lotispro/issues/17) | | |
+| E1-T1 | Carte flexible en plein écran | ✅ | [#16](https://github.com/migok/lotispro/issues/16) | | 2026-10-24 |
+| E1-T2 | Recette multi-navigateurs | ✅ | [#17](https://github.com/migok/lotispro/issues/17) | | 2026-10-24 |
 | E2-T1 | Migration 0017 + modèle client | ⬜ | [#19](https://github.com/migok/lotispro/issues/19) | | |
 | E2-T2 | Validation + doublons | ⬜ | [#20](https://github.com/migok/lotispro/issues/20) | | |
 | E2-T3 | Formulaire client | ⬜ | [#21](https://github.com/migok/lotispro/issues/21) | | |
@@ -130,9 +130,13 @@ Relevés lors de E0-T3 (`test_lot_transitions.py`) ; le code applicatif n'a pas 
 
 ## Recette E1 (plein écran)
 
-| Mode | Chrome | Firefox | Edge |
+Recette faite par l'utilisateur le 2026-10-24 sur http://localhost:5174 (branche `feature/e1-plein-ecran`, commit `210f9c2`), scénario : édition groupée en plein écran, désélection du dernier lot (pas de bande grise), fenêtre basse (~600 px, défilement), lot à compléter (avertissement puis succès), sortie par Échap, console sans erreur → **validé**.
+
+| Mode | Navigateur principal de l'utilisateur | Firefox | Edge |
 |---|---|---|---|
-| Fenêtré standard | | | |
-| Plein écran (F11 et bouton) | | | |
-| Tablette 1024 px | | | |
-| Écran large ≥ 1440 px | | | |
+| Fenêtré standard | ✅ | non testé | non testé |
+| Plein écran (bouton) | ✅ | non testé | non testé |
+| Fenêtre basse (~600 px) | ✅ | non testé | non testé |
+| Tablette 1024 px / écran large ≥ 1440 px | non testé séparément | non testé | non testé |
+
+Safari : non testé (Windows).

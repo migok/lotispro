@@ -869,14 +869,35 @@ body {
   padding: var(--spacing-md);
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
-.carte-fullscreen .carte-filters {
+/* `.carte-fullscreen` is always applied (also in native fullscreen); the
+   `.carte-tab:fullscreen` selectors below are only a safety net (effective for
+   ~1 frame before React adds the class). */
+.carte-fullscreen .map-filters-v2,
+.carte-fullscreen .selection-action-bar,
+.carte-fullscreen .bm-panel,
+.carte-tab:fullscreen .selection-action-bar,
+.carte-tab:fullscreen .bm-panel {
   flex-shrink: 0;
 }
 
+/* The map container sits inside .carte-map-wrapper (position: relative, for the lot popup):
+   the wrapper takes the remaining space and the map container fills it. */
+.carte-fullscreen .carte-map-wrapper,
+.carte-tab:fullscreen .carte-map-wrapper {
+  flex: 1;
+  /* Floor: when filters + bar + bulk-edit panel leave less room, the root scrolls (overflow-y: auto) instead of squeezing the map */
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
 .carte-fullscreen .carte-map-container {
-  /* Height is controlled by the inline style (calc(100vh - Xpx)) — do NOT override it */
+  /* Flexible: fills whatever space remains after filters, selection bar and bulk-edit panel */
+  flex: 1;
+  min-height: 0;
 }
 
 /* Styles pour le fullscreen natif du navigateur */
@@ -886,7 +907,8 @@ body {
 }
 
 .carte-tab:fullscreen .carte-map-container {
-  /* Height is controlled by the inline style — do NOT override it */
+  flex: 1;
+  min-height: 0;
 }
 
 /* ============================================
