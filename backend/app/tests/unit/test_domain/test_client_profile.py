@@ -25,7 +25,7 @@ class TestNormalizeCin:
     def test_valid(self, raw: str | None, expected: str | None) -> None:
         assert normalize_cin(raw) == expected
 
-    @pytest.mark.parametrize("raw", ["123456", "ABC12", "AB1234567"])
+    @pytest.mark.parametrize("raw", ["123456", "ABC12", "AB1234567", "AB١٢٣"])
     def test_invalid(self, raw: str) -> None:
         with pytest.raises(ValueError, match="Format CIN invalide"):
             normalize_cin(raw)
@@ -47,7 +47,7 @@ class TestNormalizePhone:
     def test_valid(self, raw: str | None, expected: str | None) -> None:
         assert normalize_phone(raw) == expected
 
-    @pytest.mark.parametrize("raw", ["12345", "abc"])
+    @pytest.mark.parametrize("raw", ["12345", "abc", "+2١٢612345678", "٠٦١٢٣٤٥٦٧٨"])
     def test_invalid(self, raw: str) -> None:
         with pytest.raises(ValueError, match="Numéro invalide"):
             normalize_phone(raw)

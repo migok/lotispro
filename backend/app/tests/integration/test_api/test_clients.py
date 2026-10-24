@@ -70,6 +70,9 @@ class TestClientProfile:
         fields = " ".join(d["field"] for d in response.json()["details"])
         for required in ("last_name", "first_name", "phone", "acquisition_channel"):
             assert required in fields
+        assert {d["message"] for d in response.json()["details"]} == {
+            "Champ obligatoire"
+        }
 
     @pytest.mark.integration
     async def test_create_client_rejects_unknown_channel(
@@ -85,6 +88,8 @@ class TestClientProfile:
         )
 
         assert response.status_code == 422
+        message = response.json()["details"][0]["message"]
+        assert message.startswith("Canal d'acquisition invalide")
 
     @pytest.mark.integration
     async def test_legacy_client_response_has_new_fields_null(
@@ -261,7 +266,11 @@ class TestClientValidation:
         )
 
         assert response.status_code == 422
-        assert response.json()["details"][0]["field"].endswith("phone")
+        detail = response.json()["details"][0]
+        assert detail["field"].endswith("phone")
+        assert detail["message"] == (
+            "Numéro invalide (format international, ex. +212612345678)"
+        )
 
     @pytest.mark.integration
     async def test_create_samsar_requires_date(
@@ -383,3 +392,117 @@ class TestClientValidation:
 
         assert response.status_code == 200
         assert response.json() == []
+
+    @pytest.mark.integration
+    async def test_create_rejects_invalid_cin_with_exact_message(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "cin": "123456"},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        detail = response.json()["details"][0]
+        assert detail["field"].endswith("cin")
+        assert detail["message"] == "Format CIN invalide (ex. AB123456)"
+
+    @pytest.mark.integration
+    async def test_create_accepts_spaced_numbers_beyond_20_raw_chars(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={
+                **FULL_PAYLOAD,
+                "phone": "+212 6 12 34 56 78",
+                "whatsapp": "0 6 1 2 3 4 5 6 7 8",
+                "cin": "A B 1 2 3 4 5 6",
+            },
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["phone"] == "+212612345678"
+        assert data["whatsapp"] == "+212612345678"
+        assert data["cin"] == "AB123456"
+
+    @pytest.mark.integration
+    async def test_raw_whatsapp_normalised_on_create_and_update(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        headers = auth_headers(commercial)
+        created = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "whatsapp": "06 12 34 56 78"},
+            headers=headers,
+        )
+        assert created.json()["whatsapp"] == "+212612345678"
+
+        updated = await client.put(
+            f"/api/clients/{created.json()['id']}",
+            json={
+                "cin": "cd 654321",
+                "phone": "0661-234-567",
+                "whatsapp": "07 11 22 33 44",
+            },
+            headers=headers,
+        )
+
+        assert updated.status_code == 200
+        data = (
+            await client.get(f"/api/clients/{created.json()['id']}", headers=headers)
+        ).json()
+        assert data["cin"] == "CD654321"
+        assert data["phone"] == "+212661234567"
+        assert data["whatsapp"] == "+212711223344"
+
+    @pytest.mark.integration
+    async def test_update_single_address_infers_acte_address(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        existing = await make_complete_client(db_session)
+        headers = auth_headers(commercial)
+
+        put = await client.put(
+            f"/api/clients/{existing.id}",
+            json={"address_abroad": "5 avenue de Paris, Lyon"},
+            headers=headers,
+        )
+        assert put.status_code == 200
+
+        data = (await client.get(f"/api/clients/{existing.id}", headers=headers)).json()
+        assert data["acte_address"] == "abroad"
+
+    @pytest.mark.integration
+    async def test_duplicates_match_legacy_unnormalised_cin(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        legacy = await make_client(db_session, cin="ab 123456")
+
+        response = await client.get(
+            "/api/clients/duplicates",
+            params={"cin": "AB123456"},
+            headers=auth_headers(commercial),
+        )
+
+        assert [c["id"] for c in response.json()] == [legacy.id]

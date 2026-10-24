@@ -14,8 +14,8 @@ ACQUISITION_CHANNELS: tuple[str, ...] = (
 ACTE_ADDRESS_CHOICES: tuple[str, ...] = ("morocco", "abroad")
 NOTIFICATION_CHANNELS: tuple[str, ...] = ("email", "sms", "whatsapp")
 
-CIN_PATTERN = re.compile(r"^[A-Z]{1,2}\d{1,6}$")
-PHONE_PATTERN = re.compile(r"^\+[1-9]\d{7,14}$")
+CIN_PATTERN = re.compile(r"^[A-Z]{1,2}[0-9]{1,6}$")
+PHONE_PATTERN = re.compile(r"^\+[1-9][0-9]{7,14}$")
 CIN_ERROR = "Format CIN invalide (ex. AB123456)"
 PHONE_ERROR = "Numéro invalide (format international, ex. +212612345678)"
 
@@ -47,7 +47,7 @@ def normalize_phone(value: str | None) -> str | None:
         return None
     if phone.startswith("00"):
         phone = "+" + phone[2:]
-    elif re.fullmatch(r"0\d{9}", phone):
+    elif re.fullmatch(r"0[0-9]{9}", phone):
         phone = "+212" + phone[1:]
     if not PHONE_PATTERN.match(phone):
         raise ValueError(PHONE_ERROR)

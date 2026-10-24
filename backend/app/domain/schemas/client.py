@@ -69,11 +69,11 @@ class ClientCreate(_ClientNormalizationMixin):
     last_name: str = Field(min_length=1, max_length=200, description="Last name")
     first_name: str = Field(min_length=1, max_length=100, description="First name")
     maiden_name: str | None = Field(default=None, max_length=100)
-    phone: str = Field(min_length=1, max_length=20, description="Phone number")
-    whatsapp: str | None = Field(default=None, max_length=20)
+    phone: str = Field(min_length=1, max_length=30, description="Phone number")
+    whatsapp: str | None = Field(default=None, max_length=30)
     email: EmailStr | None = Field(default=None, description="Email address")
     cin: str | None = Field(
-        default=None, max_length=20, description="National ID (CIN)"
+        default=None, max_length=30, description="National ID (CIN)"
     )
     address_morocco: str | None = Field(default=None, max_length=500)
     address_abroad: str | None = Field(default=None, max_length=500)
@@ -94,10 +94,10 @@ class ClientUpdate(_ClientNormalizationMixin):
     last_name: str | None = Field(default=None, min_length=1, max_length=200)
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     maiden_name: str | None = Field(default=None, max_length=100)
-    phone: str | None = Field(default=None, min_length=1, max_length=20)
-    whatsapp: str | None = Field(default=None, max_length=20)
+    phone: str | None = Field(default=None, min_length=1, max_length=30)
+    whatsapp: str | None = Field(default=None, max_length=30)
     email: EmailStr | None = None
-    cin: str | None = Field(default=None, max_length=20)
+    cin: str | None = Field(default=None, max_length=30)
     address_morocco: str | None = Field(default=None, max_length=500)
     address_abroad: str | None = Field(default=None, max_length=500)
     acte_address: OptionalActeAddress = None
