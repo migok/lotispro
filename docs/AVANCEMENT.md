@@ -14,7 +14,7 @@ _Dernière mise à jour : 2026-10-24_
 
 | Epic | Statut | Tâches faites | Issue | PR |
 |---|---|---|---|---|
-| E0 Fondations & nettoyage | 🟦 | 5 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | |
+| E0 Fondations & nettoyage | 🟨 | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | |
 | E1 🐛 #5 Plein écran | ⬜ | 0 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | |
 | E2 👤 #7 Fiche client | ⬜ | 0 / 4 | [#18](https://github.com/migok/lotispro/issues/18) | |
 | E3 Statuts par projet + états des lieux | ⬜ | 0 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
@@ -27,7 +27,7 @@ _Dernière mise à jour : 2026-10-24_
 
 | ID | Tâche | Statut | Issue | PR | Terminé le |
 |---|---|---|---|---|---|
-| E0-T1 | Réconcilier `main` → `dev` (hors IA) ; deploy strict | ⬜ | [#9](https://github.com/migok/lotispro/issues/9) | | |
+| E0-T1 | Réconcilier `main` → `dev` (hors IA) ; deploy strict | ✅ | [#9](https://github.com/migok/lotispro/issues/9) | | 2026-10-24 |
 | E0-T2 | Isolation tests backend + fabriques | ✅ | [#10](https://github.com/migok/lotispro/issues/10) | | 2026-10-22 |
 | E0-T3 | Tests de caractérisation des transitions | ✅ | [#11](https://github.com/migok/lotispro/issues/11) | | 2026-10-22 |
 | E0-T4 | Backend ruff à 0 (dont `F821`) | ✅ | [#12](https://github.com/migok/lotispro/issues/12) | | 2026-10-22 |
@@ -75,7 +75,7 @@ _Dernière mise à jour : 2026-10-24_
 - `feature/marketing_landing_page` : un seul commit non mergé dans `dev` (`git log --oneline dev..origin/feature/marketing_landing_page` après réconciliation) :
   - `b237c02 feat: update Contact and Landing pages with new messaging and styling for demo booking` (touche `ContactPage.jsx`, `LandingPage.jsx`, `landing.css`, ajoute `frontend/public/launch-strategy.md`).
 - Pas de merge effectué (décision reportée).
-- `backend/railway.toml` ligne 6 contient encore `|| alembic stamp 0001` : modification en attente (bloquée par le classifieur de permissions), à appliquer manuellement par l'utilisateur ; E0-T1 reste donc ⬜.
+- `backend/railway.toml` ligne 6 : `|| alembic stamp 0001` retiré (appliqué manuellement par l'utilisateur le 2026-10-24) — un échec de migration fait désormais échouer le déploiement.
 
 ## Dette technique suivie
 
