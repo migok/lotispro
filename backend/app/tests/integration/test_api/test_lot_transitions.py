@@ -14,7 +14,7 @@ so every ORM object held by a test is refreshed before being asserted on.
 """
 
 from collections.abc import Callable
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, get_args
 
 import pytest
@@ -60,7 +60,7 @@ def _in_days(days: int) -> str:
 
 
 def _today() -> str:
-    return date.today().isoformat()
+    return datetime.now(UTC).date().isoformat()
 
 
 def _option_payload(client_id: int) -> dict[str, Any]:
@@ -464,6 +464,50 @@ class TestNotaire:
         reservation = await _reservation_of(db_session, lot)
         assert reservation.notaire_id == notaire.id
         assert reservation.notary_name == f"{notaire.prenom} {notaire.nom}"
+
+    async def test_update_notaire_info_changes_notaire_and_date(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        lot: LotModel,
+        buyer: ClientModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        """``PUT /transitions/notaire`` swaps the notary on a ``chez_notaire`` lot."""
+        headers = auth_headers(commercial)
+        notaire_a = await make_notaire(db_session)
+        notaire_b = await make_notaire(db_session, nom="Autre", prenom="Second")
+        await post_transition(
+            client, headers, lot.id, "direct-engage", _direct_engage_payload(buyer.id)
+        )
+        await post_transition(client, headers, lot.id, "solde", {"price": 500000})
+        await post_transition(
+            client, headers, lot.id, "set-notaire-intent", {"wants_notaire": True}
+        )
+        first = await post_transition(
+            client,
+            headers,
+            lot.id,
+            "notaire",
+            {"notaire_id": notaire_a.id, "notary_date": _today()},
+        )
+        assert first.status_code == 200
+        new_date = (datetime.now(UTC) + timedelta(days=3)).date()
+
+        response = await client.put(
+            f"/api/lots/{lot.id}/transitions/notaire",
+            headers=headers,
+            json={"notaire_id": notaire_b.id, "notary_date": new_date.isoformat()},
+        )
+
+        assert response.status_code == 200
+        await db_session.refresh(lot)
+        assert lot.status == "chez_notaire"
+        reservation = await _reservation_of(db_session, lot)
+        assert reservation.notaire_id == notaire_b.id
+        assert reservation.notary_name == f"{notaire_b.prenom} {notaire_b.nom}"
+        assert reservation.notary_date == new_date
 
     async def test_notaire_refused_without_notaire_intent(
         self,
