@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { apiGet, apiPost, apiPatch, apiPut, apiFetch, apiUploadFile } from '../utils/api';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/authHooks';
+import { useToast } from '../contexts/toastHooks';
 import { formatPrice, formatDate } from '../utils/formatters';
 import { CLIENT_TYPES, STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
 
@@ -567,7 +567,6 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   const [guaranteeAmount, setGuaranteeAmount] = useState('');
   const [finalizationDate, setFinalizationDate] = useState('');
   const [paymentType, setPaymentType] = useState('cash');
-  const [notaryName, setNotaryName] = useState('');
   const [notaryDate, setNotaryDate] = useState('');
   const [notaires, setNotaires] = useState([]);
   const [selectedNotaire, setSelectedNotaire] = useState(null);
@@ -606,6 +605,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
       loadProjectFinancingPlan(lot.project_id);
       loadLotPricingConfig(lot.project_id, lot);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDocuments is recreated every render; reload only when the lot changes
   }, [lot]);
 
   // When pricing config loads after handleSetMode was called without it, re-apply auto-calc
@@ -614,6 +614,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     if (!['direct_engage', 'finaliser_engage'].includes(mode)) return;
     if (lot?.price_per_sqm_acte) return; // already set on lot directly
     setSalePriceEngaged(String(lotPricingConfig.sale_price_computed));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- re-applying auto-calc on mode change would overwrite the price the user typed; only run when the pricing config loads
   }, [lotPricingConfig]);
 
   const loadProjectFinancingPlan = async (projectId) => {
@@ -631,7 +632,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
           balance_periodicity: plan.balance_periodicity,
         });
       }
-    } catch (_) {
+    } catch {
       // No plan configured yet — keep DEFAULT_PAYMENT_PLAN
     }
   };
@@ -681,7 +682,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     try {
       const data = await apiGet(`/api/reservations/${reservationId}`);
       setReservation(data);
-    } catch (_) {
+    } catch {
       setReservation(null);
     }
   };
@@ -725,7 +726,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     try {
       const data = await apiGet(`/api/lots/${lot.id}/documents`);
       setDocuments(data);
-    } catch (_) { setDocuments([]); }
+    } catch { setDocuments([]); }
   };
 
   const handleUploadDocument = async (e) => {
@@ -778,7 +779,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     try {
       const schedule = await apiGet(`/api/payments/schedules/reservation/${reservationId}`);
       setPaymentSchedule(schedule);
-    } catch (_) {
+    } catch {
       setPaymentSchedule(null); // no schedule yet
     }
   };
@@ -845,7 +846,6 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     setGuaranteeAmount('');
     setFinalizationDate('');
     setPaymentType('cash');
-    setNotaryName('');
     setNotaryDate('');
     setBlockReason('');
     setFinalSalePrice('');
@@ -1260,6 +1260,13 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     finally { setLoading(false); }
   };
 
+  // Preview row count for panel header subtitle (based on remaining balance).
+  // Must be called before the `if (!lot) return null` below (rules of hooks), hence the lot?.price guard.
+  const previewRowCount = useMemo(() => {
+    const balance = lot?.price ? Math.max(0, lot.price - (parseFloat(depositAmount) || 0)) : 0;
+    return balance > 0 && enablePaymentPlan ? computePreview(balance, paymentPlan).allRows.length : 0;
+  }, [lot?.price, depositAmount, enablePaymentPlan, paymentPlan]);
+
   if (!lot) return null;
 
   // Source de vérité pour la garantie : API reservation > lot prop > 0
@@ -1276,12 +1283,6 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     d.setDate(d.getDate() + (parseInt(reservationDays) || 7));
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   })();
-
-  // Preview row count for panel header subtitle (based on remaining balance)
-  const previewRowCount = useMemo(
-    () => (remainingBalance > 0 && enablePaymentPlan ? computePreview(remainingBalance, paymentPlan).allRows.length : 0),
-    [remainingBalance, enablePaymentPlan, paymentPlan]
-  );
 
   // First deposit installment — for alert logic
   const firstDepositInstallment = paymentSchedule?.installments
@@ -2017,7 +2018,6 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
             {mode === 'direct_engage' && (() => {
               const salePrice = salePriceEngaged ? parseFloat(salePriceEngaged) : null;
               const promoAmt = (salePrice != null && lot?.price != null) ? Math.max(0, lot.price - salePrice) : 0;
-              const planBasePrice = salePrice != null ? salePrice : (lot?.price || 0);
               return (
                 <>
                   {/* Client */}

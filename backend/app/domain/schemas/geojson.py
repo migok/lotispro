@@ -12,7 +12,9 @@ class GeoJSONFeature(BaseSchema):
 
     type: str = "Feature"
     geometry: dict[str, Any] | None = Field(description="GeoJSON geometry object")
-    properties: dict[str, Any] = Field(default_factory=dict, description="Feature properties")
+    properties: dict[str, Any] = Field(
+        default_factory=dict, description="Feature properties"
+    )
 
 
 class GeoJSONFeatureCollection(BaseSchema):

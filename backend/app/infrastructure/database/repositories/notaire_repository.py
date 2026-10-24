@@ -39,6 +39,10 @@ class NotaireRepository(BaseRepository[NotaireModel]):
                 )
             )
 
-        query = query.order_by(NotaireModel.nom, NotaireModel.prenom).offset(offset).limit(limit)
+        query = (
+            query.order_by(NotaireModel.nom, NotaireModel.prenom)
+            .offset(offset)
+            .limit(limit)
+        )
         result = await self.session.execute(query)
         return list(result.scalars().all())

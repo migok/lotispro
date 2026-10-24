@@ -1,7 +1,7 @@
 """Supabase Storage client for file management."""
 
 import logging
-from pathlib import Path
+from functools import lru_cache
 from typing import BinaryIO
 
 from supabase import Client, create_client
@@ -30,7 +30,9 @@ class SupabaseStorageClient:
             settings.SUPABASE_SECRET_KEY,
         )
         self.bucket_name = settings.SUPABASE_STORAGE_BUCKET
-        logger.info(f"Initialized Supabase Storage client for bucket: {self.bucket_name}")
+        logger.info(
+            f"Initialized Supabase Storage client for bucket: {self.bucket_name}"
+        )
 
     def ensure_bucket_exists(self) -> None:
         """Create the storage bucket if it doesn't exist.
@@ -47,7 +49,7 @@ class SupabaseStorageClient:
                 # Create bucket with public access
                 self.client.storage.create_bucket(
                     self.bucket_name,
-                    options={"public": False}  # Private bucket for security
+                    options={"public": False},  # Private bucket for security
                 )
                 logger.info(f"Created storage bucket: {self.bucket_name}")
             else:
@@ -55,7 +57,7 @@ class SupabaseStorageClient:
 
         except Exception as e:
             logger.error(f"Failed to ensure bucket exists: {e}")
-            raise StorageError(f"Failed to ensure bucket exists: {e}")
+            raise StorageError(f"Failed to ensure bucket exists: {e}") from e
 
     def upload_file(
         self,
@@ -81,7 +83,7 @@ class SupabaseStorageClient:
             self.ensure_bucket_exists()
 
             # Upload file
-            response = self.client.storage.from_(self.bucket_name).upload(
+            self.client.storage.from_(self.bucket_name).upload(
                 path=file_path,
                 file=file_content,
                 file_options={"content-type": content_type, "upsert": "true"},
@@ -95,7 +97,7 @@ class SupabaseStorageClient:
 
         except Exception as e:
             logger.error(f"Failed to upload file {file_path}: {e}")
-            raise StorageError(f"Failed to upload file: {e}")
+            raise StorageError(f"Failed to upload file: {e}") from e
 
     def get_file_url(self, file_path: str, expires_in: int = 3600) -> str:
         """Get a signed URL for a file.
@@ -121,7 +123,7 @@ class SupabaseStorageClient:
 
         except Exception as e:
             logger.error(f"Failed to get signed URL for {file_path}: {e}")
-            raise StorageError(f"Failed to get signed URL: {e}")
+            raise StorageError(f"Failed to get signed URL: {e}") from e
 
     def download_file(self, file_path: str) -> bytes:
         """Download a file from Supabase Storage.
@@ -142,7 +144,7 @@ class SupabaseStorageClient:
 
         except Exception as e:
             logger.error(f"Failed to download file {file_path}: {e}")
-            raise StorageError(f"Failed to download file: {e}")
+            raise StorageError(f"Failed to download file: {e}") from e
 
     def delete_file(self, file_path: str) -> None:
         """Delete a file from Supabase Storage.
@@ -159,7 +161,7 @@ class SupabaseStorageClient:
 
         except Exception as e:
             logger.error(f"Failed to delete file {file_path}: {e}")
-            raise StorageError(f"Failed to delete file: {e}")
+            raise StorageError(f"Failed to delete file: {e}") from e
 
     def upload_image(
         self,
@@ -201,8 +203,11 @@ class SupabaseStorageClient:
                         images_bucket,
                         options={"public": True},
                     )
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("update_bucket skipped (not supported by this Supabase version)", exc=str(exc))
+                except Exception as exc:
+                    logger.debug(
+                        "update_bucket skipped (not supported by this Supabase version)",
+                        exc=str(exc),
+                    )
 
             self.client.storage.from_(images_bucket).upload(
                 path=file_path,
@@ -220,7 +225,7 @@ class SupabaseStorageClient:
 
         except Exception as e:
             logger.error(f"Failed to upload image {file_path}: {e}")
-            raise StorageError(f"Failed to upload image: {e}")
+            raise StorageError(f"Failed to upload image: {e}") from e
 
     def delete_image(self, file_path: str) -> None:
         """Delete an image from the public images bucket.
@@ -232,11 +237,13 @@ class SupabaseStorageClient:
             StorageError: If deletion fails
         """
         try:
-            self.client.storage.from_(settings.SUPABASE_IMAGES_BUCKET).remove([file_path])
+            self.client.storage.from_(settings.SUPABASE_IMAGES_BUCKET).remove(
+                [file_path]
+            )
             logger.info(f"Deleted image {file_path}")
         except Exception as e:
             logger.error(f"Failed to delete image {file_path}: {e}")
-            raise StorageError(f"Failed to delete image: {e}")
+            raise StorageError(f"Failed to delete image: {e}") from e
 
     # ------------------------------------------------------------------ #
     # Generic bucket helpers (used by DocumentService and other callers) #
@@ -251,7 +258,7 @@ class SupabaseStorageClient:
                 logger.info(f"Created bucket: {bucket}")
         except Exception as e:
             logger.error(f"Failed to ensure bucket {bucket}: {e}")
-            raise StorageError(f"Failed to ensure bucket: {e}")
+            raise StorageError(f"Failed to ensure bucket: {e}") from e
 
     def upload_bytes(
         self,
@@ -273,7 +280,7 @@ class SupabaseStorageClient:
             raise
         except Exception as e:
             logger.error(f"Failed to upload {path} to {bucket}: {e}")
-            raise StorageError(f"Failed to upload file: {e}")
+            raise StorageError(f"Failed to upload file: {e}") from e
 
     def download_bytes(self, bucket: str, path: str) -> bytes:
         """Download and return the raw bytes of *bucket*/*path*."""
@@ -283,7 +290,7 @@ class SupabaseStorageClient:
             return data
         except Exception as e:
             logger.error(f"Failed to download {path} from {bucket}: {e}")
-            raise StorageError(f"Failed to download file: {e}")
+            raise StorageError(f"Failed to download file: {e}") from e
 
     def delete_from_bucket(self, bucket: str, path: str) -> None:
         """Delete *path* from *bucket*."""
@@ -292,7 +299,7 @@ class SupabaseStorageClient:
             logger.info(f"Deleted {bucket}/{path}")
         except Exception as e:
             logger.error(f"Failed to delete {path} from {bucket}: {e}")
-            raise StorageError(f"Failed to delete file: {e}")
+            raise StorageError(f"Failed to delete file: {e}") from e
 
     def list_files(self, folder_path: str = "") -> list[dict]:
         """List files in a folder.
@@ -312,20 +319,14 @@ class SupabaseStorageClient:
 
         except Exception as e:
             logger.error(f"Failed to list files in {folder_path}: {e}")
-            raise StorageError(f"Failed to list files: {e}")
+            raise StorageError(f"Failed to list files: {e}") from e
 
 
-# Global storage client instance
-_storage_client: SupabaseStorageClient | None = None
-
-
+@lru_cache(maxsize=1)
 def get_storage_client() -> SupabaseStorageClient:
     """Get or create the global Supabase Storage client instance.
 
     Returns:
         SupabaseStorageClient instance
     """
-    global _storage_client
-    if _storage_client is None:
-        _storage_client = SupabaseStorageClient()
-    return _storage_client
+    return SupabaseStorageClient()

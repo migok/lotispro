@@ -31,14 +31,19 @@ class PaymentPlanData(BaseSchema):
         le=60,
         description="Délai en mois après le dernier acompte avant le premier solde",
     )
-    deposit_count: int = Field(default=1, ge=1, le=120, description="Nombre de versements acompte")
+    deposit_count: int = Field(
+        default=1, ge=1, le=120, description="Nombre de versements acompte"
+    )
     deposit_periodicity: int = Field(
         default=1, ge=1, le=24, description="Périodicité acompte (mois)"
     )
-    balance_count: int = Field(default=1, ge=1, le=120, description="Nombre de versements solde")
+    balance_count: int = Field(
+        default=1, ge=1, le=120, description="Nombre de versements solde"
+    )
     balance_periodicity: int = Field(
         default=1, ge=1, le=24, description="Périodicité solde (mois)"
     )
+
 
 PAYMENT_TYPE = Literal["cash", "card", "check", "transfer"]
 
@@ -57,6 +62,7 @@ class ReservationFilter(BaseSchema):
 # Legacy schemas — kept for backward compatibility with existing tests/clients
 # ---------------------------------------------------------------------------
 
+
 class ReservationCreate(BaseSchema):
     """Schema for creating a new reservation (legacy — prefer OptionCreate)."""
 
@@ -73,7 +79,9 @@ class ReservationCreate(BaseSchema):
         description="Reservation expiration date (overrides reservation_days if provided)",
     )
     deposit: float = Field(default=0, ge=0, description="Deposit amount")
-    deposit_date: date | None = Field(default=None, description="Date the deposit was received")
+    deposit_date: date | None = Field(
+        default=None, description="Date the deposit was received"
+    )
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
 
 
@@ -110,13 +118,18 @@ class ReservationRelease(BaseSchema):
 # New transition schemas
 # ---------------------------------------------------------------------------
 
+
 class OptionCreate(BaseSchema):
     """Schema for starting an option (available → option)."""
 
     client_id: int = Field(description="Client associated with the option")
     expiration_date: datetime = Field(description="Option expiration date (required)")
-    deposit: float = Field(default=0, ge=0, description="Initial deposit amount (optional)")
-    deposit_date: date | None = Field(default=None, description="Date the deposit was received")
+    deposit: float = Field(
+        default=0, ge=0, description="Initial deposit amount (optional)"
+    )
+    deposit_date: date | None = Field(
+        default=None, description="Date the deposit was received"
+    )
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
 
 
@@ -124,7 +137,9 @@ class ReservationAFinaliserData(BaseSchema):
     """Schema for transitioning option → reservation_a_finaliser."""
 
     guarantee_amount: float = Field(gt=0, description="Guarantee amount received")
-    finalization_date: datetime = Field(description="Deadline to finalize the reservation")
+    finalization_date: datetime = Field(
+        description="Deadline to finalize the reservation"
+    )
     payment_type: PAYMENT_TYPE = Field(description="Payment method used for guarantee")
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
 
@@ -212,7 +227,9 @@ class DirectToRAFData(BaseSchema):
     client_id: int = Field(description="Client associated with the reservation")
     guarantee_amount: float = Field(gt=0, description="Guarantee amount received")
     payment_type: PAYMENT_TYPE = Field(description="Payment method used for guarantee")
-    finalization_date: datetime = Field(description="Deadline to finalize the reservation")
+    finalization_date: datetime = Field(
+        description="Deadline to finalize the reservation"
+    )
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
 
 
@@ -220,7 +237,9 @@ class DirectToEngageeData(BaseSchema):
     """Schema for direct transition available → reservation_engagee (avec ND + premier acompte)."""
 
     client_id: int = Field(description="Client associated with the reservation")
-    guarantee_amount: float = Field(gt=0, description="Initial deposit / first payment received")
+    guarantee_amount: float = Field(
+        gt=0, description="Initial deposit / first payment received"
+    )
     payment_type: PAYMENT_TYPE = Field(description="Payment method used")
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
     # Prix de vente et promotion
@@ -272,6 +291,7 @@ class UnblockLotData(BaseSchema):
 # ---------------------------------------------------------------------------
 # Response schemas
 # ---------------------------------------------------------------------------
+
 
 class ReservationResponse(BaseSchema):
     """Schema for reservation data in responses."""

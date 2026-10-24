@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useToast } from '../contexts/ToastContext';
+import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiDelete } from '../utils/api';
 
 /* ─── Icons ─── */
@@ -78,6 +78,7 @@ export default function ManagersPage() {
   const emptyForm = { first_name: '', last_name: '', email: '', address: '', company: '' };
   const [form, setForm] = useState(emptyForm);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadManagers is recreated every render; fetch once on mount
   useEffect(() => { loadManagers(); }, []);
 
   const loadManagers = async () => {

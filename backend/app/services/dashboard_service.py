@@ -1,6 +1,6 @@
 """Dashboard service - Analytics and reporting operations."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,6 @@ from app.infrastructure.database.models import (
     LotModel,
     PaymentInstallmentModel,
     PaymentScheduleModel,
-    ProjectModel,
     ReservationModel,
     SaleModel,
 )
@@ -98,7 +97,9 @@ class DashboardService:
             func.count()
             .filter(LotModel.status == "reservation_soldee")
             .label("reservation_soldee"),
-            func.count().filter(LotModel.status == "chez_notaire").label("chez_notaire"),
+            func.count()
+            .filter(LotModel.status == "chez_notaire")
+            .label("chez_notaire"),
             func.count()
             .filter(LotModel.status == "chez_proprietaire")
             .label("chez_proprietaire"),
@@ -109,10 +110,16 @@ class DashboardService:
                 func.sum(LotModel.surface).filter(LotModel.status == "available"), 0
             ).label("surface_available"),
             func.coalesce(
-                func.sum(LotModel.surface).filter(LotModel.status.in_(_ACTIVE_LOT_STATUSES)), 0
+                func.sum(LotModel.surface).filter(
+                    LotModel.status.in_(_ACTIVE_LOT_STATUSES)
+                ),
+                0,
             ).label("surface_en_cours"),
             func.coalesce(
-                func.sum(LotModel.surface).filter(LotModel.status == "chez_proprietaire"), 0
+                func.sum(LotModel.surface).filter(
+                    LotModel.status == "chez_proprietaire"
+                ),
+                0,
             ).label("surface_proprietaire"),
             func.coalesce(
                 func.sum(LotModel.surface).filter(LotModel.status == "blocked"), 0
@@ -183,7 +190,9 @@ class DashboardService:
                 user_sold_surface_query = user_sold_surface_query.where(
                     LotModel.project_id == project_id
                 )
-            user_sold_surface_result = await self.session.execute(user_sold_surface_query)
+            user_sold_surface_result = await self.session.execute(
+                user_sold_surface_query
+            )
             user_sold_surface = float(user_sold_surface_result.scalar() or 0)
 
             _en_cours = (
@@ -240,7 +249,9 @@ class DashboardService:
                 chez_proprietaire=global_row.chez_proprietaire,
                 blocked=global_row.blocked,
                 en_cours=_en_cours,
-                reserved=global_row.option + global_row.reservation_a_finaliser + global_row.reservation_engagee,
+                reserved=global_row.option
+                + global_row.reservation_a_finaliser
+                + global_row.reservation_engagee,
                 sold=global_row.chez_proprietaire,
             )
 
@@ -326,14 +337,16 @@ class DashboardService:
         if user_id:
             taux_vente = round(counts.sold / total * 100, 2) if total > 0 else 0
         else:
-            taux_vente = round(global_row.chez_proprietaire / total * 100, 2) if total > 0 else 0
+            taux_vente = (
+                round(global_row.chez_proprietaire / total * 100, 2) if total > 0 else 0
+            )
 
         # Conversion rate (reservations to sales)
         conversion_query = select(
             func.count().label("total"),
-            func.count().filter(ReservationModel.status == "converted").label(
-                "converted"
-            ),
+            func.count()
+            .filter(ReservationModel.status == "converted")
+            .label("converted"),
         )
         if project_id:
             conversion_query = conversion_query.where(
@@ -411,9 +424,13 @@ class DashboardService:
             ReservationModel.status.in_(("released", "expired"))
         )
         if project_id:
-            liberes_query = liberes_query.where(ReservationModel.project_id == project_id)
+            liberes_query = liberes_query.where(
+                ReservationModel.project_id == project_id
+            )
         if user_id:
-            liberes_query = liberes_query.where(ReservationModel.reserved_by_user_id == user_id)
+            liberes_query = liberes_query.where(
+                ReservationModel.reserved_by_user_id == user_id
+            )
         liberes_result = await self.session.execute(liberes_query)
         lots_liberes = liberes_result.scalar() or 0
 
@@ -461,15 +478,21 @@ class DashboardService:
             )
             project_lots = {row[0] for row in lot_project_result.all()}
             at_risk = [r for r in at_risk if r["lot_id"] in project_lots]
-            expired_options = [r for r in expired_options if r["lot_id"] in project_lots]
-            expired_finalisations = [r for r in expired_finalisations if r["lot_id"] in project_lots]
+            expired_options = [
+                r for r in expired_options if r["lot_id"] in project_lots
+            ]
+            expired_finalisations = [
+                r for r in expired_finalisations if r["lot_id"] in project_lots
+            ]
 
         # Filter by user if specified
         if user_id:
             at_risk = [r for r in at_risk if r.get("reserved_by_user_id") == user_id]
 
         # Calculate summary
-        expiring_soon_count = sum(1 for r in at_risk if r["risk_type"] == "expiring_soon")
+        expiring_soon_count = sum(
+            1 for r in at_risk if r["risk_type"] == "expiring_soon"
+        )
         expired_in_at_risk = sum(1 for r in at_risk if r["risk_type"] == "expired")
         value_at_risk = sum(r.get("lot_price", 0) or 0 for r in at_risk)
         deposit_at_risk = sum(r.get("deposit", 0) or 0 for r in at_risk)
@@ -498,11 +521,12 @@ class DashboardService:
 
         Returns a list of dicts with lot + reservation + client info for the alert panel.
         """
-        from sqlalchemy.orm import joinedload
 
         query = (
             select(LotModel, ReservationModel, ClientModel)
-            .join(ReservationModel, LotModel.current_reservation_id == ReservationModel.id)
+            .join(
+                ReservationModel, LotModel.current_reservation_id == ReservationModel.id
+            )
             .join(ClientModel, ReservationModel.client_id == ClientModel.id)
             .where(
                 LotModel.status == "reservation_soldee",
@@ -520,22 +544,26 @@ class DashboardService:
 
         alerts = []
         for lot, reservation, client in rows:
-            alerts.append({
-                "lot_id": lot.id,
-                "lot_numero": lot.numero,
-                "lot_zone": lot.zone,
-                "lot_price": lot.price,
-                "project_id": lot.project_id,
-                "reservation_id": reservation.id,
-                "client_id": client.id,
-                "client_name": client.name,
-                "client_phone": client.phone,
-                "sale_price": reservation.sale_price,
-                "reserved_by_user_id": reservation.reserved_by_user_id,
-                "wants_notaire": True,
-                "notary_name": reservation.notary_name,
-                "notary_date": str(reservation.notary_date) if reservation.notary_date else None,
-            })
+            alerts.append(
+                {
+                    "lot_id": lot.id,
+                    "lot_numero": lot.numero,
+                    "lot_zone": lot.zone,
+                    "lot_price": lot.price,
+                    "project_id": lot.project_id,
+                    "reservation_id": reservation.id,
+                    "client_id": client.id,
+                    "client_name": client.name,
+                    "client_phone": client.phone,
+                    "sale_price": reservation.sale_price,
+                    "reserved_by_user_id": reservation.reserved_by_user_id,
+                    "wants_notaire": True,
+                    "notary_name": reservation.notary_name,
+                    "notary_date": str(reservation.notary_date)
+                    if reservation.notary_date
+                    else None,
+                }
+            )
 
         return alerts
 
@@ -608,7 +636,7 @@ class DashboardService:
         """Get sales aggregated by period with user filter support."""
         from datetime import timedelta
 
-        start_date = datetime.now(timezone.utc) - timedelta(days=months_back * 30)
+        start_date = datetime.now(UTC) - timedelta(days=months_back * 30)
 
         query = select(SaleModel).where(SaleModel.sale_date >= start_date)
 
@@ -678,16 +706,30 @@ class DashboardService:
         for reservation_date, sale_date, lot_created_at in rows:
             if lot_created_at and reservation_date:
                 # Convert both to date objects for comparison
-                reservation_date_only = reservation_date.date() if hasattr(reservation_date, 'date') else reservation_date
-                lot_created_date = lot_created_at.date() if hasattr(lot_created_at, 'date') else lot_created_at
+                reservation_date_only = (
+                    reservation_date.date()
+                    if hasattr(reservation_date, "date")
+                    else reservation_date
+                )
+                lot_created_date = (
+                    lot_created_at.date()
+                    if hasattr(lot_created_at, "date")
+                    else lot_created_at
+                )
                 days_to_reserve = (reservation_date_only - lot_created_date).days
                 if days_to_reserve >= 0:
                     available_to_reserved_days.append(days_to_reserve)
 
             if reservation_date and sale_date:
                 # Convert both to date objects for comparison
-                sale_date_only = sale_date.date() if hasattr(sale_date, 'date') else sale_date
-                reservation_date_only = reservation_date.date() if hasattr(reservation_date, 'date') else reservation_date
+                sale_date_only = (
+                    sale_date.date() if hasattr(sale_date, "date") else sale_date
+                )
+                reservation_date_only = (
+                    reservation_date.date()
+                    if hasattr(reservation_date, "date")
+                    else reservation_date
+                )
                 days_to_sell = (sale_date_only - reservation_date_only).days
                 if days_to_sell >= 0:
                     reserved_to_sold_days.append(days_to_sell)
@@ -749,7 +791,7 @@ class DashboardService:
         Returns:
             List of commercial stats with deposits
         """
-        from app.infrastructure.database.models import UserModel, AssignmentModel
+        from app.infrastructure.database.models import AssignmentModel, UserModel
 
         # Get commercials
         if project_id:
@@ -809,15 +851,17 @@ class DashboardService:
             deposits_result = await self.session.execute(deposits_query)
             total_deposits = float(deposits_result.scalar() or 0)
 
-            stats.append({
-                "commercial_id": user.id,
-                "name": user.name,
-                "email": user.email,
-                "total_sales": sales_row.total_sales or 0,
-                "total_revenue": float(sales_row.total_revenue or 0),
-                "active_reservations": active_reservations,
-                "total_deposits": total_deposits,
-            })
+            stats.append(
+                {
+                    "commercial_id": user.id,
+                    "name": user.name,
+                    "email": user.email,
+                    "total_sales": sales_row.total_sales or 0,
+                    "total_revenue": float(sales_row.total_revenue or 0),
+                    "active_reservations": active_reservations,
+                    "total_deposits": total_deposits,
+                }
+            )
 
         return stats
 
@@ -836,7 +880,6 @@ class DashboardService:
             List of client pipeline entries
         """
         from app.infrastructure.database.models import ClientModel
-
         from app.infrastructure.database.repositories import ClientRepository
 
         client_repo = ClientRepository(self.session)
@@ -972,7 +1015,12 @@ class DashboardService:
             )
 
         # Sort by pipeline status priority
-        status_order = {"buyer": 0, "active_reservation": 1, "past_reservation": 2, "prospect": 3}
+        status_order = {
+            "buyer": 0,
+            "active_reservation": 1,
+            "past_reservation": 2,
+            "prospect": 3,
+        }
         pipeline_data.sort(key=lambda x: status_order.get(x["pipeline_status"], 4))
 
         return pipeline_data
@@ -987,7 +1035,7 @@ class DashboardService:
 
         from app.infrastructure.database.models import UserModel
 
-        start_date = datetime.now(timezone.utc) - timedelta(days=months_back * 30)
+        start_date = datetime.now(UTC) - timedelta(days=months_back * 30)
 
         users_query = select(UserModel).where(UserModel.role == "commercial")
         users_result = await self.session.execute(users_query)
@@ -1010,12 +1058,14 @@ class DashboardService:
                 monthly[key]["count"] += 1
                 monthly[key]["total_amount"] += float(sale.price)
 
-            result_data.append({
-                "commercial_id": user.id,
-                "name": user.name,
-                "email": user.email,
-                "monthly": sorted(monthly.values(), key=lambda x: x["period"]),
-            })
+            result_data.append(
+                {
+                    "commercial_id": user.id,
+                    "name": user.name,
+                    "email": user.email,
+                    "monthly": sorted(monthly.values(), key=lambda x: x["period"]),
+                }
+            )
 
         return result_data
 
@@ -1037,7 +1087,7 @@ class DashboardService:
 
         from app.infrastructure.database.models import ClientModel
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Create aliases for client joined via reservation vs sale
         ReservationClient = aliased(ClientModel, name="reservation_client")
@@ -1057,7 +1107,9 @@ class DashboardService:
                 (ReservationModel.lot_id == LotModel.id)
                 & (ReservationModel.status.in_(_ACTIVE_STATUSES)),
             )
-            .outerjoin(ReservationClient, ReservationClient.id == ReservationModel.client_id)
+            .outerjoin(
+                ReservationClient, ReservationClient.id == ReservationModel.client_id
+            )
             .outerjoin(SaleModel, SaleModel.lot_id == LotModel.id)
             .outerjoin(SaleClient, SaleClient.id == SaleModel.client_id)
         )
@@ -1102,7 +1154,7 @@ class DashboardService:
                 lot_updated = lot.updated_at
                 # Handle timezone-naive datetimes
                 if lot_updated.tzinfo is None:
-                    lot_updated = lot_updated.replace(tzinfo=timezone.utc)
+                    lot_updated = lot_updated.replace(tzinfo=UTC)
                 days_in_status = (now - lot_updated).days
             else:
                 days_in_status = 0
@@ -1159,9 +1211,7 @@ class DashboardService:
 
         # Enrich reserved lots with payment schedule data
         reservation_ids = [
-            lot["reservation_id"]
-            for lot in lots_data
-            if "reservation_id" in lot
+            lot["reservation_id"] for lot in lots_data if "reservation_id" in lot
         ]
         if reservation_ids:
             from sqlalchemy.orm import selectinload
@@ -1212,7 +1262,7 @@ class DashboardService:
                 if first_deposit_due is not None:
                     due = first_deposit_due
                     if due.tzinfo is None:
-                        due = due.replace(tzinfo=timezone.utc)
+                        due = due.replace(tzinfo=UTC)
                     first_deposit_days = (due - now).days
 
                 payment_info[sched.reservation_id] = {
@@ -1250,7 +1300,7 @@ class DashboardService:
         """
         from datetime import timedelta
 
-        start_date = datetime.now(timezone.utc) - timedelta(days=months_back * 30)
+        start_date = datetime.now(UTC) - timedelta(days=months_back * 30)
 
         # Sales by month
         sales_query = select(SaleModel).where(SaleModel.sale_date >= start_date)
@@ -1278,14 +1328,24 @@ class DashboardService:
         for sale in sales:
             key = sale.sale_date.strftime("%Y-%m")
             if key not in monthly:
-                monthly[key] = {"period": key, "sold": 0, "reserved": 0, "total_amount": 0.0}
+                monthly[key] = {
+                    "period": key,
+                    "sold": 0,
+                    "reserved": 0,
+                    "total_amount": 0.0,
+                }
             monthly[key]["sold"] += 1
             monthly[key]["total_amount"] += float(sale.price)
 
         for res in reservations:
             key = res.reservation_date.strftime("%Y-%m")
             if key not in monthly:
-                monthly[key] = {"period": key, "sold": 0, "reserved": 0, "total_amount": 0.0}
+                monthly[key] = {
+                    "period": key,
+                    "sold": 0,
+                    "reserved": 0,
+                    "total_amount": 0.0,
+                }
             # Count all created options/reservations as "reserved" in monthly view
             if res.status in ("active", "validated"):
                 monthly[key]["reserved"] += 1
@@ -1308,27 +1368,33 @@ class DashboardService:
         """
         from sqlalchemy.orm import selectinload
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         query = (
             select(PaymentInstallmentModel)
-            .join(PaymentScheduleModel, PaymentInstallmentModel.schedule_id == PaymentScheduleModel.id)
-            .join(ReservationModel, PaymentScheduleModel.reservation_id == ReservationModel.id)
+            .join(
+                PaymentScheduleModel,
+                PaymentInstallmentModel.schedule_id == PaymentScheduleModel.id,
+            )
+            .join(
+                ReservationModel,
+                PaymentScheduleModel.reservation_id == ReservationModel.id,
+            )
             .where(
                 PaymentInstallmentModel.status == "pending",
                 PaymentInstallmentModel.due_date < now,
                 ReservationModel.status.in_(_ACTIVE_STATUSES),
             )
             .options(
-                selectinload(PaymentInstallmentModel.schedule).selectinload(
-                    PaymentScheduleModel.reservation
-                ).selectinload(ReservationModel.client),
-                selectinload(PaymentInstallmentModel.schedule).selectinload(
-                    PaymentScheduleModel.reservation
-                ).selectinload(ReservationModel.lot),
-                selectinload(PaymentInstallmentModel.schedule).selectinload(
-                    PaymentScheduleModel.reservation
-                ).selectinload(ReservationModel.project),
+                selectinload(PaymentInstallmentModel.schedule)
+                .selectinload(PaymentScheduleModel.reservation)
+                .selectinload(ReservationModel.client),
+                selectinload(PaymentInstallmentModel.schedule)
+                .selectinload(PaymentScheduleModel.reservation)
+                .selectinload(ReservationModel.lot),
+                selectinload(PaymentInstallmentModel.schedule)
+                .selectinload(PaymentScheduleModel.reservation)
+                .selectinload(ReservationModel.project),
             )
             .order_by(PaymentInstallmentModel.due_date)
         )
@@ -1354,25 +1420,27 @@ class DashboardService:
 
             due = inst.due_date
             if due.tzinfo is None:
-                due = due.replace(tzinfo=timezone.utc)
+                due = due.replace(tzinfo=UTC)
             days_late = (now - due).days
 
-            late_payments.append({
-                "installment_id": inst.id,
-                "reservation_id": reservation.id,
-                "client_id": client.id,
-                "client_name": client.name,
-                "client_phone": client.phone,
-                "lot_id": lot.id,
-                "lot_numero": lot.numero,
-                "project_id": project.id,
-                "project_name": project.name,
-                "payment_type": inst.payment_type,
-                "installment_number": inst.installment_number,
-                "amount": inst.amount,
-                "due_date": inst.due_date,
-                "days_late": days_late,
-                "reserved_by_user_id": reservation.reserved_by_user_id,
-            })
+            late_payments.append(
+                {
+                    "installment_id": inst.id,
+                    "reservation_id": reservation.id,
+                    "client_id": client.id,
+                    "client_name": client.name,
+                    "client_phone": client.phone,
+                    "lot_id": lot.id,
+                    "lot_numero": lot.numero,
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "payment_type": inst.payment_type,
+                    "installment_number": inst.installment_number,
+                    "amount": inst.amount,
+                    "due_date": inst.due_date,
+                    "days_late": days_late,
+                    "reserved_by_user_id": reservation.reserved_by_user_id,
+                }
+            )
 
         return late_payments

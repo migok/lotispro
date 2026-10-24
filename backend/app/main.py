@@ -4,13 +4,12 @@ This module provides the create_app factory function for creating
 the FastAPI application instance with all configurations applied.
 """
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
-from app import __version__
 from app.api.error_handlers import register_exception_handlers
 from app.api.v1.router import api_router
 from app.core.config import settings

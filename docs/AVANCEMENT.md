@@ -8,13 +8,13 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-22_
+_Dernière mise à jour : 2026-10-24_
 
 ## Vue d'ensemble
 
 | Epic | Statut | Tâches faites | Issue | PR |
 |---|---|---|---|---|
-| E0 Fondations & nettoyage | ⬜ | 0 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | |
+| E0 Fondations & nettoyage | 🟨 | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | |
 | E1 🐛 #5 Plein écran | ⬜ | 0 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | |
 | E2 👤 #7 Fiche client | ⬜ | 0 / 4 | [#18](https://github.com/migok/lotispro/issues/18) | |
 | E3 Statuts par projet + états des lieux | ⬜ | 0 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
@@ -27,12 +27,12 @@ _Dernière mise à jour : 2026-10-22_
 
 | ID | Tâche | Statut | Issue | PR | Terminé le |
 |---|---|---|---|---|---|
-| E0-T1 | Réconcilier `main` → `dev` (hors IA) ; deploy strict | ⬜ | [#9](https://github.com/migok/lotispro/issues/9) | | |
-| E0-T2 | Isolation tests backend + fabriques | ⬜ | [#10](https://github.com/migok/lotispro/issues/10) | | |
-| E0-T3 | Tests de caractérisation des transitions | ⬜ | [#11](https://github.com/migok/lotispro/issues/11) | | |
-| E0-T4 | Backend ruff à 0 (dont `F821`) | ⬜ | [#12](https://github.com/migok/lotispro/issues/12) | | |
-| E0-T5 | ESLint à 0 + Vitest | ⬜ | [#13](https://github.com/migok/lotispro/issues/13) | | |
-| E0-T6 | CI GitHub Actions + `CLAUDE.md` | ⬜ | [#14](https://github.com/migok/lotispro/issues/14) | | |
+| E0-T1 | Réconcilier `main` → `dev` (hors IA) ; deploy strict | ✅ | [#9](https://github.com/migok/lotispro/issues/9) | | 2026-10-24 |
+| E0-T2 | Isolation tests backend + fabriques | ✅ | [#10](https://github.com/migok/lotispro/issues/10) | | 2026-10-22 |
+| E0-T3 | Tests de caractérisation des transitions | ✅ | [#11](https://github.com/migok/lotispro/issues/11) | | 2026-10-22 |
+| E0-T4 | Backend ruff à 0 (dont `F821`) | ✅ | [#12](https://github.com/migok/lotispro/issues/12) | | 2026-10-22 |
+| E0-T5 | ESLint à 0 + Vitest | ✅ | [#13](https://github.com/migok/lotispro/issues/13) | | 2026-10-23 |
+| E0-T6 | CI GitHub Actions + `CLAUDE.md` | ✅ | [#14](https://github.com/migok/lotispro/issues/14) | | 2026-10-23 |
 | E1-T1 | Carte flexible en plein écran | ⬜ | [#16](https://github.com/migok/lotispro/issues/16) | | |
 | E1-T2 | Recette multi-navigateurs | ⬜ | [#17](https://github.com/migok/lotispro/issues/17) | | |
 | E2-T1 | Migration 0017 + modèle client | ⬜ | [#19](https://github.com/migok/lotispro/issues/19) | | |
@@ -71,15 +71,62 @@ _Dernière mise à jour : 2026-10-22_
 
 ## Branches
 
-_À compléter par E0-T1 (état de `feature/marketing_landing_page`)._
+- `main` a été réconcilié dans `dev` (merge `--no-ff`) ; `git log HEAD..origin/main` est vide. Les fichiers de l'assistant IA (`PromptLibrary.jsx`, `prompts.js`) vivent uniquement sur `feature/ai_assistant`.
+- `feature/marketing_landing_page` : un seul commit non mergé dans `dev` (`git log --oneline dev..origin/feature/marketing_landing_page` après réconciliation) :
+  - `b237c02 feat: update Contact and Landing pages with new messaging and styling for demo booking` (touche `ContactPage.jsx`, `LandingPage.jsx`, `landing.css`, ajoute `frontend/public/launch-strategy.md`).
+- Pas de merge effectué (décision reportée).
+- `backend/railway.toml` ligne 6 : `|| alembic stamp 0001` retiré (appliqué manuellement par l'utilisateur le 2026-10-24) — un échec de migration fait désormais échouer le déploiement.
 
 ## Dette technique suivie
 
-_À compléter par E0-T4 (fonctions `PLR0912` / `PLR0915` à découper quand un epic les touche)._
+Fonctions backend qui dépassent les seuils `PLR0912` (> 12 branches) / `PLR0915` (> 50 instructions). Ces règles sont désactivées dans `backend/pyproject.toml` ; à découper quand un epic touche la fonction. Liste issue de `ruff check . --isolated --select PLR0912,PLR0915` (E0-T4, 2026-10-22).
+
+| Fichier | Fonction | Dépassement |
+| --- | --- | --- |
+| `app/services/certificate_service.py` | `generate_reservation_certificate` | PLR0915 82/50 |
+| `app/services/certificate_service.py` | `generate_payment_receipt` | PLR0915 59/50 |
+| `app/services/dashboard_service.py` | `get_dashboard_stats` | PLR0912 38/12, PLR0915 121/50 |
+| `app/services/dashboard_service.py` | `get_clients_pipeline` | PLR0912 16/12, PLR0915 62/50 |
+| `app/services/dashboard_service.py` | `get_lots_dashboard` | PLR0912 18/12, PLR0915 65/50 |
+| `app/services/lot_service.py` | `bulk_update_lot_metadata` | PLR0912 13/12 |
+| `app/services/project_service.py` | `get_project_kpis` | PLR0915 67/50 |
+| `app/services/project_service.py` | `_get_user_filtered_kpis` | PLR0915 64/50 |
+| `app/services/project_service.py` | `upload_geojson` | PLR0912 16/12, PLR0915 63/50 |
+| `app/services/project_service.py` | `export_geojson` | PLR0912 20/12, PLR0915 62/50 |
+| `app/services/project_service.py` | `import_csv_metadata` | PLR0912 20/12, PLR0915 74/50 |
+| `app/services/reservation_service.py` | `finaliser_engage` | PLR0912 19/12 |
+
+Autres règles ruff désactivées par choix (E0-T4) : `PLC0415` (44 imports différés dans les services, repositories, schémas et tests, probablement pour éviter des dépendances circulaires ; à revoir, voir le détail ci-dessous) et `ARG001` limité aux endpoints FastAPI, handlers d'erreur, logging, lifespan (signatures imposées par le framework).
+
+Autre dette relevée en fin d'E0 (revue finale, 2026-10-24) :
+
+- **Tests manquants avant les refactors E3 / E4** : aucun test n'exerce `payment_plan` / les échéances ; l'effet de `engage` avec `guarantee_action=deduct` et les notes d'audit de `extend-option` ne sont pas assertés. À couvrir avant de toucher ces flux.
+- **`PLC0415` (imports différés)**, 44 occurrences, issues de `ruff check . --isolated --select PLC0415 --output-format concise` (depuis `backend/`) : `services/project_service.py` 14, `services/dashboard_service.py` 11, `repositories/lot_repository.py` 5, et 1 chacun dans `domain/schemas/lot.py`, `repositories/base.py`, `client_repository.py`, `project_repository.py`, `sale_repository.py`, `user_repository.py`, `database/session.py`, `services/email_service.py`, `lot_pricing_service.py`, `payment_service.py`, `reservation_service.py`, `user_service.py`, `tests/unit/test_domain/test_security.py`, `tests/unit/test_imports.py`.
+- **`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.
+- **Dépendances backend : 3 sources divergentes** (relevé lors de la CI de la PR #46) : `backend/requirements.txt` (épingle `fastapi==0.115.0`, `pydantic==2.8.2`…, utilisé en local), `backend/pyproject.toml` (plages non épinglées, utilisé par la CI via `pip install -e ".[dev]"`) et `backend/Dockerfile` (liste explicite non épinglée, utilisée en production). Conséquence constatée : la CI et la production résolvent fastapi 0.162.0 / starlette 1.9.0 alors que le local est en 0.115.0 (ex. `HTTPBearer` renvoie 401 au lieu de 403 sans jeton ; le test `test_get_current_user_unauthorized` attend désormais 401). À faire dans une tâche dédiée : introduire un lockfile unique (uv ou pip-tools) utilisé par le local, la CI et Docker. D'ici là, mettre à jour les environnements locaux avec `pip install -e ".[dev]" --upgrade`.
+- **`LotDetailModal.jsx`** : la formule du solde restant est dupliquée (imposée par l'ordre des hooks) ; à factoriser lors d'un refactor du composant.
 
 ## Anomalies constatées
 
 _Comportements suspects relevés pendant les tests de caractérisation, en attente de décision._
+
+Relevés lors de E0-T3 (`test_lot_transitions.py`) ; le code applicatif n'a pas été modifié, les tests décrivent le comportement actuel.
+
+- **Aucun contrôle d'accès projet sur les transitions** : `lot_transitions.py` n'utilise que `CurrentUser` ; un commercial non affecté au projet peut activer, bloquer, prolonger ou faire avancer n'importe quel lot (seuls `proprietaire` et `unblock` exigent `manager`).
+- **`extend-option` sans contrôle de propriétaire** : n'importe quel utilisateur connecté peut prolonger l'option d'un autre commercial (contrairement à `cancel-option`, `to-reservation`, `refund`, `engage`, `solde`). De plus `additional_days` est un paramètre de requête, pas un corps JSON, contrairement aux autres transitions.
+- **`block` / `unblock` perdent l'état du lot** : bloquer un lot en `option` (ou autre statut avec réservation) puis le débloquer le remet en `available` tout en conservant `current_reservation_id` vers une réservation encore `active` (couvert par `test_unblock_returns_to_available_and_keeps_reservation_link`). Le statut précédent n'est pas mémorisé.
+- **Tout utilisateur connecté peut bloquer n'importe quel lot** (y compris `reservation_engagee`, `reservation_soldee`, `chez_notaire`), sans restriction de rôle ni de propriétaire.
+- **`closed_at` absent de `ReservationResponse`** : `_reservation_to_response` (`reservation_service.py`) ne renseigne pas `closed_at` alors que le champ existe dans le schéma ; il est donc toujours `null` dans les réponses de réservation, alors qu'il est bien écrit en base par `proprietaire` et reste exposé par le détail du lot (`lot_repository.py` -> `LotWithDetails`).
+- **`unblock` écrit `blocked_reason = ""`** (chaîne vide) au lieu de `NULL`, et `block` sans motif stocke aussi `""`.
+- **`engage` en mode `guarantee_action=refund`** fait quand même avancer le lot en `reservation_engagee` (documenté dans le schéma, mais à confirmer côté métier).
+- **`solde` accepte un `price` libre** : le prix de la vente n'est pas rapproché de `sale_price` / `price` du lot ni du total de l'échéancier.
+- **`DELETE /api/lots/{id}/documents/{doc_id}` sans contrôle de rôle** : `documents.py:78` appelle `document_service.py:181` `delete_document(user_role)` mais l'argument `user_role` n'est jamais utilisé ; n'importe quel utilisateur connecté peut supprimer les documents de n'importe quel lot.
+- **Arguments inutilisés masqués par `ARG002`** (règle ignorée dans `pyproject.toml`, 10 occurrences via `ruff check . --isolated --select ARG002 --output-format concise` depuis `backend/`) :
+  - `certificate_service.py:48` `reservation_id`
+  - `document_service.py:181` `user_role` (voir anomalie ci-dessus)
+  - `reservation_service.py:1001`, `1058`, `1099`, `1137` `user_id`
+  - `reservation_service.py:1166` `data` et `1167` `user_id`
+  - `project_service.py:1256`, `1714` `user_id`
 
 ## Recette E1 (plein écran)
 

@@ -3,15 +3,13 @@
 Environment variables are loaded from .env file and can be overridden.
 """
 
+import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-import json
-
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
-
 
 _LIST_FIELDS = {"CORS_ORIGINS", "CORS_ALLOW_METHODS", "CORS_ALLOW_HEADERS"}
 
@@ -24,7 +22,9 @@ class _CommaListEnvSource(EnvSettingsSource):
             stripped = value.strip()
             if not stripped.startswith("["):
                 # Not JSON — wrap as JSON array so pydantic-settings can parse it
-                value = json.dumps([v.strip() for v in stripped.split(",") if v.strip()])
+                value = json.dumps(
+                    [v.strip() for v in stripped.split(",") if v.strip()]
+                )
         return super().prepare_field_value(field_name, field, value, value_is_complex)
 
 
@@ -87,7 +87,9 @@ class Settings(BaseSettings):
 
     # Supabase Configuration
     SUPABASE_URL: str | None = None
-    SUPABASE_PUBLIC_URL: str | None = None  # External URL for public file links (browser-accessible)
+    SUPABASE_PUBLIC_URL: str | None = (
+        None  # External URL for public file links (browser-accessible)
+    )
     SUPABASE_PUBLISHABLE_KEY: str | None = None
     SUPABASE_SECRET_KEY: str | None = None
     SUPABASE_STORAGE_URL: str | None = None
@@ -108,10 +110,12 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
 
-    # Email (Resend)
+    # Resend email settings
     RESEND_API_KEY: str | None = None
     EMAIL_FROM: str = "LotisPro <contact@lotispro.com>"
-    CONTACT_EMAIL: str = "contact@lotispro.com"  # Boîte qui reçoit les formulaires de contact
+    CONTACT_EMAIL: str = (
+        "contact@lotispro.com"  # Boîte qui reçoit les formulaires de contact
+    )
     INVITATION_EXPIRE_HOURS: int = 48
 
     # Logging

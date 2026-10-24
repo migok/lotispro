@@ -152,7 +152,11 @@ class SaleService:
             )
             if active_reservation:
                 # Check permissions: only manager or the commercial who reserved can finalize
-                if user_role and user_role != "manager" and active_reservation.reserved_by_user_id != user_id:
+                if (
+                    user_role
+                    and user_role != "manager"
+                    and active_reservation.reserved_by_user_id != user_id
+                ):
                     raise BusinessRuleError(
                         message="You don't have permission to finalize this reservation. Only the commercial who reserved the lot can finalize the sale.",
                         rule="insufficient_permissions",

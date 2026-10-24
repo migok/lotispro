@@ -15,18 +15,19 @@ Full-stack web application for managing real estate projects, lots, reservations
 lot_webapp/
 ├── backend/          # FastAPI REST API (Python 3.13)
 │   ├── app/
-│   │   ├── api/v1/endpoints/   # Route handlers (15 modules)
+│   │   ├── api/v1/endpoints/   # Route handlers (16 modules)
 │   │   ├── core/               # Config, security, logging, middlewares
 │   │   ├── domain/             # Schemas (Pydantic) + interfaces
 │   │   ├── infrastructure/     # DB models, repositories, Supabase storage
-│   │   └── services/           # Business logic (16 services)
-│   ├── alembic/      # DB migrations (0001 → 0010)
-│   └── scripts/      # Utility scripts (seed_users.py)
+│   │   └── services/           # Business logic (15 services)
+│   ├── alembic/      # DB migrations (0001 → 0016)
+│   └── scripts/      # Utility scripts (create_admin.py)
+├── .github/workflows/ci.yml   # CI (backend ruff + pytest, frontend eslint + vitest + build)
+├── docs/AVANCEMENT.md         # Suivi de la roadmap (epic → tâche → statut → issue → PR)
 ├── frontend/         # React SPA
 │   └── src/
 │       ├── components/         # React components + useTheme.js hook
-│       │   └── ai_assistant/   # AI assistant widget (AIAssistant, ChatInterface, MessageBubble…)
-│       ├── contexts/           # AuthContext, ToastContext
+│       ├── contexts/           # AuthContext.jsx, ToastContext.jsx (providers only) + authHooks.js (useAuth), toastHooks.js (useToast)
 │       ├── services/           # API service layer
 │       └── utils/              # api.js, config.js, constants.js
 └── CLAUDE.md
@@ -75,10 +76,12 @@ npm run dev   # Starts at http://localhost:5173
 ### Backend
 
 ```bash
-# Tests (requires 80% coverage)
+# Tests (pytest, in-memory SQLite per test, no DB service needed;
+# factories in app/tests/factories.py). CI runs: python -m pytest -q
+# `SECRET_KEY` must be set (via .env or environment) for Settings to load.
 pytest
 
-# Linting
+# Linting (CI runs ruff check . and ruff format --check .)
 ruff check .
 ruff format .
 
@@ -89,8 +92,8 @@ mypy .
 alembic upgrade head
 alembic revision --autogenerate -m "description"
 
-# Seed admin user
-python scripts/seed_users.py
+# Create admin user
+python scripts/create_admin.py
 ```
 
 ### Frontend
@@ -99,6 +102,7 @@ python scripts/seed_users.py
 npm run dev       # Dev server
 npm run build     # Production build
 npm run lint      # ESLint
+npm test          # Vitest (jsdom) + Testing Library; helper renderWithProviders
 npm run preview   # Preview production build
 ```
 
@@ -122,8 +126,8 @@ Endpoint → Service → Repository → DB Model
 
 ### Frontend - Component Architecture
 
-- `AuthContext` manages JWT token (stored in localStorage)
-- `ToastContext` provides global notifications
+- `AuthContext` manages JWT token (stored in localStorage); `useAuth` lives in `contexts/authHooks.js`
+- `ToastContext` provides global notifications; `useToast` lives in `contexts/toastHooks.js`
 - `utils/api.js` is the central fetch wrapper — handles JWT headers and 401 errors
 - All API calls go through `utils/api.js`, not direct fetch
 - `useTheme.js` (in `components/`) manages dark/light theme via `localStorage` + `data-theme` on `<html>`
@@ -177,9 +181,41 @@ Endpoint → Service → Repository → DB Model
 
 ---
 
+## Workflow de statuts
+
+Les transitions de statut d'un lot sont exposées par `backend/app/api/v1/endpoints/lot_transitions.py`
+(16 routes, préfixe `POST /api/lots/{lot_id}/transitions/…`, sauf mention `PUT`). Elles sont épinglées
+par des tests de caractérisation : `backend/app/tests/integration/test_api/test_lot_transitions.py`
+(comportement actuel, y compris les anomalies listées dans `docs/AVANCEMENT.md`).
+
+| # | Route | De | Vers |
+|---|-------|----|------|
+| 1 | `activate` | `creation` | `available` |
+| 2 | `start-option` | `available` | `option` |
+| 3 | `cancel-option` | `option` | `available` |
+| 4 | `extend-option` | `option` ou `reservation_a_finaliser` | inchangé (prolonge l'expiration) |
+| 5 | `direct-reservation` | `available` | `reservation_a_finaliser` |
+| 6 | `to-reservation` | `option` | `reservation_a_finaliser` |
+| 7 | `refund` | `reservation_a_finaliser` | `available` |
+| 8 | `direct-engage` | `available` | `reservation_engagee` |
+| 9 | `engage` | `reservation_a_finaliser` | `reservation_engagee` |
+| 10 | `solde` | `reservation_engagee` | `reservation_soldee` (crée la vente) |
+| 11 | `set-notaire-intent` | `reservation_soldee` | inchangé (tag `wants_notaire`) |
+| 12 | `notaire` (POST) | `reservation_soldee` | `chez_notaire` |
+| 13 | `notaire` (PUT) | `chez_notaire` | inchangé (met à jour les infos notaire) |
+| 14 | `proprietaire` | `chez_notaire` | `chez_proprietaire` (manager uniquement, renseigne `closed_at`) |
+| 15 | `block` | tout statut sauf `blocked` et `chez_proprietaire` | `blocked` (motif dans `blocked_reason`) |
+| 16 | `unblock` | `blocked` | `available` (manager uniquement) |
+
+Refus : une transition appelée depuis un autre statut est refusée en HTTP 400 (règle
+`invalid_lot_status` ou `lot_not_available` ; `activate` utilise `lot_must_be_in_creation`). Un lot
+inexistant donne 404, un rôle non autorisé 403.
+
+---
+
 ## API Endpoints
 
-Base prefix: `/api/v1`
+Base prefix: `/api` (`API_V1_PREFIX` in `app/core/config.py`)
 
 | Module | Prefix | Notes |
 |--------|--------|-------|
@@ -197,6 +233,27 @@ Base prefix: `/api/v1`
 | Dashboard | `/dashboard` | KPIs and analytics |
 | Audit | `/audit-logs` | Manager only |
 | Health | `/health` | No auth required |
+
+---
+
+## Définition de Terminé
+
+Niveau senior — pour chaque tâche :
+
+1. Test écrit avant le code (superpowers:test-driven-development), il échoue puis passe.
+2. ruff + eslint propres sur les fichiers touchés ; CI verte.
+3. Revue de code avant merge (code-review / pr-review-toolkit) ; les remarques sont traitées ou
+   justifiées.
+4. Vérification dans l'application lancée (superpowers:verification-before-completion) contre les
+   critères d'acceptance du ticket.
+5. Migration testée en `upgrade` **et** `downgrade` sur une copie des données.
+
+**Branches** : une branche par epic `feature/eN-<slug>` depuis `dev`, une PR par epic (ou par tâche
+si l'epic est gros), merge dans `dev` ; `dev → main` à la fin de chaque epic validé.
+
+**Suivi** : `docs/AVANCEMENT.md` (tableau epic → tâche → statut → issue → PR → date) est mis à jour
+dans le même commit que la tâche ; le GitHub Project « LotisPro — Roadmap » fait foi en cas d'écart.
+Design de référence : `docs/superpowers/specs/2026-10-22-roadmap-lotispro-design.md` (§6).
 
 ---
 
@@ -227,12 +284,12 @@ Base prefix: `/api/v1`
 - **Type hints required:** MyPy strict mode enabled
 - **Structured logging:** use `get_logger(__name__)`, log with context kwargs
 - **Custom exceptions:** raise from `app/core/exceptions.py`, not generic `HTTPException`
-- **Ruff rules:** E, W, F, I, B, C4, UP, ARG, SIM, PTH, PL, RUF
+- **Ruff rules:** E, W, F, I, B, C4, UP, ARG, SIM, TCH, PTH, ERA, PL, RUF (see `[tool.ruff.lint]` in `backend/pyproject.toml` for the ignored ones)
 
 ### Frontend
 
 - **No direct fetch:** always use `utils/api.js` wrapper
-- **Toast for feedback:** use `useToast()` from `ToastContext`
+- **Toast for feedback:** use `useToast()` from `contexts/toastHooks` (`ToastContext.jsx` only exports `ToastProvider`; likewise `useAuth` comes from `contexts/authHooks`, `AuthContext.jsx` only exports `AuthProvider`)
 - **Role checks:** use `ProtectedRoute` for route-level, check `user.role` in components
 - **Styling:** custom CSS in `styles.css`, no UI framework
 - **Theme:** `useTheme.js` in `components/` — reads/writes `localStorage('lotispro-theme')`, sets `data-theme` on `<html>`

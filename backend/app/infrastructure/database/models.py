@@ -3,7 +3,7 @@
 These models map to database tables and provide the persistence layer.
 """
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     CheckConstraint,
@@ -22,7 +22,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 def utc_now() -> datetime:
     """Return current UTC datetime."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
@@ -37,7 +37,9 @@ class UserModel(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, index=True
+    )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -49,8 +51,12 @@ class UserModel(Base):
         nullable=False,
         default="client",
     )
-    invitation_token: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
-    invitation_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invitation_token: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, unique=True, index=True
+    )
+    invitation_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -95,7 +101,9 @@ class ProjectModel(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="private")
+    visibility: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="private"
+    )
     total_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     sold_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ca_objectif: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -227,7 +235,9 @@ class LotModel(Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="creation")
     blocked_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     current_reservation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    geometry: Mapped[str | None] = mapped_column(Text, nullable=True)  # GeoJSON geometry
+    geometry: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # GeoJSON geometry
     # Metadata fields from CSV import
     type_lot: Mapped[str | None] = mapped_column(String(50), nullable=True)
     emplacement: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -282,7 +292,9 @@ class ClientModel(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cin: Mapped[str | None] = mapped_column(String(20), nullable=True)
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    client_type: Mapped[str] = mapped_column(String(20), nullable=False, default="autre")
+    client_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="autre"
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -401,7 +413,9 @@ class ReservationModel(Base):
     deposit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     deposit_refund_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     deposit_refund_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    deposit_refund_payment_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    deposit_refund_payment_type: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )
     release_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
@@ -589,7 +603,9 @@ class PaymentScheduleModel(Base):
     balance_pct: Mapped[float] = mapped_column(Float, nullable=False, default=50.0)
     deposit_total: Mapped[float] = mapped_column(Float, nullable=False)
     balance_total: Mapped[float] = mapped_column(Float, nullable=False)
-    balance_delay_months: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    balance_delay_months: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -628,12 +644,16 @@ class PaymentInstallmentModel(Base):
         ForeignKey("payment_schedules.id"),
         nullable=False,
     )
-    payment_type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'deposit' | 'balance'
+    payment_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # 'deposit' | 'balance'
     installment_number: Mapped[int] = mapped_column(Integer, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
-    paid_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -686,7 +706,9 @@ class ProjectFinancingPlanModel(Base):
     deposit_pct: Mapped[float] = mapped_column(Float, nullable=False, default=50.0)
     deposit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     deposit_periodicity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    balance_delay_months: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    balance_delay_months: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     balance_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     balance_periodicity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by: Mapped[int] = mapped_column(
@@ -710,9 +732,7 @@ class ProjectFinancingPlanModel(Base):
         foreign_keys=[created_by],
     )
 
-    __table_args__ = (
-        Index("ix_project_financing_plans_project", "project_id"),
-    )
+    __table_args__ = (Index("ix_project_financing_plans_project", "project_id"),)
 
 
 class LotPricingConfigModel(Base):

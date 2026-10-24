@@ -47,21 +47,41 @@ NON_DELETABLE_STATUSES = (
 class LotCreate(BaseSchema):
     """Schema for creating a new lot."""
 
-    numero: str = Field(min_length=1, max_length=50, description="Lot number/identifier")
+    numero: str = Field(
+        min_length=1, max_length=50, description="Lot number/identifier"
+    )
     zone: str | None = Field(default=None, max_length=50, description="Zone identifier")
     surface: float | None = Field(default=None, ge=0, description="Surface area in m²")
-    price: float | None = Field(default=None, ge=0, description="Prix catalogue (auto-calculé si price_per_sqm fourni)")
-    price_per_sqm: float | None = Field(default=None, ge=0, description="Prix par m² — calcule price automatiquement")
+    price: float | None = Field(
+        default=None,
+        ge=0,
+        description="Prix catalogue (auto-calculé si price_per_sqm fourni)",
+    )
+    price_per_sqm: float | None = Field(
+        default=None, ge=0, description="Prix par m² — calcule price automatiquement"
+    )
     status: LOT_STATUS = Field(
         default="creation",
         description="Lot status",
     )
     project_id: int = Field(description="Parent project ID")
-    geometry: dict[str, Any] | None = Field(default=None, description="GeoJSON geometry")
+    geometry: dict[str, Any] | None = Field(
+        default=None, description="GeoJSON geometry"
+    )
     # Metadata fields
-    type_lot: str | None = Field(default=None, max_length=50, description="Type de lot (ex: commercial, résidentiel)")
-    emplacement: str | None = Field(default=None, max_length=50, description="Emplacement (ex: 2 façade, 3 façade)")
-    type_maison: str | None = Field(default=None, max_length=50, description="Type de maison (ex: villa, appartement)")
+    type_lot: str | None = Field(
+        default=None,
+        max_length=50,
+        description="Type de lot (ex: commercial, résidentiel)",
+    )
+    emplacement: str | None = Field(
+        default=None, max_length=50, description="Emplacement (ex: 2 façade, 3 façade)"
+    )
+    type_maison: str | None = Field(
+        default=None,
+        max_length=50,
+        description="Type de maison (ex: villa, appartement)",
+    )
 
 
 class LotUpdate(BaseSchema):
@@ -79,17 +99,31 @@ class LotUpdate(BaseSchema):
     )
     zone: str | None = Field(default=None, max_length=50, description="Zone identifier")
     surface: float | None = Field(default=None, ge=0, description="Surface area")
-    price: float | None = Field(default=None, ge=0, description="Prix catalogue (auto-calculé si price_per_sqm fourni)")
-    price_per_sqm: float | None = Field(default=None, ge=0, description="Prix par m² catalogue — calcule price automatiquement")
-    price_per_sqm_acte: float | None = Field(default=None, ge=0, description="Prix par m² acte notarié")
+    price: float | None = Field(
+        default=None,
+        ge=0,
+        description="Prix catalogue (auto-calculé si price_per_sqm fourni)",
+    )
+    price_per_sqm: float | None = Field(
+        default=None,
+        ge=0,
+        description="Prix par m² catalogue — calcule price automatiquement",
+    )
+    price_per_sqm_acte: float | None = Field(
+        default=None, ge=0, description="Prix par m² acte notarié"
+    )
     status: LOT_STATUS | None = Field(
         default=None,
         description="Lot status (direct update limited to creation/available/blocked)",
     )
     # Metadata fields
     type_lot: str | None = Field(default=None, max_length=50, description="Type de lot")
-    emplacement: str | None = Field(default=None, max_length=50, description="Emplacement")
-    type_maison: str | None = Field(default=None, max_length=50, description="Type de maison")
+    emplacement: str | None = Field(
+        default=None, max_length=50, description="Emplacement"
+    )
+    type_maison: str | None = Field(
+        default=None, max_length=50, description="Type de maison"
+    )
 
 
 class LotResponse(BaseSchema):
@@ -124,6 +158,7 @@ class LotResponse(BaseSchema):
             return v
         if isinstance(v, str):
             import json
+
             try:
                 return json.loads(v)
             except (json.JSONDecodeError, ValueError):
@@ -187,8 +222,12 @@ class LotBulkMetadataUpdate(BaseSchema):
     lot_ids: list[int] = Field(min_length=1, description="List of lot IDs to update")
     # Optional metadata fields — only non-None values will be applied
     type_lot: str | None = Field(default=None, max_length=50, description="Type de lot")
-    emplacement: str | None = Field(default=None, max_length=50, description="Emplacement")
-    type_maison: str | None = Field(default=None, max_length=50, description="Type de maison")
+    emplacement: str | None = Field(
+        default=None, max_length=50, description="Emplacement"
+    )
+    type_maison: str | None = Field(
+        default=None, max_length=50, description="Type de maison"
+    )
     price: float | None = Field(default=None, ge=0, description="Prix du lot")
     price_per_sqm: float | None = Field(default=None, ge=0, description="Prix par m²")
     surface: float | None = Field(default=None, ge=0, description="Surface en m²")

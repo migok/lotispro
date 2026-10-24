@@ -15,7 +15,9 @@ class LotPricingConfigItem(BaseSchema):
     type_maison: str | None = Field(default=None, max_length=50)
     emplacement: str | None = Field(default=None, max_length=50)
     prix_m2_acte: float = Field(gt=0, description="Prix au m² de vente acte (stable)")
-    prix_m2_catalogue: float = Field(gt=0, description="Prix au m² catalogue (modifiable)")
+    prix_m2_catalogue: float = Field(
+        gt=0, description="Prix au m² catalogue (modifiable)"
+    )
 
 
 class LotPricingConfigBulkUpsert(BaseSchema):

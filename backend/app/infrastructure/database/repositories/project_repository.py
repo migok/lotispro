@@ -31,7 +31,9 @@ class ProjectRepository(BaseRepository[ProjectModel]):
             select(func.count(LotModel.id))
             .where(
                 LotModel.project_id == id,
-                LotModel.status.in_(("reservation_soldee", "chez_notaire", "chez_proprietaire")),
+                LotModel.status.in_(
+                    ("reservation_soldee", "chez_notaire", "chez_proprietaire")
+                ),
             )
             .scalar_subquery()
         )
@@ -82,7 +84,11 @@ class ProjectRepository(BaseRepository[ProjectModel]):
                 LotModel.project_id,
                 func.count(LotModel.id).label("sold_count"),
             )
-            .where(LotModel.status.in_(("reservation_soldee", "chez_notaire", "chez_proprietaire")))
+            .where(
+                LotModel.status.in_(
+                    ("reservation_soldee", "chez_notaire", "chez_proprietaire")
+                )
+            )
             .group_by(LotModel.project_id)
             .subquery()
         )
@@ -97,16 +103,24 @@ class ProjectRepository(BaseRepository[ProjectModel]):
             .subquery()
         )
 
-        query = select(
-            ProjectModel,
-            func.coalesce(sold_lots_subquery.c.sold_count, 0).label("actual_sold_lots"),
-            func.coalesce(total_lots_subquery.c.total_count, 0).label("actual_total_lots"),
-        ).outerjoin(
-            sold_lots_subquery,
-            ProjectModel.id == sold_lots_subquery.c.project_id,
-        ).outerjoin(
-            total_lots_subquery,
-            ProjectModel.id == total_lots_subquery.c.project_id,
+        query = (
+            select(
+                ProjectModel,
+                func.coalesce(sold_lots_subquery.c.sold_count, 0).label(
+                    "actual_sold_lots"
+                ),
+                func.coalesce(total_lots_subquery.c.total_count, 0).label(
+                    "actual_total_lots"
+                ),
+            )
+            .outerjoin(
+                sold_lots_subquery,
+                ProjectModel.id == sold_lots_subquery.c.project_id,
+            )
+            .outerjoin(
+                total_lots_subquery,
+                ProjectModel.id == total_lots_subquery.c.project_id,
+            )
         )
 
         if user_role == "manager":
@@ -114,9 +128,8 @@ class ProjectRepository(BaseRepository[ProjectModel]):
             pass
         elif user_role == "commercial" and user_id:
             # Commercials see assigned + public projects
-            assigned_subquery = (
-                select(AssignmentModel.project_id)
-                .where(AssignmentModel.user_id == user_id)
+            assigned_subquery = select(AssignmentModel.project_id).where(
+                AssignmentModel.user_id == user_id
             )
             query = query.where(
                 or_(

@@ -1,7 +1,7 @@
 """Payment service — schedule creation and installment management."""
 
 import calendar
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,8 +47,7 @@ def _generate_due_dates(
 ) -> list[datetime]:
     """Generate a list of due dates starting at `start` with the given periodicity."""
     return [
-        _add_months(start, i * config.periodicity_months)
-        for i in range(config.count)
+        _add_months(start, i * config.periodicity_months) for i in range(config.count)
     ]
 
 
@@ -160,14 +159,16 @@ class PaymentService:
             balance_delay_months=data.balance_delay_months,
         )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # ── Deposit installments ────────────────────────────────────────
         deposit_start = data.deposit_start_date or now
         deposit_dates = _generate_due_dates(deposit_start, data.deposit_installments)
         deposit_amounts = _split_amount(deposit_total, data.deposit_installments.count)
 
-        for i, (due, amount) in enumerate(zip(deposit_dates, deposit_amounts, strict=True)):
+        for i, (due, amount) in enumerate(
+            zip(deposit_dates, deposit_amounts, strict=True)
+        ):
             await self.payment_repo.create_installment(
                 schedule_id=schedule.id,
                 payment_type="deposit",
@@ -184,7 +185,9 @@ class PaymentService:
         balance_dates = _generate_due_dates(balance_start, data.balance_installments)
         balance_amounts = _split_amount(balance_total, data.balance_installments.count)
 
-        for i, (due, amount) in enumerate(zip(balance_dates, balance_amounts, strict=True)):
+        for i, (due, amount) in enumerate(
+            zip(balance_dates, balance_amounts, strict=True)
+        ):
             await self.payment_repo.create_installment(
                 schedule_id=schedule.id,
                 payment_type="balance",
@@ -241,14 +244,17 @@ class PaymentService:
 
         # Enforce strict payment order when marking as paid
         if data.status == "paid":
-            inst_check = await self.payment_repo.get_installment_with_schedule(installment_id)
+            inst_check = await self.payment_repo.get_installment_with_schedule(
+                installment_id
+            )
             if inst_check:
                 all_insts = inst_check.schedule.installments
 
                 if inst_check.payment_type == "deposit":
                     # All previous deposit installments must be paid
                     prev_deposit = [
-                        i for i in all_insts
+                        i
+                        for i in all_insts
                         if i.payment_type == "deposit"
                         and i.installment_number < inst_check.installment_number
                     ]
@@ -260,7 +266,9 @@ class PaymentService:
 
                 elif inst_check.payment_type == "balance":
                     # All deposit installments must be paid first
-                    deposit_insts = [i for i in all_insts if i.payment_type == "deposit"]
+                    deposit_insts = [
+                        i for i in all_insts if i.payment_type == "deposit"
+                    ]
                     if any(i.status != "paid" for i in deposit_insts):
                         raise BusinessRuleError(
                             message="Tous les versements de l'échéancier acompte doivent être validés avant de commencer l'échéancier solde.",
@@ -268,7 +276,8 @@ class PaymentService:
                         )
                     # Previous balance installments must be paid
                     prev_balance = [
-                        i for i in all_insts
+                        i
+                        for i in all_insts
                         if i.payment_type == "balance"
                         and i.installment_number < inst_check.installment_number
                     ]
@@ -307,7 +316,9 @@ class PaymentService:
 
         # Send email confirmation for every paid installment
         if data.status == "paid":
-            await self._send_payment_confirmation(inst.id, inst.amount, inst.paid_date, inst.payment_type)
+            await self._send_payment_confirmation(
+                inst.id, inst.amount, inst.paid_date, inst.payment_type
+            )
 
         return self._installment_to_response(inst)
 
@@ -410,7 +421,8 @@ class PaymentService:
         type_insts = [i for i in all_insts if i.payment_type == payment_type]
         total_installments = len(type_insts)
         schedule_total = (
-            ctx.schedule.deposit_total if payment_type == "deposit"
+            ctx.schedule.deposit_total
+            if payment_type == "deposit"
             else ctx.schedule.balance_total
         )
         # Find installment number for the given installment_id

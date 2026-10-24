@@ -108,7 +108,7 @@ export default function ContactPage() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    let W, H, lots = [], mouse = { x: -999, y: -999 }, rafId;
+    let W, H, lots = [], rafId;
     const buildLots = () => {
       lots = [];
       const cols = Math.ceil(W / 80) + 2, rows = Math.ceil(H / 60) + 2;

@@ -173,11 +173,13 @@ class ClientRepository(BaseRepository[ClientModel]):
 
         reservation_counts = await self.session.execute(
             select(
-                func.count().filter(ReservationModel.status == "active").label("active"),
+                func.count()
+                .filter(ReservationModel.status == "active")
+                .label("active"),
                 func.count().label("total"),
-                func.count().filter(ReservationModel.status == "converted").label(
-                    "converted"
-                ),
+                func.count()
+                .filter(ReservationModel.status == "converted")
+                .label("converted"),
             ).where(ReservationModel.client_id == client_id)
         )
         res_counts = reservation_counts.one()

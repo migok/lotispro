@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/authHooks';
+import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiDelete } from '../utils/api';
 import { formatDate, formatPrice, formatCompactPrice } from '../utils/formatters';
 
@@ -249,6 +249,7 @@ export default function CommercialsPage() {
       loadProjects();
       loadMonthlyData();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loaders are recreated every render; fetch once when the token becomes available
   }, [token]);
 
   useEffect(() => {

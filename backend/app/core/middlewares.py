@@ -5,7 +5,7 @@ Includes CORS, security headers, request logging, and GZip compression.
 
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, ClassVar
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
@@ -82,7 +82,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Middleware to add security headers to all responses."""
 
-    SECURITY_HEADERS: dict[str, str] = {
+    SECURITY_HEADERS: ClassVar[dict[str, str]] = {
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
         "X-XSS-Protection": "1; mode=block",
@@ -91,7 +91,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     }
 
     # Additional headers for production
-    PRODUCTION_HEADERS: dict[str, str] = {
+    PRODUCTION_HEADERS: ClassVar[dict[str, str]] = {
         "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
         "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
     }

@@ -5,7 +5,11 @@ from typing import Literal
 from fastapi import APIRouter, Query, status
 
 from app.api.dependencies import CurrentUser, LotPricingServiceDep, LotServiceDep
-from app.domain.schemas.common import MessageResponse, PaginatedResponse, PaginationParams
+from app.domain.schemas.common import (
+    MessageResponse,
+    PaginatedResponse,
+    PaginationParams,
+)
 from app.domain.schemas.lot import LotCreate, LotFilter, LotResponse, LotUpdate
 
 router = APIRouter()
@@ -28,10 +32,17 @@ async def list_lots(
     numero: str | None = Query(default=None, description="Search by lot number"),
     zone: str | None = Query(default=None, description="Filter by zone"),
     status: Literal[
-        "creation", "available", "option", "reservation_a_finaliser",
-        "reservation_engagee", "reservation_soldee", "chez_notaire",
-        "chez_proprietaire", "blocked"
-    ] | None = Query(default=None, description="Filter by status"),
+        "creation",
+        "available",
+        "option",
+        "reservation_a_finaliser",
+        "reservation_engagee",
+        "reservation_soldee",
+        "chez_notaire",
+        "chez_proprietaire",
+        "blocked",
+    ]
+    | None = Query(default=None, description="Filter by status"),
     surface_min: float | None = Query(default=None, ge=0, description="Min surface"),
     surface_max: float | None = Query(default=None, ge=0, description="Max surface"),
 ) -> PaginatedResponse[LotResponse]:

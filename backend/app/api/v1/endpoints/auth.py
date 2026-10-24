@@ -3,7 +3,12 @@
 from fastapi import APIRouter
 
 from app.api.dependencies import AuthServiceDep, CurrentUser, UserServiceDep
-from app.domain.schemas.user import ForgotPasswordRequest, TokenResponse, UserLogin, UserResponse
+from app.domain.schemas.user import (
+    ForgotPasswordRequest,
+    TokenResponse,
+    UserLogin,
+    UserResponse,
+)
 
 router = APIRouter()
 

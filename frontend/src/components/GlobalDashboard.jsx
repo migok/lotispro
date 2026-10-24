@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiGet } from "../utils/api";
-import { useAuth } from "../contexts/AuthContext";
-import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/authHooks";
+import { useToast } from "../contexts/toastHooks";
 
 // ─── Inject scoped styles once ───────────────────────────────────────────────
 const STYLE_ID = "gdb-styles";
@@ -693,7 +693,7 @@ export default function GlobalDashboard() {
       if (notaireRes.status === "fulfilled") {
         setNotaireAlerts(Array.isArray(notaireRes.value) ? notaireRes.value : []);
       }
-    } catch (err) {
+    } catch {
       showToast("Erreur lors du chargement du tableau de bord", "error");
     } finally {
       setLoading(false);

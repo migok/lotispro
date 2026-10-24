@@ -1,6 +1,6 @@
 """Reservation service — lot workflow transitions and reservation management."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -187,9 +187,16 @@ class ReservationService:
             notes=data.notes,
         )
 
-        await self.lot_repo.update(lot_id, status="option", current_reservation_id=reservation.id)
+        await self.lot_repo.update(
+            lot_id, status="option", current_reservation_id=reservation.id
+        )
 
-        logger.info("Option started", lot_id=lot_id, reservation_id=reservation.id, user_id=user_id)
+        logger.info(
+            "Option started",
+            lot_id=lot_id,
+            reservation_id=reservation.id,
+            user_id=user_id,
+        )
         return _reservation_to_response(reservation)
 
     # ------------------------------------------------------------------
@@ -220,9 +227,14 @@ class ReservationService:
             )
 
         if lot.current_reservation_id:
-            reservation = await self.reservation_repo.get_by_id(lot.current_reservation_id)
+            reservation = await self.reservation_repo.get_by_id(
+                lot.current_reservation_id
+            )
             if reservation:
-                if user_role != "manager" and reservation.reserved_by_user_id != user_id:
+                if (
+                    user_role != "manager"
+                    and reservation.reserved_by_user_id != user_id
+                ):
                     raise BusinessRuleError(
                         message="Insufficient permissions to cancel this option",
                         rule="insufficient_permissions",
@@ -324,7 +336,11 @@ class ReservationService:
         the promotion is then subtracted from the deposit gross to get the net
         installments. Balance = catalogue × balance_pct% = lot_price − deposit_net.
         """
-        from app.services.payment_service import _add_months, _generate_due_dates, _split_amount
+        from app.services.payment_service import (
+            _add_months,
+            _generate_due_dates,
+            _split_amount,
+        )
 
         existing = await self.payment_repo.get_by_reservation(reservation_id)
         if existing:
@@ -348,7 +364,7 @@ class ReservationService:
             balance_delay_months=plan.balance_delay_months,
         )
 
-        deposit_start = plan.deposit_start_date or datetime.now(timezone.utc)
+        deposit_start = plan.deposit_start_date or datetime.now(UTC)
 
         dep_cfg = InstallmentConfig(
             count=plan.deposit_count,
@@ -362,7 +378,9 @@ class ReservationService:
         deposit_dates = _generate_due_dates(deposit_start, dep_cfg)
         deposit_amounts = _split_amount(deposit_total, plan.deposit_count)
 
-        for i, (due, amount) in enumerate(zip(deposit_dates, deposit_amounts, strict=True)):
+        for i, (due, amount) in enumerate(
+            zip(deposit_dates, deposit_amounts, strict=True)
+        ):
             await self.payment_repo.create_installment(
                 schedule_id=schedule.id,
                 payment_type="deposit",
@@ -377,7 +395,9 @@ class ReservationService:
         balance_dates = _generate_due_dates(balance_start, bal_cfg)
         balance_amounts = _split_amount(balance_total, plan.balance_count)
 
-        for i, (due, amount) in enumerate(zip(balance_dates, balance_amounts, strict=True)):
+        for i, (due, amount) in enumerate(
+            zip(balance_dates, balance_amounts, strict=True)
+        ):
             await self.payment_repo.create_installment(
                 schedule_id=schedule.id,
                 payment_type="balance",
@@ -435,7 +455,7 @@ class ReservationService:
             lot_id=lot_id,
             client_id=data.client_id,
             reserved_by_user_id=user_id,
-            expiration_date=datetime.now(timezone.utc) + timedelta(days=365),
+            expiration_date=datetime.now(UTC) + timedelta(days=365),
             deposit=0,
             notes=data.notes,
         )
@@ -477,7 +497,9 @@ class ReservationService:
 
         # Create payment schedule if plan provided
         if data.payment_plan is not None:
-            schedule_price = data.sale_price if data.sale_price is not None else (lot.price or 0)
+            schedule_price = (
+                data.sale_price if data.sale_price is not None else (lot.price or 0)
+            )
             await self._create_payment_schedule_from_plan(
                 reservation_id=reservation.id,
                 lot_price=schedule_price,
@@ -584,9 +606,14 @@ class ReservationService:
             )
 
         if lot.current_reservation_id:
-            reservation = await self.reservation_repo.get_by_id(lot.current_reservation_id)
+            reservation = await self.reservation_repo.get_by_id(
+                lot.current_reservation_id
+            )
             if reservation:
-                if user_role != "manager" and reservation.reserved_by_user_id != user_id:
+                if (
+                    user_role != "manager"
+                    and reservation.reserved_by_user_id != user_id
+                ):
                     raise BusinessRuleError(
                         message="Insufficient permissions",
                         rule="insufficient_permissions",
@@ -641,13 +668,18 @@ class ReservationService:
 
         current_reservation = None
         if lot.current_reservation_id:
-            current_reservation = await self.reservation_repo.get_by_id(lot.current_reservation_id)
-            if current_reservation:
-                if user_role != "manager" and current_reservation.reserved_by_user_id != user_id:
-                    raise BusinessRuleError(
-                        message="Insufficient permissions",
-                        rule="insufficient_permissions",
-                    )
+            current_reservation = await self.reservation_repo.get_by_id(
+                lot.current_reservation_id
+            )
+            if (
+                current_reservation
+                and user_role != "manager"
+                and current_reservation.reserved_by_user_id != user_id
+            ):
+                raise BusinessRuleError(
+                    message="Insufficient permissions",
+                    rule="insufficient_permissions",
+                )
 
         guarantee_action = data.guarantee_action if data else "deduct"
 
@@ -683,16 +715,22 @@ class ReservationService:
                 if data.refund_date is not None:
                     update_kwargs["deposit_refund_date"] = data.refund_date
                 if data.refund_payment_type is not None:
-                    update_kwargs["deposit_refund_payment_type"] = data.refund_payment_type
+                    update_kwargs["deposit_refund_payment_type"] = (
+                        data.refund_payment_type
+                    )
             if update_kwargs:
-                await self.reservation_repo.update(current_reservation.id, **update_kwargs)
+                await self.reservation_repo.update(
+                    current_reservation.id, **update_kwargs
+                )
 
         await self.lot_repo.update(lot_id, status="reservation_engagee")
 
         # Create payment schedule if plan provided
         # When guarantee is deducted it counts as first payment → subtract from plan base
         if data and data.payment_plan is not None and current_reservation:
-            base_price = data.sale_price if data.sale_price is not None else (lot.price or 0)
+            base_price = (
+                data.sale_price if data.sale_price is not None else (lot.price or 0)
+            )
             if guarantee_action == "deduct" and current_reservation.guarantee_amount:
                 base_price = max(0.0, base_price - current_reservation.guarantee_amount)
             await self._create_payment_schedule_from_plan(
@@ -745,10 +783,16 @@ class ReservationService:
                 rule="promotion_already_received",
             )
 
-        date_str = data.received_date.strftime("%d/%m/%Y") if data.received_date else date.today().strftime("%d/%m/%Y")
+        date_str = (
+            data.received_date.strftime("%d/%m/%Y")
+            if data.received_date
+            else date.today().strftime("%d/%m/%Y")
+        )
         note_suffix = f"[{date_str}] Montant promotion reçu."
         current_notes = reservation.notes or ""
-        new_notes = f"{current_notes}\n{note_suffix}".strip() if current_notes else note_suffix
+        new_notes = (
+            f"{current_notes}\n{note_suffix}".strip() if current_notes else note_suffix
+        )
 
         updated = await self.reservation_repo.update(
             reservation_id,
@@ -809,7 +853,9 @@ class ReservationService:
             tag = "Notaire souhaité" if data.wants_notaire else "Notaire non souhaité"
             note_line = f"[{date_str}] {tag}."
             current = reservation.notes or ""
-            update_kwargs["notes"] = f"{current}\n{note_line}".strip() if current else note_line
+            update_kwargs["notes"] = (
+                f"{current}\n{note_line}".strip() if current else note_line
+            )
 
         updated = await self.reservation_repo.update(reservation.id, **update_kwargs)
 
@@ -860,7 +906,11 @@ class ReservationService:
         if not reservation:
             raise NotFoundError("Reservation", lot.current_reservation_id)
 
-        if user_role and user_role != "manager" and reservation.reserved_by_user_id != user_id:
+        if (
+            user_role
+            and user_role != "manager"
+            and reservation.reserved_by_user_id != user_id
+        ):
             raise BusinessRuleError(
                 message="Insufficient permissions to finalize this sale",
                 rule="insufficient_permissions",
@@ -868,7 +918,9 @@ class ReservationService:
 
         # --- Validation : reçus de paiement ---
         # Si un échéancier existe, tous les versements doivent être encaissés
-        payment_schedule = await self.payment_repo.get_by_reservation(lot.current_reservation_id)
+        payment_schedule = await self.payment_repo.get_by_reservation(
+            lot.current_reservation_id
+        )
         if payment_schedule:
             unpaid = [i for i in payment_schedule.installments if i.status != "paid"]
             if unpaid:
@@ -906,7 +958,9 @@ class ReservationService:
             notes=sale_data.notes,
         )
 
-        await self.reservation_repo.update(lot.current_reservation_id, status="converted")
+        await self.reservation_repo.update(
+            lot.current_reservation_id, status="converted"
+        )
         await self.lot_repo.update(lot_id, status="reservation_soldee")
 
         project = await self.project_repo.get_by_id(lot.project_id)
@@ -964,7 +1018,9 @@ class ReservationService:
 
         # Guard : le client doit avoir exprimé son souhait de passer chez le notaire
         if lot.current_reservation_id:
-            current_res = await self.reservation_repo.get_by_id(lot.current_reservation_id)
+            current_res = await self.reservation_repo.get_by_id(
+                lot.current_reservation_id
+            )
             if current_res and not current_res.wants_notaire:
                 raise BusinessRuleError(
                     message=(
@@ -989,7 +1045,9 @@ class ReservationService:
 
         await self.lot_repo.update(lot_id, status="chez_notaire")
 
-        logger.info("Lot moved to chez_notaire", lot_id=lot_id, notaire_id=data.notaire_id)
+        logger.info(
+            "Lot moved to chez_notaire", lot_id=lot_id, notaire_id=data.notaire_id
+        )
         updated_lot = await self.lot_repo.get_by_id(lot_id)
         return LotResponse.model_validate(updated_lot)
 
@@ -1061,7 +1119,7 @@ class ReservationService:
         if lot.current_reservation_id:
             await self.reservation_repo.update(
                 lot.current_reservation_id,
-                closed_at=datetime.now(timezone.utc),
+                closed_at=datetime.now(UTC),
             )
 
         logger.info("Lot confirmed chez_proprietaire", lot_id=lot_id)
@@ -1069,7 +1127,7 @@ class ReservationService:
         return LotResponse.model_validate(updated_lot)
 
     # ------------------------------------------------------------------
-    # Transitions: block / unblock
+    # Block and unblock transitions
     # ------------------------------------------------------------------
 
     async def block_lot(
@@ -1094,7 +1152,9 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
 
-        await self.lot_repo.update(lot_id, status="blocked", blocked_reason=data.reason or "")
+        await self.lot_repo.update(
+            lot_id, status="blocked", blocked_reason=data.reason or ""
+        )
 
         logger.info("Lot blocked", lot_id=lot_id, reason=data.reason)
         updated_lot = await self.lot_repo.get_by_id(lot_id)
@@ -1165,17 +1225,21 @@ class ReservationService:
 
         current_expiration = reservation.expiration_date
         if current_expiration.tzinfo is None:
-            current_expiration = current_expiration.replace(tzinfo=timezone.utc)
+            current_expiration = current_expiration.replace(tzinfo=UTC)
 
         new_expiration = current_expiration + timedelta(days=additional_days)
 
         # Append extension to notes for audit trail
         extension_note = (
-            f"[{datetime.now(timezone.utc).strftime('%d/%m/%Y')}] "
+            f"[{datetime.now(UTC).strftime('%d/%m/%Y')}] "
             f"Prolongation +{additional_days}j → {new_expiration.strftime('%d/%m/%Y')}"
         )
         current_notes = reservation.notes or ""
-        new_notes = f"{current_notes}\n{extension_note}".strip() if current_notes else extension_note
+        new_notes = (
+            f"{current_notes}\n{extension_note}".strip()
+            if current_notes
+            else extension_note
+        )
 
         updated = await self.reservation_repo.update(
             reservation.id,
@@ -1205,7 +1269,7 @@ class ReservationService:
         Converts ReservationCreate to OptionCreate semantics.
         """
         expiration_date = data.expiration_date or (
-            datetime.now(timezone.utc) + timedelta(days=data.reservation_days)
+            datetime.now(UTC) + timedelta(days=data.reservation_days)
         )
         option_data = OptionCreate(
             client_id=data.client_id,

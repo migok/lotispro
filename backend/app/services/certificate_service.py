@@ -98,7 +98,11 @@ class CertificateService:
 
         # Client side
         cin_str = f"CIN N°  {client_cin}" if client_cin else "CIN N°  _______________"
-        address_str = client_address if client_address else "_______________________________________________"
+        address_str = (
+            client_address
+            if client_address
+            else "_______________________________________________"
+        )
         txt_client = (
             f"Monsieur/Madame {client_name}, portant {cin_str},"
             f" demeurant à {address_str}, ci-après désigné réservataire"
@@ -176,7 +180,7 @@ class CertificateService:
         pdf.multi_cell(w, 5.5, txt_balance, align="J", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
-        # Conditions (static)
+        # Static conditions list
         conditions = [
             (
                 "Après achèvement des travaux du lotissement, le réservant avise le "
@@ -200,7 +204,9 @@ class CertificateService:
             ),
         ]
         for cond in conditions:
-            pdf.multi_cell(w, 5.5, f"- {cond}", align="J", new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(
+                w, 5.5, f"- {cond}", align="J", new_x="LMARGIN", new_y="NEXT"
+            )
             pdf.ln(2)
 
         pdf.ln(4)
@@ -208,15 +214,25 @@ class CertificateService:
         # ── Fait à ──────────────────────────────────────────────────────────
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(
-            0, 6, f"Fait à {COMPANY_CITY}, le {_fmt_date(reservation_date)}",
-            new_x="LMARGIN", new_y="NEXT",
+            0,
+            6,
+            f"Fait à {COMPANY_CITY}, le {_fmt_date(reservation_date)}",
+            new_x="LMARGIN",
+            new_y="NEXT",
         )
         pdf.ln(8)
 
         # ── Signature block ──────────────────────────────────────────────────
         col_w = w / 2
         pdf.cell(col_w, 5.5, f"Le réservataire ({client_name})", align="L")
-        pdf.cell(col_w, 5.5, f"réservant ({COMPANY_NAME})", align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(
+            col_w,
+            5.5,
+            f"réservant ({COMPANY_NAME})",
+            align="R",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
         pdf.ln(3)
         pdf.cell(col_w, 5.5, "Lu et accepté", align="L")
         pdf.cell(col_w, 5.5, "Lu et accepté", align="R", new_x="LMARGIN", new_y="NEXT")
@@ -272,7 +288,8 @@ class CertificateService:
         # ── Reference line ──────────────────────────────────────────────────
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(
-            0, 6,
+            0,
+            6,
             f"Recu N° {reservation_id:04d}  |  Fait a {COMPANY_CITY}, le {_fmt_date(receipt_date)}",
             align="R",
             new_x="LMARGIN",
@@ -286,7 +303,11 @@ class CertificateService:
         pdf.ln(3)
 
         cin_str = f"CIN N°  {client_cin}" if client_cin else "CIN N°  _______________"
-        address_str = client_address if client_address else "_______________________________________________"
+        address_str = (
+            client_address
+            if client_address
+            else "_______________________________________________"
+        )
         pdf.set_font("Helvetica", "", 10)
         txt_client = (
             f"Monsieur/Madame {client_name}, portant {cin_str},"
@@ -306,7 +327,8 @@ class CertificateService:
 
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(
-            0, 6,
+            0,
+            6,
             f"Verse le {_fmt_date(deposit_date)} - Dont quittance.",
             new_x="LMARGIN",
             new_y="NEXT",
@@ -332,7 +354,8 @@ class CertificateService:
         if sale_price is not None:
             pdf.set_font("Helvetica", "", 10)
             pdf.cell(
-                0, 6,
+                0,
+                6,
                 f"Prix de vente contractuel : {_fmt_price(sale_price)}",
                 new_x="LMARGIN",
                 new_y="NEXT",
@@ -343,7 +366,8 @@ class CertificateService:
             pdf.ln(3)
             pdf.set_font("Helvetica", "I", 9)
             pdf.multi_cell(
-                w, 5,
+                w,
+                5,
                 (
                     f"Note : Le montant de la promotion de {_fmt_price(promotion_amount)}"
                     " (différence entre le prix catalogue et le prix de vente) n'a pas encore"
@@ -360,7 +384,14 @@ class CertificateService:
         col_w = w / 2
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(col_w, 5.5, f"Le réservataire ({client_name})", align="L")
-        pdf.cell(col_w, 5.5, f"Le réservant ({COMPANY_NAME})", align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(
+            col_w,
+            5.5,
+            f"Le réservant ({COMPANY_NAME})",
+            align="R",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
         pdf.ln(3)
         pdf.cell(col_w, 5.5, "Lu et accepté", align="L")
         pdf.cell(col_w, 5.5, "Lu et accepté", align="R", new_x="LMARGIN", new_y="NEXT")

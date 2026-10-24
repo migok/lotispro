@@ -9,16 +9,17 @@ from logging.config import fileConfig
 _orig_getaddrinfo = socket.getaddrinfo
 
 
-def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):  # noqa: A002
+def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
     return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
 
 
 socket.getaddrinfo = _ipv4_only_getaddrinfo
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from alembic import context
 
 # Import your models and config
 from app.core.config import settings

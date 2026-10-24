@@ -1,6 +1,6 @@
 """Sale repository implementation."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 
@@ -120,7 +120,7 @@ class SaleRepository(BaseRepository[SaleModel]):
         Returns:
             List of period aggregations
         """
-        start_date = datetime.now(timezone.utc) - timedelta(days=months_back * 30)
+        start_date = datetime.now(UTC) - timedelta(days=months_back * 30)
 
         query = select(SaleModel).where(SaleModel.sale_date >= start_date)
 

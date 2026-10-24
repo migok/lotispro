@@ -61,9 +61,7 @@ async def get_current_user(
 
 
 async def get_current_user_optional(
-    credentials: HTTPAuthorizationCredentials | None = Depends(
-        security_scheme
-    ),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security_scheme),
     session: AsyncSession = Depends(get_session),
 ) -> UserResponse | None:
     """Get current user if authenticated, None otherwise.

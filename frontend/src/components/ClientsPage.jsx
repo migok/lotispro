@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/authHooks';
+import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost } from '../utils/api';
 import { formatPrice, formatCompactPrice } from '../utils/formatters';
 import { CLIENT_TYPES, PIPELINE_LABELS } from '../utils/constants';
@@ -94,6 +94,7 @@ export default function ClientsPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadClients is recreated every render; fetch only when the token becomes available
   useEffect(() => { if (token) loadClients(); }, [token]);
 
   const loadClients = async () => {

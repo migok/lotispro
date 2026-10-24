@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/authHooks';
+import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiDelete } from '../utils/api';
-import { formatDate, formatCompactPrice } from '../utils/formatters';
+import { formatDate } from '../utils/formatters';
 import CreateProjectModal from './CreateProjectModal';
 import UploadGeojsonModal from './UploadGeojsonModal';
 import AssignCommercialsModal from './AssignCommercialsModal';

@@ -1,7 +1,9 @@
 """Project service - Project management operations."""
 
-from datetime import datetime, timedelta, timezone
+import contextlib
+from datetime import UTC, datetime
 
+from fastapi import UploadFile
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -78,22 +80,23 @@ class ProjectService:
             result = await self.session.execute(
                 select(
                     LotModel.project_id,
-                    func.coalesce(func.sum(LotModel.price), 0).label("total_price")
-                ).where(
-                    LotModel.project_id.in_(project_ids)
-                ).group_by(LotModel.project_id)
+                    func.coalesce(func.sum(LotModel.price), 0).label("total_price"),
+                )
+                .where(LotModel.project_id.in_(project_ids))
+                .group_by(LotModel.project_id)
             )
             ca_objectifs = {row[0]: float(row[1]) for row in result.all()}
 
             # Get reserved lots count grouped by project
             reserved_result = await self.session.execute(
                 select(
-                    LotModel.project_id,
-                    func.count(LotModel.id).label("reserved_count")
-                ).where(
+                    LotModel.project_id, func.count(LotModel.id).label("reserved_count")
+                )
+                .where(
                     LotModel.project_id.in_(project_ids),
                     LotModel.status == "reserved",
-                ).group_by(LotModel.project_id)
+                )
+                .group_by(LotModel.project_id)
             )
             reserved_lots_map = {row[0]: row[1] for row in reserved_result.all()}
         else:
@@ -319,7 +322,11 @@ class ProjectService:
         if not project:
             raise NotFoundError("Project", project_id)
 
-        ext = filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else "jpg"
+        ext = (
+            filename.rsplit(".", 1)[-1].lower()
+            if filename and "." in filename
+            else "jpg"
+        )
         storage_path = f"projects/{project_id}/cover.{ext}"
 
         storage_client = get_storage_client()
@@ -327,12 +334,16 @@ class ProjectService:
         # Delete previous image if one exists
         if project.image_url:
             try:
-                old_path = project.image_url.split(f"/{settings.SUPABASE_IMAGES_BUCKET}/")[-1]
+                old_path = project.image_url.split(
+                    f"/{settings.SUPABASE_IMAGES_BUCKET}/"
+                )[-1]
                 storage_client.delete_image(old_path)
             except Exception:
                 pass  # Non-blocking — proceed even if old file is missing
 
-        image_url = storage_client.upload_image(storage_path, file_content, content_type)
+        image_url = storage_client.upload_image(
+            storage_path, file_content, content_type
+        )
         return await self._set_project_image_url(project_id, image_url)
 
     async def remove_project_image(self, project_id: int) -> "ProjectResponse":
@@ -356,7 +367,9 @@ class ProjectService:
 
         if project.image_url:
             try:
-                old_path = project.image_url.split(f"/{settings.SUPABASE_IMAGES_BUCKET}/")[-1]
+                old_path = project.image_url.split(
+                    f"/{settings.SUPABASE_IMAGES_BUCKET}/"
+                )[-1]
                 get_storage_client().delete_image(old_path)
             except Exception:
                 pass
@@ -370,7 +383,9 @@ class ProjectService:
     ) -> "ProjectResponse":
         """Persist image_url to DB and return updated ProjectResponse."""
         await self.session.execute(
-            update(ProjectModel).where(ProjectModel.id == project_id).values(image_url=image_url)
+            update(ProjectModel)
+            .where(ProjectModel.id == project_id)
+            .values(image_url=image_url)
         )
         await self.session.flush()
 
@@ -627,9 +642,9 @@ class ProjectService:
         conversion_result = await self.session.execute(
             select(
                 func.count().label("total"),
-                func.count().filter(ReservationModel.status == "converted").label(
-                    "converted"
-                ),
+                func.count()
+                .filter(ReservationModel.status == "converted")
+                .label("converted"),
             ).where(ReservationModel.project_id == project_id)
         )
         conv_row = conversion_result.one()
@@ -711,7 +726,9 @@ class ProjectService:
         # Calculate trends
         tendance_ventes = 0.0
         if ventes_prev > 0:
-            tendance_ventes = round(((ventes_mois - ventes_prev) / ventes_prev) * 100, 2)
+            tendance_ventes = round(
+                ((ventes_mois - ventes_prev) / ventes_prev) * 100, 2
+            )
         elif ventes_mois > 0:
             tendance_ventes = 100.0
 
@@ -768,16 +785,6 @@ class ProjectService:
         from datetime import date
 
         project_id = project.id
-
-        # Get lots associated with this user (via reservations or sales)
-        user_reserved_lots = select(ReservationModel.lot_id).where(
-            ReservationModel.project_id == project_id,
-            ReservationModel.reserved_by_user_id == filter_user_id,
-        )
-        user_sold_lots = select(SaleModel.lot_id).where(
-            SaleModel.project_id == project_id,
-            SaleModel.sold_by_user_id == filter_user_id,
-        )
 
         # Count user's reservations (active)
         reserved_count_result = await self.session.execute(
@@ -845,9 +852,9 @@ class ProjectService:
         conversion_result = await self.session.execute(
             select(
                 func.count().label("total"),
-                func.count().filter(ReservationModel.status == "converted").label(
-                    "converted"
-                ),
+                func.count()
+                .filter(ReservationModel.status == "converted")
+                .label("converted"),
             ).where(
                 ReservationModel.project_id == project_id,
                 ReservationModel.reserved_by_user_id == filter_user_id,
@@ -956,7 +963,9 @@ class ProjectService:
         # Calculate trends
         tendance_ventes = 0.0
         if ventes_prev > 0:
-            tendance_ventes = round(((ventes_mois - ventes_prev) / ventes_prev) * 100, 2)
+            tendance_ventes = round(
+                ((ventes_mois - ventes_prev) / ventes_prev) * 100, 2
+            )
         elif ventes_mois > 0:
             tendance_ventes = 100.0
 
@@ -1335,9 +1344,17 @@ class ProjectService:
                 )
 
                 # Metadata fields
-                type_lot = props.get("type_lot") or props.get("type de lots") or props.get("type_de_lots")
+                type_lot = (
+                    props.get("type_lot")
+                    or props.get("type de lots")
+                    or props.get("type_de_lots")
+                )
                 emplacement = props.get("emplacement") or props.get("Emplacement")
-                type_maison = props.get("type_maison") or props.get("type maison") or props.get("type_maison")
+                type_maison = (
+                    props.get("type_maison")
+                    or props.get("type maison")
+                    or props.get("type_maison")
+                )
 
                 # Convert surface/price to float if needed
                 if surface and not isinstance(surface, (int, float)):
@@ -1396,7 +1413,7 @@ class ProjectService:
                     created += 1
 
             except Exception as e:
-                errors.append(f"Feature {i}: {str(e)}")
+                errors.append(f"Feature {i}: {e!s}")
                 skipped += 1
 
         # Update project lot count
@@ -1423,7 +1440,7 @@ class ProjectService:
         project_id: int,
         user_id: int,
         user_role: str,
-        file: "UploadFile",
+        file: UploadFile,
     ) -> dict:
         """Upload GeoJSON file to Supabase Storage and create/update lots.
 
@@ -1443,7 +1460,6 @@ class ProjectService:
             StorageError: If file upload to Supabase Storage fails
         """
         import json
-        from fastapi import UploadFile
 
         from app.infrastructure.storage.supabase_storage import get_storage_client
 
@@ -1456,12 +1472,11 @@ class ProjectService:
             raise AuthorizationError(message="Only managers can upload GeoJSON")
 
         # Validate file type
-        if not file.filename or not file.filename.endswith(".geojson"):
-            if not file.filename or not file.filename.endswith(".json"):
-                raise BusinessRuleError(
-                    message="Invalid file type: must be a .geojson or .json file",
-                    rule="invalid_file_type",
-                )
+        if not file.filename or not file.filename.endswith((".geojson", ".json")):
+            raise BusinessRuleError(
+                message="Invalid file type: must be a .geojson or .json file",
+                rule="invalid_file_type",
+            )
 
         # Read file content
         content = await file.read()
@@ -1473,7 +1488,7 @@ class ProjectService:
             raise BusinessRuleError(
                 message=f"Invalid JSON format: {e}",
                 rule="invalid_json",
-            )
+            ) from e
 
         # Upload to Supabase Storage
         storage_client = get_storage_client()
@@ -1490,7 +1505,7 @@ class ProjectService:
             raise StorageError(
                 message=f"Failed to upload file to storage: {e}",
                 storage_path=file_path,
-            )
+            ) from e
 
         # Update project with file URL
         await self.project_repo.update(
@@ -1556,18 +1571,16 @@ class ProjectService:
         lots_data = await self.lot_repo.get_project_lots_with_details(project_id)
 
         # Enrich with payment schedule data
-        from datetime import timezone as _tz
         from sqlalchemy import select as _select
         from sqlalchemy.orm import selectinload as _selectinload
+
         from app.infrastructure.database.models import (
             PaymentScheduleModel as _PSM,
         )
 
-        _now = datetime.now(_tz.utc)
+        _now = datetime.now(UTC)
         reservation_ids = [
-            lot["reservation_id"]
-            for lot in lots_data
-            if lot.get("reservation_id")
+            lot["reservation_id"] for lot in lots_data if lot.get("reservation_id")
         ]
         _payment_info: dict[int, dict] = {}
         if reservation_ids:
@@ -1579,30 +1592,38 @@ class ProjectService:
             _sched_res = await self.lot_repo.session.execute(_sched_q)
             for _sched in _sched_res.scalars().all():
                 _dep_paid = sum(
-                    i.amount for i in _sched.installments
+                    i.amount
+                    for i in _sched.installments
                     if i.payment_type == "deposit" and i.status == "paid"
                 )
                 _bal_paid = sum(
-                    i.amount for i in _sched.installments
+                    i.amount
+                    for i in _sched.installments
                     if i.payment_type == "balance" and i.status == "paid"
                 )
                 _dep_pct = (
                     round(_dep_paid / _sched.deposit_total * 100)
-                    if _sched.deposit_total > 0 else 0
+                    if _sched.deposit_total > 0
+                    else 0
                 )
                 _bal_pct = (
                     round(_bal_paid / _sched.balance_total * 100)
-                    if _sched.balance_total > 0 else 0
+                    if _sched.balance_total > 0
+                    else 0
                 )
                 _pending = sorted(
-                    [i for i in _sched.installments if i.payment_type == "deposit" and i.status == "pending"],
+                    [
+                        i
+                        for i in _sched.installments
+                        if i.payment_type == "deposit" and i.status == "pending"
+                    ],
                     key=lambda i: i.due_date,
                 )
                 _first_due_days = None
                 if _pending:
                     _due = _pending[0].due_date
                     if _due.tzinfo is None:
-                        _due = _due.replace(tzinfo=_tz.utc)
+                        _due = _due.replace(tzinfo=UTC)
                     _first_due_days = (_due - _now).days
                 _payment_info[_sched.reservation_id] = {
                     "deposit_paid_pct": _dep_pct,
@@ -1615,10 +1636,8 @@ class ProjectService:
             # Parse geometry from string
             geometry = None
             if lot.get("geometry"):
-                try:
+                with contextlib.suppress(json.JSONDecodeError, TypeError):
                     geometry = json.loads(lot["geometry"])
-                except (json.JSONDecodeError, TypeError):
-                    pass
 
             # Build properties (include aliases for frontend compatibility)
             properties = {
@@ -1796,11 +1815,7 @@ class ProjectService:
                     or row.get("Type maison")
                     or row.get("TYPE_MAISON")
                 )
-                zone_raw = (
-                    row.get("ZONE")
-                    or row.get("zone")
-                    or row.get("Zone")
-                )
+                zone_raw = row.get("ZONE") or row.get("zone") or row.get("Zone")
                 price_per_sqm = _to_float(
                     row.get("prix_m2")
                     or row.get("prix m2")
@@ -1812,9 +1827,7 @@ class ProjectService:
                     or row.get("prix/m2")
                 )
                 surface_raw = _to_float(
-                    row.get("surface")
-                    or row.get("Surface")
-                    or row.get("SURFACE")
+                    row.get("surface") or row.get("Surface") or row.get("SURFACE")
                 )
                 price_raw = _to_float(
                     row.get("prix")
@@ -1824,8 +1837,14 @@ class ProjectService:
                 )
 
                 # Determine effective surface and price
-                surface = surface_raw if surface_raw and surface_raw > 0 else existing_lot.surface
-                price_per_sqm_final = price_per_sqm if price_per_sqm and price_per_sqm > 0 else None
+                surface = (
+                    surface_raw
+                    if surface_raw and surface_raw > 0
+                    else existing_lot.surface
+                )
+                price_per_sqm_final = (
+                    price_per_sqm if price_per_sqm and price_per_sqm > 0 else None
+                )
 
                 # Compute price: prix_m2 × surface takes precedence over explicit prix column
                 if price_per_sqm_final and surface and surface > 0:
@@ -1857,8 +1876,16 @@ class ProjectService:
                     updated += 1
 
                     # Auto-activate: if lot is in 'creation' and now has both price and surface
-                    effective_price = computed_price if computed_price is not None else existing_lot.price
-                    effective_surface = surface_raw if surface_raw and surface_raw > 0 else existing_lot.surface
+                    effective_price = (
+                        computed_price
+                        if computed_price is not None
+                        else existing_lot.price
+                    )
+                    effective_surface = (
+                        surface_raw
+                        if surface_raw and surface_raw > 0
+                        else existing_lot.surface
+                    )
                     if (
                         existing_lot.status == "creation"
                         and effective_price
@@ -1871,7 +1898,7 @@ class ProjectService:
                     skipped += 1
 
             except Exception as e:
-                errors.append(f"Row {i + 1}: {str(e)}")
+                errors.append(f"Row {i + 1}: {e!s}")
                 skipped += 1
 
         logger.info(
@@ -1951,7 +1978,9 @@ class ProjectService:
             Newly created financing plan
         """
         if requester_role not in ("manager", "commercial"):
-            raise AuthorizationError("Only managers and commercials can configure financing plans")
+            raise AuthorizationError(
+                "Only managers and commercials can configure financing plans"
+            )
 
         can_access = await self.project_repo.can_user_access(
             project_id, requester_id, requester_role

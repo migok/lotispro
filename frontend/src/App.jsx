@@ -4,7 +4,8 @@ import "./styles.css";
 import { useTheme } from "./hooks/useTheme";
 
 // Import contexts
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AuthProvider } from "./contexts/AuthContext";
+import { useAuth } from "./contexts/authHooks";
 import { ToastProvider } from "./contexts/ToastContext";
 
 // Import components

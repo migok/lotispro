@@ -27,7 +27,9 @@ class PaymentScheduleCreate(BaseSchema):
     """Schema for creating a payment schedule linked to a reservation."""
 
     reservation_id: int = Field(description="Reservation to attach the schedule to")
-    lot_price: float = Field(gt=0, description="Lot price snapshot at schedule creation")
+    lot_price: float = Field(
+        gt=0, description="Lot price snapshot at schedule creation"
+    )
     deposit_pct: float = Field(
         default=50.0,
         ge=0,

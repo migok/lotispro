@@ -4,7 +4,12 @@ from datetime import datetime
 
 from sqlalchemy import select, update
 
-from app.infrastructure.database.models import AssignmentModel, ReservationModel, SaleModel, UserModel
+from app.infrastructure.database.models import (
+    AssignmentModel,
+    ReservationModel,
+    SaleModel,
+    UserModel,
+)
 from app.infrastructure.database.repositories.base import BaseRepository
 
 
@@ -81,6 +86,7 @@ class UserRepository(BaseRepository[UserModel]):
             .values(sold_by_user_id=None)
         )
         from sqlalchemy import delete as _delete
+
         await self.session.execute(
             _delete(AssignmentModel).where(AssignmentModel.user_id == user_id)
         )

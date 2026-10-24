@@ -6,7 +6,12 @@ Generic lot updates (PUT /lots/{id}) only handle creation/available/blocked.
 
 from fastapi import APIRouter
 
-from app.api.dependencies import CurrentUser, LotServiceDep, ManagerUser, ReservationServiceDep
+from app.api.dependencies import (
+    CurrentUser,
+    LotServiceDep,
+    ManagerUser,
+    ReservationServiceDep,
+)
 from app.domain.schemas.lot import LotResponse
 from app.domain.schemas.reservation import (
     BlockLotData,

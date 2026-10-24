@@ -36,7 +36,9 @@ class UserCreate(BaseSchema):
         description="User password (min 6 characters)",
     )
     name: str = Field(min_length=1, max_length=100, description="User display name")
-    first_name: str | None = Field(default=None, max_length=100, description="First name")
+    first_name: str | None = Field(
+        default=None, max_length=100, description="First name"
+    )
     last_name: str | None = Field(default=None, max_length=100, description="Last name")
     address: str | None = Field(default=None, max_length=255, description="Address")
     company: str | None = Field(default=None, max_length=150, description="Company")

@@ -5,8 +5,14 @@ import io
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 
-from app.api.dependencies import CurrentUser, LotServiceDep, ManagerUser, ProjectServiceDep
+from app.api.dependencies import (
+    CurrentUser,
+    LotServiceDep,
+    ManagerUser,
+    ProjectServiceDep,
+)
 from app.domain.schemas.common import MessageResponse
+from app.domain.schemas.lot import LotBulkMetadataUpdate
 from app.domain.schemas.project import (
     AssignUserRequest,
     ProjectCreate,
@@ -17,7 +23,6 @@ from app.domain.schemas.project import (
     ProjectResponse,
     ProjectUpdate,
 )
-from app.domain.schemas.lot import LotBulkMetadataUpdate
 from app.domain.schemas.user import UserResponse
 
 router = APIRouter()
@@ -416,8 +421,11 @@ async def import_csv_metadata(
             # Strip whitespace from all field names and values
             clean_fieldnames = [f.strip() if f else f for f in reader.fieldnames]
             rows = [
-                {clean_fieldnames[i]: (v.strip() if isinstance(v, str) else v)
-                 for i, (k, v) in enumerate(row.items()) if i < len(clean_fieldnames)}
+                {
+                    clean_fieldnames[i]: (v.strip() if isinstance(v, str) else v)
+                    for i, (k, v) in enumerate(row.items())
+                    if i < len(clean_fieldnames)
+                }
                 for row in rows
             ]
         return rows

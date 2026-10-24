@@ -20,7 +20,11 @@ from app.domain.schemas.lot import (
     LotResponse,
     LotUpdate,
 )
-from app.infrastructure.database.repositories import LotPricingConfigRepository, LotRepository, ProjectRepository
+from app.infrastructure.database.repositories import (
+    LotPricingConfigRepository,
+    LotRepository,
+    ProjectRepository,
+)
 
 logger = get_logger(__name__)
 
@@ -290,15 +294,18 @@ class LotService:
             raise NotFoundError("Lot", lot_id)
 
         # Check numero uniqueness if changed
-        if data.numero and data.numero != lot.numero:
-            if await self.lot_repo.numero_exists(
+        if (
+            data.numero
+            and data.numero != lot.numero
+            and await self.lot_repo.numero_exists(
                 lot.project_id, data.numero, exclude_id=lot_id
-            ):
-                raise AlreadyExistsError(
-                    resource="Lot",
-                    field="numero",
-                    value=data.numero,
-                )
+            )
+        ):
+            raise AlreadyExistsError(
+                resource="Lot",
+                field="numero",
+                value=data.numero,
+            )
 
         # Direct status updates are limited to creation/available/blocked
         # Workflow transitions must use dedicated transition endpoints
@@ -331,9 +338,15 @@ class LotService:
         final_status = data.status if data.status is not None else lot.status
         if final_status in ("creation", "available"):
             final_zone = data.zone if data.zone is not None else lot.zone
-            final_type_lot = data.type_lot if data.type_lot is not None else lot.type_lot
-            final_type_maison = data.type_maison if data.type_maison is not None else lot.type_maison
-            final_emplacement = data.emplacement if data.emplacement is not None else lot.emplacement
+            final_type_lot = (
+                data.type_lot if data.type_lot is not None else lot.type_lot
+            )
+            final_type_maison = (
+                data.type_maison if data.type_maison is not None else lot.type_maison
+            )
+            final_emplacement = (
+                data.emplacement if data.emplacement is not None else lot.emplacement
+            )
             final_surface = data.surface if data.surface is not None else lot.surface
 
             pricing_overrides = await self._get_pricing_overrides(
@@ -349,7 +362,9 @@ class LotService:
             if pricing_overrides:
                 price_per_sqm = pricing_overrides.get("price_per_sqm", price_per_sqm)
                 price = pricing_overrides.get("price", price)
-                price_per_sqm_acte = pricing_overrides.get("price_per_sqm_acte", price_per_sqm_acte)
+                price_per_sqm_acte = pricing_overrides.get(
+                    "price_per_sqm_acte", price_per_sqm_acte
+                )
                 status_override = pricing_overrides.get("status", status_override)
 
         updated = await self.lot_repo.update(

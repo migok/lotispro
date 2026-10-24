@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useToast } from '../contexts/ToastContext';
+import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiPut, apiPatch, apiFetch } from '../utils/api';
 import { formatPrice, formatDate } from '../utils/formatters';
 import { CLIENT_TYPES } from '../utils/constants';
@@ -429,9 +429,11 @@ export default function ClientDetailPage() {
   const [paymentSchedules, setPaymentSchedules] = useState([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadClient is recreated every render; reload only when clientId changes
   useEffect(() => { loadClient(); }, [clientId]);
 
   // Load payment schedules on mount (needed for acte condition in reservations tab)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadPaymentSchedules is recreated every render; reload only when clientId changes
   useEffect(() => { loadPaymentSchedules(); }, [clientId]);
 
   const loadClient = async () => {

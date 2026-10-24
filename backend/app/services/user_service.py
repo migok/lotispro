@@ -1,15 +1,26 @@
 """User service - User management operations."""
 
-from datetime import timedelta, timezone
+from datetime import UTC, timedelta
 from datetime import datetime as dt
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import AlreadyExistsError, BusinessRuleError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    AlreadyExistsError,
+    BusinessRuleError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.logging import get_logger
 from app.core.security import generate_invitation_token, hash_password
-from app.domain.schemas.user import ForgotPasswordRequest, SetPasswordRequest, UserCreate, UserInvite, UserResponse
+from app.domain.schemas.user import (
+    ForgotPasswordRequest,
+    SetPasswordRequest,
+    UserCreate,
+    UserInvite,
+    UserResponse,
+)
 from app.infrastructure.database.repositories import UserRepository
 from app.services.email_service import EmailService
 
@@ -80,11 +91,12 @@ class UserService:
             raise AlreadyExistsError(resource="User", field="email", value=data.email)
 
         token = generate_invitation_token()
-        expires_at = dt.now(timezone.utc) + timedelta(hours=settings.INVITATION_EXPIRE_HOURS)
+        expires_at = dt.now(UTC) + timedelta(hours=settings.INVITATION_EXPIRE_HOURS)
         full_name = f"{data.first_name} {data.last_name}"
 
         # Unusable placeholder — bcrypt hash of a random secret
         import secrets as _s
+
         placeholder_hash = hash_password(_s.token_hex(32))
 
         user = await self.user_repo.create_user(
@@ -125,7 +137,7 @@ class UserService:
         if not user:
             raise NotFoundError("Invitation token", data.token)
 
-        if user.invitation_expires_at and user.invitation_expires_at < dt.now(timezone.utc):
+        if user.invitation_expires_at and user.invitation_expires_at < dt.now(UTC):
             raise ValidationError(
                 message="Invitation token has expired. Ask an administrator to resend the invitation.",
                 field="token",
@@ -150,7 +162,7 @@ class UserService:
             raise NotFoundError("User", data.email)
 
         token = generate_invitation_token()
-        expires_at = dt.now(timezone.utc) + timedelta(hours=1)
+        expires_at = dt.now(UTC) + timedelta(hours=1)
 
         user.invitation_token = token
         user.invitation_expires_at = expires_at
@@ -164,14 +176,18 @@ class UserService:
 
         logger.info("Password reset requested", email=data.email)
 
-    async def create_user(self, user_data: UserCreate, created_by_id: int) -> UserResponse:
+    async def create_user(
+        self, user_data: UserCreate, created_by_id: int
+    ) -> UserResponse:
         """Create a user with a password (legacy — used by seed scripts).
 
         For normal staff creation, prefer invite_user().
         """
         if await self.user_repo.email_exists(user_data.email):
             logger.warning("User creation failed - email exists", email=user_data.email)
-            raise AlreadyExistsError(resource="User", field="email", value=user_data.email)
+            raise AlreadyExistsError(
+                resource="User", field="email", value=user_data.email
+            )
 
         password_hash = hash_password(user_data.password)
         user = await self.user_repo.create_user(
