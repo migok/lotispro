@@ -7,6 +7,7 @@ import LotDetailModal from './LotDetailModal';
 import Dashboard from './Dashboard';
 import LotPricingConfigPanel from './LotPricingConfigPanel';
 import { useAuth } from '../contexts/authHooks';
+import { getCarteMapContainerStyle } from './carteMapContainerStyle';
 
 const STATUS_COLORS = {
   creation:               '#6b7280',
@@ -764,6 +765,17 @@ function CarteTab({
     return () => clearTimeout(timer);
   }, [mapRef, showFilters]);
 
+  // Redimensionner la carte quand la barre de sélection ou le panneau d'édition groupée apparaît/disparaît
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapRef?.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [selectionMode, showBulkEdit, mapRef]);
+
   // Fermer le bulk edit quand on quitte le mode sélection
   useEffect(() => {
     if (!selectionMode) setShowBulkEdit(false);
@@ -1118,15 +1130,10 @@ function CarteTab({
       )}
 
       {/* Map Container */}
-      <div style={{ position: 'relative' }}>
+      <div className="carte-map-wrapper" style={{ position: 'relative' }}>
         <div
           className="section-card carte-map-container"
-          style={{
-            padding: 0,
-            overflow: 'hidden',
-            height: isFullscreen ? 'calc(100vh - 120px)' : 'calc(100vh - 300px)',
-            minHeight: 500
-          }}
+          style={getCarteMapContainerStyle(isFullscreen)}
         >
           <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
         </div>

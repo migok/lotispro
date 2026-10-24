@@ -869,14 +869,27 @@ body {
   padding: var(--spacing-md);
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
-.carte-fullscreen .carte-filters {
+.carte-fullscreen .map-filters-v2 {
   flex-shrink: 0;
 }
 
+/* The map container sits inside .carte-map-wrapper (position: relative, for the lot popup):
+   the wrapper takes the remaining space and the map container fills it. */
+.carte-fullscreen .carte-map-wrapper,
+.carte-tab:fullscreen .carte-map-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .carte-fullscreen .carte-map-container {
-  /* Height is controlled by the inline style (calc(100vh - Xpx)) — do NOT override it */
+  /* Flexible: fills whatever space remains after filters, selection bar and bulk-edit panel */
+  flex: 1;
+  min-height: 0;
 }
 
 /* Styles pour le fullscreen natif du navigateur */
@@ -886,7 +899,8 @@ body {
 }
 
 .carte-tab:fullscreen .carte-map-container {
-  /* Height is controlled by the inline style — do NOT override it */
+  flex: 1;
+  min-height: 0;
 }
 
 /* ============================================
