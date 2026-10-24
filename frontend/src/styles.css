@@ -13233,3 +13233,29 @@ body {
 [data-theme="light"] .opt-table tbody tr:hover td { background: #f4f0e8; }
 [data-theme="light"] .opt-row--expired td { background: rgba(220,38,38,0.04); }
 
+
+/* ── Client form (shared) ── */
+.client-form { display: flex; flex-direction: column; gap: 18px; }
+.client-form-section { display: flex; flex-direction: column; gap: 12px; }
+.client-form-section-title {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+.client-form .field-input.has-error { border-color: var(--color-blocked); }
+.client-form-error { color: var(--color-blocked); font-size: 0.78rem; }
+.client-form-hint { color: var(--text-muted); font-size: 0.78rem; }
+.client-form-inline { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.client-form-inline label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.client-form-warning {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(224, 160, 60, 0.1);
+  border: 1px solid rgba(224, 160, 60, 0.3);
+  font-size: 0.82rem;
+}
+.client-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.client-form--compact .form-2col { grid-template-columns: 1fr; }

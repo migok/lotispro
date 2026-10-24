@@ -5,6 +5,7 @@ import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost } from '../utils/api';
 import { formatPrice, formatCompactPrice } from '../utils/formatters';
 import { CLIENT_TYPES, PIPELINE_LABELS } from '../utils/constants';
+import ClientForm from './clients/ClientForm';
 
 /* ── Icons ─────────────────────────────────────────────── */
 const IconSearch = () => (
@@ -91,8 +92,6 @@ export default function ClientsPage() {
   const [sortBy, setSortBy] = useState('name');
 
   const [showModal, setShowModal] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- loadClients is recreated every render; fetch only when the token becomes available
   useEffect(() => { if (token) loadClients(); }, [token]);
@@ -109,28 +108,16 @@ export default function ClientsPage() {
     }
   };
 
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    if (!form.name.trim()) { toast.warning('Le nom est requis'); return; }
-    setSaving(true);
+  const handleCreate = async (payload) => {
     try {
-      await apiPost('/api/clients', {
-        name: form.name.trim(),
-        phone: form.phone.trim() || null,
-        email: form.email.trim() || null,
-        cin: form.cin.trim() || null,
-        client_type: form.client_type,
-        notes: form.notes.trim() || null,
-      });
-      toast.success('Client créé avec succès');
-      setShowModal(false);
-      setForm({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
-      loadClients();
+      await apiPost('/api/clients', payload);
     } catch (err) {
-      toast.error(err.message || 'Erreur lors de la création');
-    } finally {
-      setSaving(false);
+      if (!err.details?.length) toast.error(err.message || 'Erreur lors de la création');
+      throw err;
     }
+    toast.success('Client créé avec succès');
+    setShowModal(false);
+    loadClients();
   };
 
   /* ── Derived list ── */
@@ -189,10 +176,7 @@ export default function ClientsPage() {
         <div className="cp-header-actions">
           <button
             className="cp-btn-primary"
-            onClick={() => {
-              setShowModal(true);
-              setForm({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
-            }}
+            onClick={() => setShowModal(true)}
           >
             <IconPlus />
             Nouveau client
@@ -477,85 +461,13 @@ export default function ClientsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreate}>
-              <div className="cp-modal-body">
-                <div className="field-group">
-                  <label className="field-label">Nom complet *</label>
-                  <input
-                    className="field-input"
-                    type="text"
-                    placeholder="Jean Dupont"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    autoFocus
-                  />
-                </div>
-                <div className="form-2col">
-                  <div className="field-group">
-                    <label className="field-label">Téléphone</label>
-                    <input
-                      className="field-input"
-                      type="tel"
-                      placeholder="0612345678"
-                      value={form.phone}
-                      onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                    />
-                  </div>
-                  <div className="field-group">
-                    <label className="field-label">CIN</label>
-                    <input
-                      className="field-input"
-                      type="text"
-                      placeholder="AB123456"
-                      value={form.cin}
-                      onChange={e => setForm(f => ({ ...f, cin: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Email</label>
-                  <input
-                    className="field-input"
-                    type="email"
-                    placeholder="jean@exemple.com"
-                    value={form.email}
-                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Type de client</label>
-                  <select
-                    className="field-input"
-                    value={form.client_type}
-                    onChange={e => setForm(f => ({ ...f, client_type: e.target.value }))}
-                  >
-                    {CLIENT_TYPES.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Notes</label>
-                  <textarea
-                    className="field-input"
-                    placeholder="Informations complémentaires…"
-                    rows={3}
-                    value={form.notes}
-                    onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                    style={{ resize: 'vertical', minHeight: 72 }}
-                  />
-                </div>
-              </div>
-
-              <div className="cp-modal-footer">
-                <button type="button" className="cp-btn-ghost" onClick={() => setShowModal(false)}>
-                  Annuler
-                </button>
-                <button type="submit" className="cp-btn-primary" disabled={saving}>
-                  {saving ? 'Création…' : 'Créer le client'}
-                </button>
-              </div>
-            </form>
+            <div className="cp-modal-body">
+              <ClientForm
+                onSubmit={handleCreate}
+                onCancel={() => setShowModal(false)}
+                submitLabel="Créer le client"
+              />
+            </div>
           </div>
         </div>
       )}

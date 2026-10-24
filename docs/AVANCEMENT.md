@@ -37,7 +37,7 @@ _Dernière mise à jour : 2026-10-24_
 | E1-T2 | Recette multi-navigateurs | ✅ | [#17](https://github.com/migok/lotispro/issues/17) | | 2026-10-24 |
 | E2-T1 | Migration 0017 + modèle client | ✅ | [#19](https://github.com/migok/lotispro/issues/19) | | 2026-10-24 |
 | E2-T2 | Validation + doublons | ✅ | [#20](https://github.com/migok/lotispro/issues/20) | | 2026-10-24 |
-| E2-T3 | Formulaire client | ⬜ | [#21](https://github.com/migok/lotispro/issues/21) | | |
+| E2-T3 | Formulaire client | ✅ | [#21](https://github.com/migok/lotispro/issues/21) | | 2026-10-24 |
 | E2-T4 | Fiche / listes / PDF | ⬜ | [#22](https://github.com/migok/lotispro/issues/22) | | |
 | E3-T1 | `lot_workflow` + `lot_status_history` | ⬜ | [#24](https://github.com/migok/lotispro/issues/24) | | |
 | E3-T2 | Statuts optionnels par projet | ⬜ | [#25](https://github.com/migok/lotispro/issues/25) | | |

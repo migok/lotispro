@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiPut, apiPatch, apiFetch } from '../utils/api';
 import { formatPrice, formatDate } from '../utils/formatters';
-import { CLIENT_TYPES } from '../utils/constants';
+import ClientForm from './clients/ClientForm';
 
 /* ── Label maps ─────────────────────────────────────────────── */
 const CLIENT_TYPE_LABELS = {
@@ -421,8 +421,6 @@ export default function ClientDetailPage() {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('info');
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({});
-  const [saving, setSaving] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
   // Payment data
@@ -442,15 +440,6 @@ export default function ClientDetailPage() {
     try {
       const data = await apiGet(`/api/clients/${clientId}/details`);
       setClient(data);
-      setEditForm({
-        name:        data.name        || '',
-        phone:       data.phone       || '',
-        email:       data.email       || '',
-        cin:         data.cin         || '',
-        address:     data.address     || '',
-        client_type: data.client_type || 'autre',
-        notes:       data.notes       || '',
-      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -559,18 +548,16 @@ export default function ClientDetailPage() {
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  const handleSave = async (payload) => {
     try {
-      await apiPut(`/api/clients/${clientId}`, editForm);
-      await loadClient();
-      setIsEditing(false);
-      toast.success('Client mis à jour avec succès');
-    } catch {
-      toast.error('Erreur lors de la mise à jour du client');
-    } finally {
-      setSaving(false);
+      await apiPut(`/api/clients/${clientId}`, payload);
+    } catch (err) {
+      if (!err.details?.length) toast.error(err.message || 'Erreur lors de la mise à jour du client');
+      throw err;
     }
+    await loadClient();
+    setIsEditing(false);
+    toast.success('Client mis à jour');
   };
 
   /* ── Guards ─────────────────────────────────────────────── */
@@ -841,54 +828,12 @@ export default function ClientDetailPage() {
         {activeTab === 'info' && (
           isEditing ? (
             <div className="card">
-              <div className="form-2col">
-                <div className="field-group">
-                  <label className="field-label">Nom complet *</label>
-                  <input className="field-input" type="text" value={editForm.name}
-                    onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Téléphone</label>
-                  <input className="field-input" type="tel" value={editForm.phone}
-                    onChange={e => setEditForm({ ...editForm, phone: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Email</label>
-                  <input className="field-input" type="email" value={editForm.email}
-                    onChange={e => setEditForm({ ...editForm, email: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">CIN</label>
-                  <input className="field-input" type="text" value={editForm.cin}
-                    onChange={e => setEditForm({ ...editForm, cin: e.target.value })} />
-                </div>
-                <div className="field-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="field-label">Adresse</label>
-                  <input className="field-input" type="text" placeholder="Rue, ville, pays"
-                    value={editForm.address || ''}
-                    onChange={e => setEditForm({ ...editForm, address: e.target.value })} />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">Type de client</label>
-                  <select className="field-input" value={editForm.client_type}
-                    onChange={e => setEditForm({ ...editForm, client_type: e.target.value })}>
-                    {CLIENT_TYPES.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field-group" style={{ gridColumn: 'span 2' }}>
-                  <label className="field-label">Notes</label>
-                  <textarea className="field-input" rows={3} value={editForm.notes}
-                    onChange={e => setEditForm({ ...editForm, notes: e.target.value })} />
-                </div>
-              </div>
-              <div className="flex gap-sm" style={{ marginTop: 'var(--spacing-lg)' }}>
-                <button className="btn btn-ghost" onClick={() => setIsEditing(false)}>Annuler</button>
-                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                  {saving ? 'Enregistrement…' : 'Enregistrer'}
-                </button>
-              </div>
+              <ClientForm
+                initialValues={client}
+                excludeId={client.id}
+                onSubmit={handleSave}
+                onCancel={() => setIsEditing(false)}
+              />
             </div>
           ) : (
             <div className="cd-info-grid">
