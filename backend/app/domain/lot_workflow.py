@@ -59,6 +59,18 @@ MANDATORY_STATUSES: tuple[str, ...] = tuple(
 
 DEFAULT_ENABLED_OPTIONAL: tuple[str, ...] = ("option", "reservation_a_finaliser")
 
+# Statuses controlled by each optional key, and the label used in messages.
+OPTIONAL_KEY_STATUSES: dict[str, tuple[str, ...]] = {
+    "option": ("option",),
+    "reservation_a_finaliser": ("reservation_a_finaliser",),
+    "edl": EDL_STATUSES,
+}
+OPTIONAL_KEY_LABELS: dict[str, str] = {
+    "option": STATUS_LABELS["option"],
+    "reservation_a_finaliser": STATUS_LABELS["reservation_a_finaliser"],
+    "edl": "État des lieux",
+}
+
 
 @dataclass(frozen=True)
 class Transition:

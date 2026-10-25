@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -111,6 +112,13 @@ class ProjectModel(Base):
     delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     geojson_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Optional lot statuses the project uses ("option", "reservation_a_finaliser", "edl")
+    enabled_optional_statuses: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=lambda: ["option", "reservation_a_finaliser"],
+        server_default=text('\'["option","reservation_a_finaliser"]\''),
+    )
     created_by: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id"),

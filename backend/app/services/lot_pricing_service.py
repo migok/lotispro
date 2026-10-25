@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.logging import get_logger
-from app.domain.lot_workflow import DEFAULT_ENABLED_OPTIONAL, assert_transition_allowed
+from app.domain.lot_workflow import assert_transition_allowed
 from app.domain.schemas.lot_pricing import (
     LotPricingCombination,
     LotPricingConfigBulkUpsert,
@@ -75,10 +75,16 @@ class LotPricingService:
         if not result.scalar_one_or_none():
             raise AuthorizationError("Access denied to this project")
 
-    async def _activate(self, lot_id: int, from_status: str, user_id: int) -> None:
+    async def _activate(
+        self,
+        lot_id: int,
+        from_status: str,
+        user_id: int,
+        enabled_optional: list[str],
+    ) -> None:
         """Auto-activate a lot (creation → available) through ``change_status``."""
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "activate", from_status
+            enabled_optional, "activate", from_status
         )
         await self.lot_repo.change_status(
             lot_id, new_status, transition="activate", user_id=user_id
@@ -141,6 +147,7 @@ class LotPricingService:
 
         await self._check_project_access(project_id, requester_id, requester_role)
 
+        enabled_optional = await self.project_repo.get_enabled_optional(project_id)
         for item in data.configs:
             await self.pricing_repo.upsert(
                 project_id=project_id,
@@ -162,6 +169,7 @@ class LotPricingService:
                 prix_m2_acte=item.prix_m2_acte,
                 prix_m2_catalogue=item.prix_m2_catalogue,
                 user_id=requester_id,
+                enabled_optional=enabled_optional,
             )
 
         await self.session.flush()
@@ -184,6 +192,7 @@ class LotPricingService:
         prix_m2_acte: float,
         prix_m2_catalogue: float,
         user_id: int,
+        enabled_optional: list[str],
     ) -> None:
         """Update prices on lots in creation/available status, then auto-activate creation lots."""
         lots_result = await self.session.execute(
@@ -213,7 +222,7 @@ class LotPricingService:
             )
             # Auto-activate: lot en création avec surface → disponible
             if lot.status == "creation" and lot.surface and new_price:
-                await self._activate(lot.id, lot.status, user_id)
+                await self._activate(lot.id, lot.status, user_id, enabled_optional)
                 logger.info(
                     "Lot auto-activated via pricing config",
                     lot_id=lot.id,
@@ -234,6 +243,7 @@ class LotPricingService:
         await self._check_project_access(project_id, requester_id, requester_role)
 
         configs = await self.pricing_repo.list_by_project(project_id)
+        enabled_optional = await self.project_repo.get_enabled_optional(project_id)
         total_updated = 0
         total_activated = 0
 
@@ -266,7 +276,9 @@ class LotPricingService:
                     update(LotModel).where(LotModel.id == lot.id).values(**new_values)
                 )
                 if lot.status == "creation" and lot.surface and new_price:
-                    await self._activate(lot.id, lot.status, requester_id)
+                    await self._activate(
+                        lot.id, lot.status, requester_id, enabled_optional
+                    )
                     total_activated += 1
                     logger.info(
                         "Lot auto-activated via apply-configs",

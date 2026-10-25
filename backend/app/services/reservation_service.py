@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
-from app.domain.lot_workflow import DEFAULT_ENABLED_OPTIONAL, assert_transition_allowed
+from app.domain.lot_workflow import assert_transition_allowed
 from app.domain.schemas.lot import LotResponse
 from app.domain.schemas.payment import InstallmentConfig
 from app.domain.schemas.reservation import (
@@ -28,7 +28,7 @@ from app.domain.schemas.reservation import (
     UnblockLotData,
 )
 from app.domain.schemas.sale import SaleFromReservation, SaleResponse
-from app.infrastructure.database.models import ReservationModel
+from app.infrastructure.database.models import LotModel, ReservationModel
 from app.infrastructure.database.repositories import (
     ClientRepository,
     LotPricingConfigRepository,
@@ -90,6 +90,10 @@ class ReservationService:
         self.payment_repo = PaymentRepository(session)
         self.notaire_repo = NotaireRepository(session)
         self.pricing_repo = LotPricingConfigRepository(session)
+
+    async def _enabled_optional(self, lot: LotModel) -> list[str]:
+        """Optional statuses enabled for the lot's project."""
+        return await self.project_repo.get_enabled_optional(lot.project_id)
 
     # ------------------------------------------------------------------
     # Read operations
@@ -173,7 +177,7 @@ class ReservationService:
                 rule="lot_not_available",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "start_option", lot.status
+            await self._enabled_optional(lot), "start_option", lot.status
         )
 
         client = await self.client_repo.get_by_id(data.client_id)
@@ -234,7 +238,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "cancel_option", lot.status
+            await self._enabled_optional(lot), "cancel_option", lot.status
         )
 
         if lot.current_reservation_id:
@@ -297,7 +301,7 @@ class ReservationService:
                 rule="lot_not_available",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "direct_reservation", lot.status
+            await self._enabled_optional(lot), "direct_reservation", lot.status
         )
 
         client = await self.client_repo.get_by_id(data.client_id)
@@ -468,7 +472,7 @@ class ReservationService:
                 rule="lot_not_available",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "direct_engage", lot.status
+            await self._enabled_optional(lot), "direct_engage", lot.status
         )
 
         client = await self.client_repo.get_by_id(data.client_id)
@@ -572,7 +576,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "to_reservation", lot.status
+            await self._enabled_optional(lot), "to_reservation", lot.status
         )
 
         if not lot.current_reservation_id:
@@ -637,7 +641,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "refund", lot.status
+            await self._enabled_optional(lot), "refund", lot.status
         )
 
         if lot.current_reservation_id:
@@ -707,7 +711,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "engage", lot.status
+            await self._enabled_optional(lot), "engage", lot.status
         )
 
         current_reservation = None
@@ -883,7 +887,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "set_notaire_intent", lot.status
+            await self._enabled_optional(lot), "set_notaire_intent", lot.status
         )
 
         if not lot.current_reservation_id:
@@ -945,7 +949,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "solde", lot.status
+            await self._enabled_optional(lot), "solde", lot.status
         )
 
         if not lot.current_reservation_id:
@@ -1070,7 +1074,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "notaire", lot.status
+            await self._enabled_optional(lot), "notaire", lot.status
         )
 
         # Guard : le client doit avoir exprimé son souhait de passer chez le notaire
@@ -1132,7 +1136,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "notaire_update", lot.status
+            await self._enabled_optional(lot), "notaire_update", lot.status
         )
 
         notaire = await self.notaire_repo.get_by_id(data.notaire_id)
@@ -1176,7 +1180,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "proprietaire", lot.status
+            await self._enabled_optional(lot), "proprietaire", lot.status
         )
 
         await self.lot_repo.change_status(
@@ -1219,7 +1223,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "block", lot.status
+            await self._enabled_optional(lot), "block", lot.status
         )
 
         await self.lot_repo.change_status(
@@ -1256,7 +1260,7 @@ class ReservationService:
                 rule="invalid_lot_status",
             )
         new_status = assert_transition_allowed(
-            DEFAULT_ENABLED_OPTIONAL, "unblock", lot.status
+            await self._enabled_optional(lot), "unblock", lot.status
         )
 
         await self.lot_repo.change_status(

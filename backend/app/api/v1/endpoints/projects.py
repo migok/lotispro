@@ -22,6 +22,7 @@ from app.domain.schemas.project import (
     ProjectPerformance,
     ProjectResponse,
     ProjectUpdate,
+    ProjectWorkflowUpdate,
 )
 from app.domain.schemas.user import UserResponse
 
@@ -94,6 +95,22 @@ async def update_project(
 ) -> ProjectResponse:
     """Update a project. Manager only."""
     return await project_service.update_project(project_id, data)
+
+
+@router.put(
+    "/{project_id}/workflow",
+    response_model=ProjectResponse,
+    summary="Update project workflow",
+    description="Choose the optional lot statuses of the project (manager only)",
+)
+async def update_project_workflow(
+    project_id: int,
+    data: ProjectWorkflowUpdate,
+    current_user: ManagerUser,
+    project_service: ProjectServiceDep,
+) -> ProjectResponse:
+    """Enable or disable optional lot statuses. Manager only."""
+    return await project_service.update_workflow(project_id, data)
 
 
 @router.delete(

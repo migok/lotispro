@@ -2,6 +2,7 @@
 
 from sqlalchemy import and_, func, or_, select
 
+from app.domain.lot_workflow import DEFAULT_ENABLED_OPTIONAL
 from app.infrastructure.database.models import (
     AssignmentModel,
     LotModel,
@@ -63,6 +64,16 @@ class ProjectRepository(BaseRepository[ProjectModel]):
         project.total_lots = row[2]
 
         return project
+
+    async def get_enabled_optional(self, project_id: int) -> list[str]:
+        """Optional lot statuses enabled for a project (default if not found)."""
+        result = await self.session.execute(
+            select(ProjectModel.enabled_optional_statuses).where(
+                ProjectModel.id == project_id
+            )
+        )
+        value = result.scalar_one_or_none()
+        return list(value) if value is not None else list(DEFAULT_ENABLED_OPTIONAL)
 
     async def get_all_for_user(
         self,

@@ -14,7 +14,12 @@ from app.core.exceptions import (
     StorageError,
 )
 from app.core.logging import get_logger
-from app.domain.lot_workflow import DEFAULT_ENABLED_OPTIONAL, assert_transition_allowed
+from app.domain.lot_workflow import (
+    OPTIONAL_KEY_LABELS,
+    OPTIONAL_KEY_STATUSES,
+    assert_transition_allowed,
+    enabled_statuses,
+)
 from app.domain.schemas.project import (
     ProjectCreate,
     ProjectFinancingPlanCreate,
@@ -23,6 +28,7 @@ from app.domain.schemas.project import (
     ProjectPerformance,
     ProjectResponse,
     ProjectUpdate,
+    ProjectWorkflowUpdate,
 )
 from app.domain.schemas.user import UserResponse
 from app.infrastructure.database.models import (
@@ -115,6 +121,8 @@ class ProjectService:
                 ca_objectif=ca_objectifs.get(p.id, 0.0),
                 geojson_file_url=p.geojson_file_url,
                 image_url=p.image_url,
+                enabled_optional_statuses=p.enabled_optional_statuses,
+                enabled_statuses=enabled_statuses(p.enabled_optional_statuses),
                 created_by=p.created_by,
                 created_at=p.created_at,
                 updated_at=p.updated_at,
@@ -184,6 +192,8 @@ class ProjectService:
             ca_objectif=ca_objectif,
             geojson_file_url=project.geojson_file_url,
             image_url=project.image_url,
+            enabled_optional_statuses=project.enabled_optional_statuses,
+            enabled_statuses=enabled_statuses(project.enabled_optional_statuses),
             created_by=project.created_by,
             created_at=project.created_at,
             updated_at=project.updated_at,
@@ -229,6 +239,8 @@ class ProjectService:
             ca_objectif=0.0,
             geojson_file_url=project.geojson_file_url,
             image_url=project.image_url,
+            enabled_optional_statuses=project.enabled_optional_statuses,
+            enabled_statuses=enabled_statuses(project.enabled_optional_statuses),
             created_by=project.created_by,
             created_at=project.created_at,
             updated_at=project.updated_at,
@@ -283,10 +295,63 @@ class ProjectService:
             ca_objectif=ca_objectif,
             geojson_file_url=updated.geojson_file_url,
             image_url=updated.image_url,
+            enabled_optional_statuses=updated.enabled_optional_statuses,
+            enabled_statuses=enabled_statuses(updated.enabled_optional_statuses),
             created_by=updated.created_by,
             created_at=updated.created_at,
             updated_at=updated.updated_at,
         )
+
+    async def update_workflow(
+        self,
+        project_id: int,
+        data: ProjectWorkflowUpdate,
+    ) -> ProjectResponse:
+        """Choose the optional lot statuses a project uses.
+
+        Raises:
+            NotFoundError: If project not found
+            BusinessRuleError: If a status being disabled is still carried by
+                at least one lot of the project (``status_in_use``)
+        """
+        project = await self.project_repo.get_by_id(project_id)
+        if not project:
+            raise NotFoundError("Project", project_id)
+
+        new_enabled = list(data.enabled_optional_statuses)
+        for key in set(project.enabled_optional_statuses) - set(new_enabled):
+            numeros = await self._lot_numeros_in_statuses(
+                project_id, OPTIONAL_KEY_STATUSES[key]
+            )
+            if numeros:
+                raise BusinessRuleError(
+                    message=(
+                        f"Impossible de désactiver « {OPTIONAL_KEY_LABELS[key]} » : "
+                        f"lots concernés : {', '.join(numeros)}."
+                    ),
+                    rule="status_in_use",
+                )
+
+        await self.project_repo.update(
+            project_id, enabled_optional_statuses=new_enabled
+        )
+        logger.info(
+            "Project workflow updated",
+            project_id=project_id,
+            enabled_optional_statuses=new_enabled,
+        )
+        return await self._response_for(project_id)
+
+    async def _lot_numeros_in_statuses(
+        self, project_id: int, statuses: tuple[str, ...]
+    ) -> list[str]:
+        """Sorted numbers of the project's lots currently in ``statuses``."""
+        result = await self.session.execute(
+            select(LotModel.numero)
+            .where(LotModel.project_id == project_id, LotModel.status.in_(statuses))
+            .order_by(LotModel.numero)
+        )
+        return [row[0] for row in result.all()]
 
     async def upload_project_image(
         self,
@@ -390,6 +455,10 @@ class ProjectService:
         )
         await self.session.flush()
 
+        return await self._response_for(project_id)
+
+    async def _response_for(self, project_id: int) -> ProjectResponse:
+        """Build the ProjectResponse of an existing project (no access check)."""
         updated = await self.project_repo.get_by_id(project_id)
 
         ca_objectif_result = await self.session.execute(
@@ -409,6 +478,8 @@ class ProjectService:
             ca_objectif=ca_objectif,
             geojson_file_url=updated.geojson_file_url,
             image_url=updated.image_url,
+            enabled_optional_statuses=updated.enabled_optional_statuses,
+            enabled_statuses=enabled_statuses(updated.enabled_optional_statuses),
             created_by=updated.created_by,
             created_at=updated.created_at,
             updated_at=updated.updated_at,
@@ -1742,6 +1813,8 @@ class ProjectService:
         if user_role != "manager":
             raise AuthorizationError(message="Only managers can import CSV metadata")
 
+        enabled_optional = project.enabled_optional_statuses
+
         if not csv_rows:
             raise BusinessRuleError(
                 message="CSV file is empty",
@@ -1894,7 +1967,7 @@ class ProjectService:
                         and effective_surface > 0
                     ):
                         new_status = assert_transition_allowed(
-                            DEFAULT_ENABLED_OPTIONAL, "activate", existing_lot.status
+                            enabled_optional, "activate", existing_lot.status
                         )
                         await self.lot_repo.change_status(
                             existing_lot.id,
