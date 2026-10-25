@@ -111,6 +111,12 @@ Autre dette relevée en fin d'E0 (revue finale, 2026-10-24) :
 - **E2, migration 0017 : downgrade destructif** : `downgrade()` supprime les colonnes ajoutées au profil client ; après usage réel, un retour arrière entraîne une perte de données.
 - **E2, ordre de déploiement** : déployer Railway (backend) puis Vercel (frontend) immédiatement après, car l'ancienne interface envoie `POST {name}`, qui reçoit un 422 sur le nouveau backend.
 
+Dette relevée en fin d'E2 (revue finale, 2026-10-25) :
+- **PDF d'acte / reçu en erreur 500** si une adresse, une ville, un pays ou un nom contient un caractère hors latin-1 (apostrophe typographique ’ insérée par les claviers de téléphone, écriture arabe). Préexistant, plus probable avec les nouveaux champs. Correctif : police Unicode (DejaVuSans via `pdf.add_font`) dans `certificate_service.py`, ou au minimum remplacer ’‘“” avant impression. **À traiter tôt (E4 génère l'acte automatiquement).**
+- Badge « Actes » de la fiche client choisi par comparaison de chaînes (`ClientDetailPage.jsx`) : comparer la clé (`morocco`/`abroad`) serait plus robuste.
+- Adresses héritées contenant déjà la ville : la ville apparaîtra deux fois après saisie de la ville (pas de migration de découpage, décision utilisateur).
+- `pydantic_validation_handler` renvoie encore « Data validation failed » (anglais).
+
 ## Anomalies constatées
 
 _Comportements suspects relevés pendant les tests de caractérisation, en attente de décision._

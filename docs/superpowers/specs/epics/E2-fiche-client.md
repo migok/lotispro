@@ -30,8 +30,8 @@
 `client_type` existant conservé. Migration `0017` avec `downgrade` (ré-assemble `name` et `address`).
 
 ## Règles de validation
-- **Au moins une adresse** (Maroc ou étranger) est obligatoire ; chaque adresse remplie exige sa **ville** (décision utilisateur, recette du 2026-10-25).
-- Une notice indique que l'adresse d'acte (adresse + ville) figurera sur l'acte de réservation et l'acte final.
+- **Au moins une adresse** (Maroc ou étranger) est obligatoire ; chaque adresse remplie exige sa **ville** (et l'adresse à l'étranger son **pays**) (décision utilisateur, recette du 2026-10-25).
+- Une notice indique que l'adresse d'acte (adresse + ville [+ pays]) figurera sur l'acte de réservation et l'acte final.
 - CIN marocain : `^[A-Z]{1,2}\d{1,6}$` après passage en majuscules et suppression des espaces (*choix de Claude*).
 - Téléphone : format E.164 après normalisation (`+212…`) ; un numéro local `0XXXXXXXXX` est converti en `+212XXXXXXXXX`.
 - Email : `EmailStr`.
