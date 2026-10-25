@@ -89,8 +89,10 @@ async def make_client(
     **overrides: Any,
 ) -> ClientModel:
     n = next(_sequence)
+    name = overrides.get("name", f"Test Client {n}")
     fields: dict[str, Any] = {
-        "name": f"Test Client {n}",
+        "name": name,
+        "last_name": name,
         "phone": "+212600000000",
         "email": f"client{n}@example.com",
         "client_type": "investisseur",

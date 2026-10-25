@@ -3,7 +3,9 @@ import { apiGet, apiPost, apiPatch, apiPut, apiFetch, apiUploadFile } from '../u
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
 import { formatPrice, formatDate } from '../utils/formatters';
-import { CLIENT_TYPES, STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
+import { STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
+import ClientForm from './clients/ClientForm';
+import { shouldToastClientError } from '../utils/clientProfile';
 
 /* ── Default payment plan ─────────────────────────────────── */
 const DEFAULT_PAYMENT_PLAN = {
@@ -493,7 +495,7 @@ function AddNotairePanel({ newNotaire, onChange, onSave, onCancel, saving }) {
   );
 }
 
-function AddClientPanel({ newClient, onChange, onSave, onCancel, saving }) {
+function AddClientPanel({ onSubmit, onCancel }) {
   return (
     <div className="add-client-panel">
       <div className="add-client-panel-header">
@@ -502,40 +504,7 @@ function AddClientPanel({ newClient, onChange, onSave, onCancel, saving }) {
           <IcClose />
         </button>
       </div>
-      <div className="add-client-grid">
-        {[
-          { label: 'Nom complet *', key: 'name', type: 'text', placeholder: 'Jean Dupont' },
-          { label: 'Téléphone', key: 'phone', type: 'tel', placeholder: '0612 345 678' },
-          { label: 'Email', key: 'email', type: 'email', placeholder: 'email@example.com' },
-          { label: 'CIN', key: 'cin', type: 'text', placeholder: 'AB123456' },
-        ].map(f => (
-          <div key={f.key} className="add-client-field">
-            <label className="form-field-label">{f.label}</label>
-            <input type={f.type} className="form-field-input" placeholder={f.placeholder}
-              value={newClient[f.key]}
-              onChange={e => onChange({ ...newClient, [f.key]: e.target.value })} />
-          </div>
-        ))}
-        <div className="add-client-field add-client-field--full">
-          <label className="form-field-label">Adresse</label>
-          <input type="text" className="form-field-input" placeholder="Rue, ville, pays"
-            value={newClient.address}
-            onChange={e => onChange({ ...newClient, address: e.target.value })} />
-        </div>
-        <div className="add-client-field add-client-field--full">
-          <label className="form-field-label">Type de client</label>
-          <select className="form-field-input" value={newClient.client_type}
-            onChange={e => onChange({ ...newClient, client_type: e.target.value })}>
-            {CLIENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-          </select>
-        </div>
-      </div>
-      <div className="add-client-actions">
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>Annuler</button>
-        <button type="button" className="btn btn-primary btn-sm" onClick={onSave} disabled={saving}>
-          {saving ? 'Création...' : 'Créer et sélectionner'}
-        </button>
-      </div>
+      <ClientForm compact onSubmit={onSubmit} onCancel={onCancel} submitLabel="Créer et sélectionner" />
     </div>
   );
 }
@@ -556,8 +525,6 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   const [projectFinancingPlan, setProjectFinancingPlan] = useState(null);
   const [lotPricingConfig, setLotPricingConfig] = useState(null); // prix_m2_acte from project pricing grid
   const [showAddClient, setShowAddClient] = useState(false);
-  const [savingClient, setSavingClient] = useState(false);
-  const [newClient, setNewClient] = useState({ name: '', phone: '', email: '', cin: '', address: '', client_type: 'autre', notes: '' });
   const [releaseData, setReleaseData] = useState({ deposit_refund_amount: '', deposit_refund_date: new Date().toISOString().split('T')[0], release_reason: '' });
   const [paymentSchedule, setPaymentSchedule] = useState(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
@@ -803,32 +770,22 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     } finally { setConfirmingPayment(false); }
   };
 
-  const handleCreateClient = async () => {
-    if (!newClient.name.trim()) { toast.warning('Le nom est requis'); return; }
-    setSavingClient(true);
+  const handleCreateClient = async (payload) => {
+    let createdClient;
     try {
-      const createdClient = await apiPost('/api/clients', {
-        name: newClient.name.trim(),
-        phone: newClient.phone.trim() || null,
-        email: newClient.email.trim() || null,
-        cin: newClient.cin.trim() || null,
-        address: newClient.address.trim() || null,
-        client_type: newClient.client_type,
-        notes: newClient.notes.trim() || null,
-      });
-      await loadClients();
-      setSelectedClient(createdClient);
-      setNewClient({ name: '', phone: '', email: '', cin: '', address: '', client_type: 'autre', notes: '' });
-      setShowAddClient(false);
-      toast.success('Client créé avec succès');
+      createdClient = await apiPost('/api/clients', payload);
     } catch (error) {
-      toast.error(error.message || 'Erreur lors de la création du client');
-    } finally { setSavingClient(false); }
+      if (shouldToastClientError(error)) toast.error(error.message || 'Erreur lors de la création du client');
+      throw error;
+    }
+    await loadClients();
+    setSelectedClient(createdClient);
+    setShowAddClient(false);
+    toast.success('Client créé avec succès');
   };
 
   const resetFormState = () => {
     setShowAddClient(false);
-    setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' });
     setSelectedClient(null);
     setDepositAmount('');
     setReservationDays(7);
@@ -1934,10 +1891,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                     </button>
                   </div>
                   {showAddClient && (
-                    <AddClientPanel newClient={newClient} onChange={setNewClient}
-                      onSave={handleCreateClient}
-                      onCancel={() => { setShowAddClient(false); setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' }); }}
-                      saving={savingClient} />
+                    <AddClientPanel onSubmit={handleCreateClient} onCancel={() => setShowAddClient(false)} />
                   )}
                 </div>
                 {/* Duration */}
@@ -1982,10 +1936,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                     </button>
                   </div>
                   {showAddClient && (
-                    <AddClientPanel newClient={newClient} onChange={setNewClient}
-                      onSave={handleCreateClient}
-                      onCancel={() => { setShowAddClient(false); setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' }); }}
-                      saving={savingClient} />
+                    <AddClientPanel onSubmit={handleCreateClient} onCancel={() => setShowAddClient(false)} />
                   )}
                 </div>
                 <div className="msr-field-group">
@@ -2037,10 +1988,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                       </button>
                     </div>
                     {showAddClient && (
-                      <AddClientPanel newClient={newClient} onChange={setNewClient}
-                        onSave={handleCreateClient}
-                        onCancel={() => { setShowAddClient(false); setNewClient({ name: '', phone: '', email: '', cin: '', client_type: 'autre', notes: '' }); }}
-                        saving={savingClient} />
+                      <AddClientPanel onSubmit={handleCreateClient} onCancel={() => setShowAddClient(false)} />
                     )}
                   </div>
 

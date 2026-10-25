@@ -997,7 +997,11 @@ class DashboardService:
                 {
                     "id": client.id,
                     "name": client.name,
+                    "first_name": client.first_name,
+                    "last_name": client.last_name,
+                    "maiden_name": client.maiden_name,
                     "phone": client.phone,
+                    "whatsapp": client.whatsapp,
                     "email": client.email,
                     "cin": client.cin,
                     "client_type": client.client_type,

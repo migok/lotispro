@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import and_, select
 
+from app.domain.client_profile import acte_address_of
 from app.domain.schemas.reservation import ReservationFilter
 from app.infrastructure.database.models import (
     ClientModel,
@@ -138,7 +139,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             "client_phone": client.phone,
             "client_email": client.email,
             "client_cin": client.cin,
-            "client_address": client.address,
+            "client_address": acte_address_of(client),
             "reserved_by_name": reserver.name if reserver else None,
             "project_name": project.name,
         }

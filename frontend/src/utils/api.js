@@ -28,6 +28,16 @@ const getAuthHeaders = () => {
 };
 
 /**
+ * Construit l'Error levée pour une réponse non-OK (message + status + details).
+ */
+export const buildApiError = (body, status) => {
+  const error = new Error(body?.detail || body?.message || `Erreur ${status}`);
+  error.status = status;
+  error.details = Array.isArray(body?.details) ? body.details : [];
+  return error;
+};
+
+/**
  * Wrapper pour fetch avec authentification automatique
  */
 export const apiFetch = async (endpoint, options = {}) => {
@@ -62,7 +72,7 @@ export const apiGet = async (endpoint) => {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.detail || data.message || `Erreur ${response.status}`);
+    throw buildApiError(data, response.status);
   }
 
   return data;
@@ -79,7 +89,7 @@ export const apiPost = async (endpoint, data) => {
   const responseData = await response.json();
 
   if (!response.ok) {
-    throw new Error(responseData.detail || responseData.message || `Erreur ${response.status}`);
+    throw buildApiError(responseData, response.status);
   }
 
   return responseData;
@@ -96,7 +106,7 @@ export const apiPut = async (endpoint, data) => {
   const responseData = await response.json();
 
   if (!response.ok) {
-    throw new Error(responseData.detail || responseData.message || `Erreur ${response.status}`);
+    throw buildApiError(responseData, response.status);
   }
 
   return responseData;
@@ -113,7 +123,7 @@ export const apiPatch = async (endpoint, data) => {
   const responseData = await response.json();
 
   if (!response.ok) {
-    throw new Error(responseData.detail || responseData.message || `Erreur ${response.status}`);
+    throw buildApiError(responseData, response.status);
   }
 
   return responseData;
@@ -129,7 +139,7 @@ export const apiDelete = async (endpoint) => {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.detail || data.message || `Erreur ${response.status}`);
+    throw buildApiError(data, response.status);
   }
 
   return data;
@@ -161,7 +171,7 @@ export const apiUploadFile = async (endpoint, file, fieldName = 'file') => {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.detail || data.message || `Erreur ${response.status}`);
+    throw buildApiError(data, response.status);
   }
 
   return data;

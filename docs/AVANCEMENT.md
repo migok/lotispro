@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-24_
+_Dernière mise à jour : 2026-10-25_
 
 ## Vue d'ensemble
 
@@ -16,7 +16,7 @@ _Dernière mise à jour : 2026-10-24_
 |---|---|---|---|---|
 | E0 Fondations & nettoyage | ✅ | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | [#46](https://github.com/migok/lotispro/pull/46) |
 | E1 🐛 #5 Plein écran | 🟨 | 2 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | |
-| E2 👤 #7 Fiche client | ⬜ | 0 / 4 | [#18](https://github.com/migok/lotispro/issues/18) | |
+| E2 👤 #7 Fiche client | 🟨 | 6 / 6 | [#18](https://github.com/migok/lotispro/issues/18) | |
 | E3 Statuts par projet + états des lieux | ⬜ | 0 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
 | E4 🔄 #8 Réservation | ⬜ | 0 / 4 | [#29](https://github.com/migok/lotispro/issues/29) | |
 | E5 📊 #3 Vue projet | ⬜ | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | |
@@ -35,10 +35,12 @@ _Dernière mise à jour : 2026-10-24_
 | E0-T6 | CI GitHub Actions + `CLAUDE.md` | ✅ | [#14](https://github.com/migok/lotispro/issues/14) | | 2026-10-23 |
 | E1-T1 | Carte flexible en plein écran | ✅ | [#16](https://github.com/migok/lotispro/issues/16) | | 2026-10-24 |
 | E1-T2 | Recette multi-navigateurs | ✅ | [#17](https://github.com/migok/lotispro/issues/17) | | 2026-10-24 |
-| E2-T1 | Migration 0017 + modèle client | ⬜ | [#19](https://github.com/migok/lotispro/issues/19) | | |
-| E2-T2 | Validation + doublons | ⬜ | [#20](https://github.com/migok/lotispro/issues/20) | | |
-| E2-T3 | Formulaire client | ⬜ | [#21](https://github.com/migok/lotispro/issues/21) | | |
-| E2-T4 | Fiche / listes / PDF | ⬜ | [#22](https://github.com/migok/lotispro/issues/22) | | |
+| E2-T1 | Migration 0017 + modèle client | ✅ | [#19](https://github.com/migok/lotispro/issues/19) | | 2026-10-24 |
+| E2-T2 | Validation + doublons | ✅ | [#20](https://github.com/migok/lotispro/issues/20) | | 2026-10-24 |
+| E2-T3 | Formulaire client | ✅ | [#21](https://github.com/migok/lotispro/issues/21) | | 2026-10-24 |
+| E2-T4 | Fiche / listes / PDF | ✅ | [#22](https://github.com/migok/lotispro/issues/22) | | 2026-10-24 |
+| E2-T5 | Villes, adresse obligatoire, notice acte | ✅ | — | | 2026-10-25 |
+| E2-T6 | Pays de l'adresse à l'étranger | ✅ | — | | 2026-10-25 |
 | E3-T1 | `lot_workflow` + `lot_status_history` | ⬜ | [#24](https://github.com/migok/lotispro/issues/24) | | |
 | E3-T2 | Statuts optionnels par projet | ⬜ | [#25](https://github.com/migok/lotispro/issues/25) | | |
 | E3-T3 | Transition option → engagée | ⬜ | [#26](https://github.com/migok/lotispro/issues/26) | | |
@@ -105,6 +107,15 @@ Autre dette relevée en fin d'E0 (revue finale, 2026-10-24) :
 - **`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.
 - **Dépendances backend : 3 sources divergentes** (relevé lors de la CI de la PR #46) : `backend/requirements.txt` (épingle `fastapi==0.115.0`, `pydantic==2.8.2`…, utilisé en local), `backend/pyproject.toml` (plages non épinglées, utilisé par la CI via `pip install -e ".[dev]"`) et `backend/Dockerfile` (liste explicite non épinglée, utilisée en production). Conséquence constatée : la CI et la production résolvent fastapi 0.162.0 / starlette 1.9.0 alors que le local est en 0.115.0 (ex. `HTTPBearer` renvoie 401 au lieu de 403 sans jeton ; le test `test_get_current_user_unauthorized` attend désormais 401). À faire dans une tâche dédiée : introduire un lockfile unique (uv ou pip-tools) utilisé par le local, la CI et Docker. D'ici là, mettre à jour les environnements locaux avec `pip install -e ".[dev]" --upgrade`.
 - **`LotDetailModal.jsx`** : la formule du solde restant est dupliquée (imposée par l'ordre des hooks) ; à factoriser lors d'un refactor du composant.
+- **E2, erreurs 422 non traduites** : le toast de repli anglais « Request validation failed » et les erreurs de parsing de date en anglais restent affichés sur les chemins 422 non couverts par `error_handlers.py`.
+- **E2, migration 0017 : downgrade destructif** : `downgrade()` supprime les colonnes ajoutées au profil client ; après usage réel, un retour arrière entraîne une perte de données.
+- **E2, ordre de déploiement** : déployer Railway (backend) puis Vercel (frontend) immédiatement après, car l'ancienne interface envoie `POST {name}`, qui reçoit un 422 sur le nouveau backend.
+
+Dette relevée en fin d'E2 (revue finale, 2026-10-25) :
+- **PDF d'acte / reçu en erreur 500** si une adresse, une ville, un pays ou un nom contient un caractère hors latin-1 (apostrophe typographique ’ insérée par les claviers de téléphone, écriture arabe). Préexistant, plus probable avec les nouveaux champs. Correctif : police Unicode (DejaVuSans via `pdf.add_font`) dans `certificate_service.py`, ou au minimum remplacer ’‘“” avant impression. **À traiter tôt (E4 génère l'acte automatiquement).**
+- Badge « Actes » de la fiche client choisi par comparaison de chaînes (`ClientDetailPage.jsx`) : comparer la clé (`morocco`/`abroad`) serait plus robuste.
+- Adresses héritées contenant déjà la ville : la ville apparaîtra deux fois après saisie de la ville (pas de migration de découpage, décision utilisateur).
+- `pydantic_validation_handler` renvoie encore « Data validation failed » (anglais).
 
 ## Anomalies constatées
 
