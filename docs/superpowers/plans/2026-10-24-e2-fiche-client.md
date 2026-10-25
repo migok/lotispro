@@ -207,3 +207,19 @@
 - [ ] **Step 3: Implémenter** migration 0018 (`down_revision="0017"`, deux `add_column`, downgrade symétrique), modèle, schémas, règles, `acte_address_of`, recherche, handler, UI.
 - [ ] **Step 4: Vérifier** — backend (venv CI), ruff, `alembic upgrade 0017:0018 --sql` ; frontend vitest, eslint 0, build.
 - [ ] **Step 5: Commit** — `feat: require an address, add cities and acte notice` (+ AVANCEMENT : ligne E2-T5 ajoutée ✅).
+
+---
+
+### Task 6: Pays de l'adresse à l'étranger (demande utilisateur du 2026-10-25)
+
+**Décision utilisateur :** l'adresse à l'étranger a un champ **Pays**.
+
+**Files:**
+- Create: `backend/alembic/versions/0019_add_client_country_abroad.py` (`down_revision="0018"` ; 0018 déjà appliquée sur Supabase : ne pas la modifier)
+- Modify: `ClientModel.country_abroad` (`String(100)`, nullable), schémas Create/Update/Response, dict détails, recherche (inclut le pays)
+- Modify: `validate_client_profile` — règle 8 étendue : `address_abroad` remplie et `country_abroad` vide → `ValidationError("Indiquez le pays", field="country_abroad")` (après la vérification de `city_abroad`)
+- Modify: `acte_address_of` → adresse étrangère imprimée `"<adresse>, <ville>, <pays>"` (parties vides omises) ; miroir frontend identique
+- Modify: `ClientForm` — champ « Pays (étranger) » juste après « Ville (étranger) », `*` dès que l'adresse étrangère est remplie, saisie libre avec `<datalist>` de suggestions : France, Espagne, Belgique, Italie, Allemagne, Pays-Bas, Suisse, Royaume-Uni, Canada, États-Unis, Émirats arabes unis, Arabie saoudite, Qatar ; ligne « Adresse imprimée : … » incluant le pays ; `ClientDetailPage` affiche le pays
+- Tests : unitaire (règle pays, `acte_address_of` avec pays et sans pays pour une fiche ancienne), API (étrangère sans pays → 422 `country_abroad` « Indiquez le pays » ; création complète renvoie le pays ; recherche par pays ; PDF/réservation `client_address == "4 rue des murgers, Paris, France"`), garde de modèle (longueur 100), frontend (ordre, `*` conditionnel, erreur, ligne imprimée).
+
+- [ ] Step 1: tests → RED (consigner) · Step 2: implémenter · Step 3: vérifier (backend venv CI, ruff, `alembic upgrade 0018:0019 --sql` ; frontend vitest, eslint 0, build) · Step 4: commit `feat: add country to foreign client address` (+ AVANCEMENT ligne E2-T6 ✅, E2 6 / 6).

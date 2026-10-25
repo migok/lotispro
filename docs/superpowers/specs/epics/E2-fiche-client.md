@@ -19,6 +19,7 @@
 | `address_abroad` | str(500) | non | |
 | `city_morocco` | str(100) | oui si `address_morocco` remplie | ajouté le 2026-10-25 (migration 0018) |
 | `city_abroad` | str(100) | oui si `address_abroad` remplie | ajouté le 2026-10-25 (migration 0018) |
+| `country_abroad` | str(100) | oui si `address_abroad` remplie | ajouté le 2026-10-25 (migration 0019) ; imprimé sur l'acte |
 | `acte_address` | `'morocco' \| 'abroad'` \| null | oui si les 2 adresses sont remplies | sinon déduit de l'adresse remplie |
 | `acquisition_channel` | `'smap' \| 'bureau_vente' \| 'reseaux_sociaux' \| 'recommandation' \| 'samsar'` | oui (formulaire) | nullable en base |
 | `acquisition_referrer` | str(200) | oui si `recommandation` ou `samsar` | « Qui ? » |
