@@ -134,4 +134,53 @@ describe('ClientForm', () => {
     expect(onSubmit).not.toHaveBeenCalled()
     expect(screen.getAllByText('Champ obligatoire')).toHaveLength(2) // Prénom + Canal
   })
+
+  it('ticks Email for a legacy client with an email and null channels', () => {
+    renderWithProviders(
+      <ClientForm
+        initialValues={{ name: 'Benali', last_name: 'Benali', email: 'a@b.ma', notification_channels: null }}
+        onSubmit={vi.fn()}
+      />
+    )
+    expect(screen.getByLabelText('Email', { selector: 'input[type=checkbox]' })).toBeChecked()
+  })
+
+  it('auto-ticks Email for a new client typing an email, until the user touches the boxes', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ClientForm onSubmit={vi.fn()} />)
+    const box = () => screen.getByLabelText('Email', { selector: 'input[type=checkbox]' })
+
+    expect(box()).not.toBeChecked()
+    await user.type(screen.getByLabelText('Email', { selector: 'input[type=email]' }), 'a@b.ma')
+    expect(box()).toBeChecked()
+
+    await user.click(box())
+    expect(box()).not.toBeChecked()
+    await user.type(screen.getByLabelText('Email', { selector: 'input[type=email]' }), 'x')
+    expect(box()).not.toBeChecked()
+  })
+
+  it('hints to split the name of a legacy full-name client', () => {
+    const hint = "Nom complet hérité de l'ancienne fiche : séparez le prénom et le nom."
+    const { unmount } = renderWithProviders(
+      <ClientForm initialValues={{ name: 'Jean Dupont', last_name: 'Jean Dupont' }} onSubmit={vi.fn()} />
+    )
+    expect(screen.getByText(hint)).toBeInTheDocument()
+    unmount()
+    renderWithProviders(
+      <ClientForm
+        initialValues={{ name: 'Jean Dupont', last_name: 'Dupont', first_name: 'Jean' }}
+        onSubmit={vi.fn()}
+      />
+    )
+    expect(screen.queryByText(hint)).not.toBeInTheDocument()
+  })
+
+  it('does not tick "same as phone" when editing a client saved with no whatsapp', () => {
+    renderWithProviders(
+      <ClientForm initialValues={{ last_name: 'Benali', first_name: 'F', phone: '0612345678' }} onSubmit={vi.fn()} />
+    )
+    expect(screen.getByLabelText('Même numéro que le téléphone')).not.toBeChecked()
+    expect(screen.getAllByLabelText('WhatsApp')[0]).toHaveValue('')
+  })
 })

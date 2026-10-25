@@ -41,6 +41,12 @@ def upgrade() -> None:
     # Legacy clients only have a single "name": keep it as the last name.
     op.execute("UPDATE clients SET last_name = name WHERE last_name IS NULL")
 
+    # Default notification channel for existing clients that have an email.
+    op.execute(
+        "UPDATE clients SET notification_channels = '[\"email\"]' "
+        "WHERE email IS NOT NULL AND email <> ''"
+    )
+
     op.create_check_constraint(
         "valid_acte_address",
         "clients",

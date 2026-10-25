@@ -205,16 +205,24 @@ async def rate_limit_error_handler(
 def _french_validation_message(error: dict) -> str:
     """Translate common Pydantic messages to French; strip the ValueError prefix."""
     error_type = error["type"]
-    if error_type in ("missing", "string_too_short"):
+    ctx = error.get("ctx") or {}
+    if error_type == "missing" or (
+        error_type == "string_too_short" and ctx.get("min_length") in (None, 1)
+    ):
         return "Champ obligatoire"
+    if error_type == "string_too_short":
+        return f"Trop court ({ctx['min_length']} caractères min)"
     if error_type == "string_too_long":
-        max_length = (error.get("ctx") or {}).get("max_length")
-        return f"Trop long ({max_length} caractères max)"
+        return f"Trop long ({ctx.get('max_length')} caractères max)"
     if error_type in ("literal_error", "enum"):
         return "Valeur non autorisée"
     message = error["msg"]
     reason = str((error.get("ctx") or {}).get("reason", ""))
-    if error_type == "value_error" and "email" in f"{message} {reason}".lower():
+    if (
+        error_type == "value_error"
+        and error["loc"][-1:] == ("email",)
+        and "email" in f"{message} {reason}".lower()
+    ):
         return "Adresse email invalide"
     return message.removeprefix("Value error, ")
 

@@ -35,9 +35,12 @@ function toFormValues(initial = {}) {
   for (const key of TEXT_FIELDS) values[key] = initial[key] ?? EMPTY_VALUES[key];
   // Client hérité : seul `name` existe, il sert de nom de famille.
   if (!values.last_name && initial.name && !initial.first_name) values.last_name = initial.name;
-  values.notification_channels = Array.isArray(initial.notification_channels)
-    ? [...initial.notification_channels]
-    : [];
+  if (Array.isArray(initial.notification_channels)) {
+    values.notification_channels = [...initial.notification_channels];
+  } else {
+    // Par défaut : notification par email dès que le client a une adresse email.
+    values.notification_channels = values.email.trim() ? ['email'] : [];
+  }
   return values;
 }
 
@@ -55,24 +58,41 @@ export default function ClientForm({
   excludeId,
 }) {
   const [values, setValues] = useState(() => toFormValues(initialValues));
+  const isNew = !initialValues;
   const [whatsappSame, setWhatsappSame] = useState(
-    () => !initialValues?.whatsapp || initialValues.whatsapp === initialValues.phone
+    () => isNew || (!!initialValues.whatsapp && initialValues.whatsapp === initialValues.phone)
   );
+  const [channelsTouched, setChannelsTouched] = useState(false);
   const [errors, setErrors] = useState({});
   const [duplicates, setDuplicates] = useState([]);
   const [saving, setSaving] = useState(false);
 
   const set = (field) => (e) => {
     const { value } = e.target;
-    setValues((v) => ({ ...v, [field]: value }));
+    setValues((v) => {
+      const next = { ...v, [field]: value };
+      // Nouveau client : cocher Email dès qu'une adresse est saisie (tant que
+      // les cases n'ont pas été touchées par l'utilisateur).
+      if (field === 'email' && isNew && !channelsTouched) {
+        next.notification_channels = value.trim() ? ['email'] : [];
+      }
+      return next;
+    });
     setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
   };
+
+  const isLegacyFullName =
+    !!initialValues &&
+    !initialValues.first_name &&
+    !!initialValues.last_name &&
+    initialValues.last_name === initialValues.name;
 
   const hasBothAddresses = values.address_morocco.trim() && values.address_abroad.trim();
   const channel = values.acquisition_channel;
   const needsReferrer = channel === 'recommandation' || channel === 'samsar';
 
   const toggleNotification = (key) => {
+    setChannelsTouched(true);
     setValues((v) => ({
       ...v,
       notification_channels: v.notification_channels.includes(key)
@@ -155,7 +175,16 @@ export default function ClientForm({
       <section className="client-form-section">
         <h4 className="client-form-section-title">Identité</h4>
         <div className="form-2col">
-          {field('last_name', 'Nom *', text('last_name', { autoFocus: true }))}
+          {field(
+            'last_name',
+            'Nom *',
+            text('last_name', { autoFocus: true }),
+            isLegacyFullName && (
+              <span className="client-form-hint">
+                Nom complet hérité de l&apos;ancienne fiche : séparez le prénom et le nom.
+              </span>
+            )
+          )}
           {field('maiden_name', 'Nom de jeune fille', text('maiden_name'))}
           {field('first_name', 'Prénom *', text('first_name'))}
           {field('cin', 'CIN', text('cin', { placeholder: 'AB123456', onBlur: checkDuplicates }))}

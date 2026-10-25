@@ -155,6 +155,8 @@ class ClientService:
             Created client response
         """
         fields = validate_client_profile(data.model_dump())
+        if fields.get("notification_channels") is None and fields.get("email"):
+            fields["notification_channels"] = ["email"]
         fields["name"] = self._compose_name(data.first_name, data.last_name)
         client = await self.client_repo.create(**fields, created_by_user_id=user_id)
 

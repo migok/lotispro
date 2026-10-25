@@ -60,6 +60,60 @@ class TestClientProfile:
         assert data["name"] == "Fatima Benali"
 
     @pytest.mark.integration
+    @pytest.mark.parametrize(
+        ("overrides", "expected"),
+        [
+            ({"notification_channels": None}, ["email"]),
+            ({"notification_channels": None, "email": None}, None),
+            ({"notification_channels": ["whatsapp"]}, ["whatsapp"]),
+        ],
+    )
+    async def test_create_defaults_notification_channels(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+        overrides: dict[str, Any],
+        expected: list[str] | None,
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, **overrides},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["notification_channels"] == expected
+
+    @pytest.mark.integration
+    async def test_invalid_notification_channel_is_not_an_email_error(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "notification_channels": ["fax"]},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        assert response.json()["details"][0]["message"] != "Adresse email invalide"
+
+    @pytest.mark.integration
+    async def test_too_short_value_reports_min_length(
+        self, client: AsyncClient
+    ) -> None:
+        response = await client.post(
+            "/api/users/set-password", json={"token": "abc", "password": "123"}
+        )
+
+        assert response.status_code == 422
+        details = {d["field"]: d["message"] for d in response.json()["details"]}
+        assert details["body.password"] == "Trop court (6 caractères min)"
+
+    @pytest.mark.integration
     async def test_create_client_missing_required_fields(
         self,
         client: AsyncClient,
