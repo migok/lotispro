@@ -17,6 +17,8 @@
 | `email` | str(255) | non | format validé |
 | `address_morocco` | str(500) | non | backfill = ancien `address` |
 | `address_abroad` | str(500) | non | |
+| `city_morocco` | str(100) | oui si `address_morocco` remplie | ajouté le 2026-10-25 (migration 0018) |
+| `city_abroad` | str(100) | oui si `address_abroad` remplie | ajouté le 2026-10-25 (migration 0018) |
 | `acte_address` | `'morocco' \| 'abroad'` \| null | oui si les 2 adresses sont remplies | sinon déduit de l'adresse remplie |
 | `acquisition_channel` | `'smap' \| 'bureau_vente' \| 'reseaux_sociaux' \| 'recommandation' \| 'samsar'` | oui (formulaire) | nullable en base |
 | `acquisition_referrer` | str(200) | oui si `recommandation` ou `samsar` | « Qui ? » |
@@ -27,6 +29,8 @@
 `client_type` existant conservé. Migration `0017` avec `downgrade` (ré-assemble `name` et `address`).
 
 ## Règles de validation
+- **Au moins une adresse** (Maroc ou étranger) est obligatoire ; chaque adresse remplie exige sa **ville** (décision utilisateur, recette du 2026-10-25).
+- Une notice indique que l'adresse d'acte (adresse + ville) figurera sur l'acte de réservation et l'acte final.
 - CIN marocain : `^[A-Z]{1,2}\d{1,6}$` après passage en majuscules et suppression des espaces (*choix de Claude*).
 - Téléphone : format E.164 après normalisation (`+212…`) ; un numéro local `0XXXXXXXXX` est converti en `+212XXXXXXXXX`.
 - Email : `EmailStr`.

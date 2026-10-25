@@ -175,3 +175,35 @@
 - [ ] **Step 3: Implémenter** : recherche backend sur `name`, `first_name`, `last_name`, `maiden_name`, `phone`, `whatsapp`, `cin`, `email` ; `client_address` = `acte_address_of(client)` ; fiche client : sections Identité, Coordonnées, Adresses (badge « Actes »), Canal, Préférences ; liste : recherche locale sur les mêmes champs.
 - [ ] **Step 4: Vérifier** — suites backend + frontend vertes, lint 0, build OK.
 - [ ] **Step 5: Commit** — `feat: show full client profile and use acte address in documents` (+ AVANCEMENT E2-T4 ✅, ligne E2 de la vue d'ensemble).
+
+---
+
+### Task 5: Ville des adresses, adresse obligatoire, notice « acte » (demande utilisateur du 2026-10-25, recette)
+
+**Décisions utilisateur :** au moins une adresse (Maroc ou étranger) est obligatoire ; chaque adresse a une **ville** ; une notice indique que l'adresse choisie figurera sur les actes.
+
+**Files:**
+- Create: `backend/alembic/versions/0018_add_client_cities.py` (0017 est déjà appliquée sur Supabase : ne pas la modifier)
+- Modify: `backend/app/infrastructure/database/models.py` (`ClientModel.city_morocco`, `city_abroad` — `String(100)`, nullable)
+- Modify: `backend/app/domain/client_profile.py` (`validate_client_profile` règles 7-8, `acte_address_of`)
+- Modify: `backend/app/domain/schemas/client.py` (champs `city_morocco`, `city_abroad` dans Create / Update / Response)
+- Modify: `backend/app/infrastructure/database/repositories/client_repository.py` (dict détails ; recherche inclut les villes)
+- Modify: `backend/app/api/error_handlers.py` (message de haut niveau des 422 : `"Request validation failed"` → `"Certains champs sont invalides"`)
+- Modify: `frontend/src/utils/clientProfile.js`, `frontend/src/components/clients/ClientForm.jsx`, `frontend/src/components/ClientDetailPage.jsx`
+- Tests: `backend/app/tests/unit/test_domain/test_client_profile.py`, `backend/app/tests/integration/test_api/test_clients.py`, `backend/app/tests/unit/test_client_model.py`, `frontend/src/components/clients/__tests__/ClientForm.test.jsx`, `frontend/src/utils/__tests__/clientProfile.test.js`
+
+**Règles ajoutées à `validate_client_profile` (après la règle 1, avant les règles d'adresse) :**
+- Règle 7 : aucune adresse remplie → `ValidationError("Renseignez au moins une adresse (Maroc ou étranger)", field="address_morocco")`.
+- Règle 8 : `address_morocco` remplie et `city_morocco` vide → `"Indiquez la ville"` sur `city_morocco` ; idem `address_abroad` / `city_abroad`.
+
+**`acte_address_of(client)`** renvoie désormais `"<adresse>, <ville>"` (la ville seule est omise si vide, pour les anciennes fiches).
+
+**UI (`ClientForm`)** — ordre de la section Adresses : Adresse Maroc · Ville (Maroc) · Adresse à l'étranger · Ville (étranger) · choix de l'adresse d'acte (si les deux) ; la ville est marquée `*` dès que son adresse est remplie ; libellé de section « Adresses * (au moins une) ». **Notice** sous la section, toujours visible : `ℹ L'adresse utilisée pour les actes figurera sur l'acte de réservation et l'acte final.` ; quand l'adresse d'acte est déterminée, ajouter la ligne `Adresse imprimée : <adresse>, <ville>`. Mêmes messages côté client que côté serveur.
+
+**Fiche (`ClientDetailPage`)** : chaque adresse affichée avec sa ville ; badge « Actes » inchangé.
+
+- [ ] **Step 1: Tests** — unitaires règles 7 et 8 (champ + message exacts) et `acte_address_of` avec ville ; API : création sans aucune adresse → 422 `address_morocco` + message ; adresse étrangère sans ville → 422 `city_abroad` ; création complète → villes renvoyées ; `GET /api/clients?search=<ville>` trouve le client ; PDF/réservation : `client_address == "4 rue des murgers, Paris"` ; message de haut niveau d'un 422 = `"Certains champs sont invalides"` ; garde de modèle : longueur 100 des deux villes ; frontend : ordre des champs, ville obligatoire conditionnelle, erreur « au moins une adresse », notice visible, ligne « Adresse imprimée : … ».
+- [ ] **Step 2: Lancer → FAIL** (consigner la sortie RED).
+- [ ] **Step 3: Implémenter** migration 0018 (`down_revision="0017"`, deux `add_column`, downgrade symétrique), modèle, schémas, règles, `acte_address_of`, recherche, handler, UI.
+- [ ] **Step 4: Vérifier** — backend (venv CI), ruff, `alembic upgrade 0017:0018 --sql` ; frontend vitest, eslint 0, build.
+- [ ] **Step 5: Commit** — `feat: require an address, add cities and acte notice` (+ AVANCEMENT : ligne E2-T5 ajoutée ✅).
