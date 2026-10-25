@@ -70,6 +70,7 @@ class Transition:
     """
 
     name: str
+    label: str  # French action label shown in error messages
     from_statuses: frozenset[str]
     to_status: str | None
     requires_enabled: str | None = None
@@ -81,59 +82,113 @@ DIRECT_UPDATE_STATUSES: tuple[str, ...] = ("creation", "available", "blocked")
 
 def _t(
     name: str,
+    label: str,
     from_statuses: Iterable[str],
     to_status: str | None,
     requires_enabled: str | None = None,
     requires_disabled: str | None = None,
 ) -> Transition:
     return Transition(
-        name, frozenset(from_statuses), to_status, requires_enabled, requires_disabled
+        name,
+        label,
+        frozenset(from_statuses),
+        to_status,
+        requires_enabled,
+        requires_disabled,
     )
 
 
 _TRANSITION_LIST = (
-    _t("activate", ["creation"], "available"),
-    _t("start_option", ["available"], "option", requires_enabled="option"),
-    _t("cancel_option", ["option"], "available"),
-    _t("extend_option", ["option", "reservation_a_finaliser"], None),
+    _t("activate", "Activer le lot", ["creation"], "available"),
+    _t(
+        "start_option",
+        "Démarrer une option",
+        ["available"],
+        "option",
+        requires_enabled="option",
+    ),
+    _t("cancel_option", "Annuler l'option", ["option"], "available"),
+    _t(
+        "extend_option",
+        "Prolonger l'option",
+        ["option", "reservation_a_finaliser"],
+        None,
+    ),
     _t(
         "direct_reservation",
+        "Réserver directement (à finaliser)",
         ["available"],
         "reservation_a_finaliser",
         requires_enabled="reservation_a_finaliser",
     ),
     _t(
         "to_reservation",
+        "Passer en réservation à finaliser",
         ["option"],
         "reservation_a_finaliser",
         requires_enabled="reservation_a_finaliser",
     ),
-    _t("refund", ["reservation_a_finaliser"], "available"),
-    _t("direct_engage", ["available"], "reservation_engagee"),
-    _t("engage", ["reservation_a_finaliser"], "reservation_engagee"),
+    _t("refund", "Rembourser la garantie", ["reservation_a_finaliser"], "available"),
+    _t(
+        "direct_engage",
+        "Engager directement la réservation",
+        ["available"],
+        "reservation_engagee",
+    ),
+    _t(
+        "engage",
+        "Engager la réservation",
+        ["reservation_a_finaliser"],
+        "reservation_engagee",
+    ),
     _t(
         "option_engage",
+        "Engager la réservation depuis l'option",
         ["option"],
         "reservation_engagee",
         requires_disabled="reservation_a_finaliser",
     ),
-    _t("solde", ["reservation_engagee"], "reservation_soldee"),
-    _t("set_notaire_intent", ["reservation_soldee", *EDL_STATUSES], None),
-    _t("edl_schedule", ["reservation_soldee"], "edl_programme", requires_enabled="edl"),
-    _t("edl_reschedule", ["edl_programme"], None),
-    _t("edl_done", ["edl_programme"], "edl_realise"),
-    _t("edl_finalize", ["edl_realise"], "edl_finalise"),
+    _t("solde", "Marquer soldé", ["reservation_engagee"], "reservation_soldee"),
+    _t(
+        "set_notaire_intent",
+        "Définir l'intention notaire",
+        ["reservation_soldee", *EDL_STATUSES],
+        None,
+    ),
+    _t(
+        "edl_schedule",
+        "Programmer l'état des lieux",
+        ["reservation_soldee"],
+        "edl_programme",
+        requires_enabled="edl",
+    ),
+    _t("edl_reschedule", "Reprogrammer l'état des lieux", ["edl_programme"], None),
+    _t(
+        "edl_done", "Marquer l'état des lieux réalisé", ["edl_programme"], "edl_realise"
+    ),
+    _t("edl_finalize", "Finaliser l'état des lieux", ["edl_realise"], "edl_finalise"),
     # Conditions depend on the departure status: see _check_notaire_path.
-    _t("notaire", ["reservation_soldee", "edl_finalise"], "chez_notaire"),
-    _t("notaire_update", ["chez_notaire"], None),
-    _t("proprietaire", ["chez_notaire"], "chez_proprietaire"),
+    _t(
+        "notaire",
+        "Passer chez le notaire",
+        ["reservation_soldee", "edl_finalise"],
+        "chez_notaire",
+    ),
+    _t("notaire_update", "Modifier les infos du notaire", ["chez_notaire"], None),
+    _t(
+        "proprietaire",
+        "Confirmer l'acte notarial",
+        ["chez_notaire"],
+        "chez_proprietaire",
+    ),
     _t(
         "block",
+        "Bloquer le lot",
         [s for s in ALL_STATUSES if s not in ("blocked", "chez_proprietaire")],
         "blocked",
     ),
-    _t("unblock", ["blocked"], "available"),
-    _t("direct_update", DIRECT_UPDATE_STATUSES, None),
+    _t("unblock", "Débloquer le lot", ["blocked"], "available"),
+    _t("direct_update", "Modifier directement le statut", DIRECT_UPDATE_STATUSES, None),
 )
 
 TRANSITIONS: dict[str, Transition] = {t.name: t for t in _TRANSITION_LIST}
@@ -204,7 +259,7 @@ def assert_transition_allowed(
     if from_status not in rule.from_statuses:
         raise BusinessRuleError(
             message=(
-                f"Transition « {transition} » impossible depuis le statut "
+                f"Action « {rule.label} » impossible depuis le statut "
                 f"« {_label(from_status)} »."
             ),
             rule="invalid_lot_status",

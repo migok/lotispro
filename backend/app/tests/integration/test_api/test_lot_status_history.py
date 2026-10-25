@@ -403,6 +403,98 @@ class TestOtherStatusWriters:
         assert response.status_code == 200
         assert await _history(db_session, lot.id) == []
 
+    async def test_direct_update_refused_from_workflow_status(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        """``PUT /lots/{id}`` can no longer take a lot out of the workflow."""
+        project = await make_project(db_session, manager)
+        lot = await make_lot(db_session, project, status="option")
+
+        response = await client.put(
+            f"/api/lots/{lot.id}",
+            headers=auth_headers(manager),
+            json={"status": "available"},
+        )
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["details"][0]["rule"] == "invalid_lot_status"
+        assert body["message"] == (
+            "Action « Modifier directement le statut » impossible depuis le "
+            "statut « Option »."
+        )
+        await db_session.refresh(lot)
+        assert lot.status == "option"
+        assert await _history(db_session, lot.id) == []
+
+    async def test_pricing_bulk_upsert_activation_writes_activate_row(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        project = await make_project(db_session, manager)
+        lot = await make_lot(
+            db_session, project, status="creation", price=None, zone="A"
+        )
+
+        response = await client.post(
+            f"/api/projects/{project.id}/pricing-configs/bulk",
+            headers=auth_headers(manager),
+            json={
+                "configs": [
+                    {"zone": "A", "prix_m2_acte": 1000, "prix_m2_catalogue": 1200}
+                ]
+            },
+        )
+
+        assert response.status_code == 200, response.json()
+        await db_session.refresh(lot)
+        assert lot.status == "available"
+        rows = await _history(db_session, lot.id)
+        assert [
+            (r.from_status, r.to_status, r.transition, r.user_id) for r in rows
+        ] == [("creation", "available", "activate", manager.id)]
+
+    async def test_bulk_metadata_activation_writes_activate_row(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        project = await make_project(db_session, manager)
+        lot = await make_lot(db_session, project, status="creation", price=None)
+        db_session.add(
+            LotPricingConfigModel(
+                project_id=project.id,
+                zone="A",
+                prix_m2_acte=1000.0,
+                prix_m2_catalogue=1200.0,
+                created_by=manager.id,
+            )
+        )
+        await db_session.commit()
+
+        response = await client.patch(
+            f"/api/projects/{project.id}/lots/bulk-metadata",
+            headers=auth_headers(manager),
+            json={"lot_ids": [lot.id], "zone": "A"},
+        )
+
+        assert response.status_code == 200, response.json()
+        await db_session.refresh(lot)
+        assert lot.status == "available"
+        rows = await _history(db_session, lot.id)
+        assert [
+            (r.from_status, r.to_status, r.transition, r.user_id) for r in rows
+        ] == [("creation", "available", "activate", manager.id)]
+
     async def test_pricing_auto_activation_on_update_writes_activate_row(
         self,
         client: AsyncClient,

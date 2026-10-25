@@ -254,5 +254,12 @@ class TestProjectConditions:
         with pytest.raises(BusinessRuleError) as exc:
             assert_transition_allowed(DEFAULT_ENABLED_OPTIONAL, "solde", "available")
         assert exc.value.message == (
-            "Transition « solde » impossible depuis le statut « Disponible »."
+            "Action « Marquer soldé » impossible depuis le statut « Disponible »."
         )
+
+    @pytest.mark.parametrize("transition", TRANSITION_NAMES)
+    def test_every_transition_has_a_french_label(self, transition: str) -> None:
+        label = TRANSITIONS[transition].label
+        assert label
+        assert label != transition
+        assert "_" not in label
