@@ -895,9 +895,9 @@ export default function ClientDetailPage() {
                 <div className="cd-info-rows">
                   {[
                     ['morocco', 'Maroc', client.address_morocco, client.city_morocco],
-                    ['abroad', 'Étranger', client.address_abroad, client.city_abroad],
-                  ].filter(([, , value]) => value).map(([key, label, value, city]) => {
-                    const full = city ? `${value}, ${city}` : value;
+                    ['abroad', 'Étranger', client.address_abroad, client.city_abroad, client.country_abroad],
+                  ].filter(([, , value]) => value).map(([key, label, ...parts]) => {
+                    const full = parts.filter(Boolean).join(', ');
                     return (
                     <div className="cd-info-row" key={key}>
                       <span className="cd-info-icon"><IconNote /></span>

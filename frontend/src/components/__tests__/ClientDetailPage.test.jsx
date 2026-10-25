@@ -17,6 +17,7 @@ const CLIENT = {
   city_morocco: 'Casablanca',
   address_abroad: '5 avenue de Paris',
   city_abroad: 'Lyon',
+  country_abroad: 'France',
   acte_address: 'abroad',
   acquisition_channel: 'samsar',
   acquisition_referrer: 'Karim',
@@ -65,7 +66,7 @@ describe('ClientDetailPage - fiche client', () => {
 
     const morocco = await screen.findByText(/12 rue des Orangers/)
     const abroad = screen.getByText(/5 avenue de Paris/)
-    expect(abroad).toHaveTextContent('Étranger : 5 avenue de Paris, Lyon')
+    expect(abroad).toHaveTextContent('Étranger : 5 avenue de Paris, Lyon, France')
     expect(morocco).toHaveTextContent('Maroc : 12 rue des Orangers, Casablanca')
     expect(abroad).toHaveTextContent('Actes')
     expect(morocco).not.toHaveTextContent('Actes')

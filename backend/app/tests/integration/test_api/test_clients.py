@@ -25,6 +25,7 @@ FULL_PAYLOAD = {
     "city_morocco": "Casablanca",
     "address_abroad": "5 avenue de Paris",
     "city_abroad": "Lyon",
+    "country_abroad": "France",
     "acte_address": "abroad",
     "acquisition_channel": "samsar",
     "acquisition_referrer": "Karim",
@@ -231,6 +232,7 @@ class TestClientProfile:
             acquisition_channel="smap",
             address_abroad="Lyon",
             city_abroad="Lyon",
+            country_abroad="France",
             acte_address="abroad",
         )
 
@@ -244,6 +246,7 @@ class TestClientProfile:
         assert data["address_abroad"] == "Lyon"
         assert data["acte_address"] == "abroad"
         assert data["city_abroad"] == "Lyon"
+        assert data["country_abroad"] == "France"
 
     @pytest.mark.integration
     async def test_update_legacy_client_keeps_name_as_last_name(
@@ -387,6 +390,7 @@ class TestClientValidation:
             **FULL_PAYLOAD,
             "address_abroad": None,
             "city_abroad": None,
+            "country_abroad": None,
             "acte_address": None,
         }
         response = await client.post(
@@ -561,6 +565,7 @@ class TestClientValidation:
             city_morocco=None,
             address_abroad="Lyon",
             city_abroad="Lyon",
+            country_abroad="France",
         )
         headers = auth_headers(commercial)
 
@@ -658,6 +663,7 @@ class TestClientValidation:
             city_morocco="Casablanca",
             address_abroad="4 rue des murgers",
             city_abroad="Paris",
+            country_abroad="France",
             acte_address="abroad",
         )
         project = await make_project(db_session, manager)
@@ -687,7 +693,7 @@ class TestClientValidation:
         )
 
         assert details is not None
-        assert details["client_address"] == "4 rue des murgers, Paris"
+        assert details["client_address"] == "4 rue des murgers, Paris, France"
 
     @pytest.mark.integration
     async def test_create_requires_at_least_one_address(
@@ -701,6 +707,7 @@ class TestClientValidation:
             "city_morocco",
             "address_abroad",
             "city_abroad",
+            "country_abroad",
         )
         payload = {k: v for k, v in FULL_PAYLOAD.items() if k not in address_keys}
         payload["acte_address"] = None
@@ -732,6 +739,81 @@ class TestClientValidation:
         detail = response.json()["details"][0]
         assert detail["field"].endswith("city_abroad")
         assert detail["message"] == "Indiquez la ville"
+
+    @pytest.mark.integration
+    async def test_create_abroad_address_requires_country(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "country_abroad": None},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        detail = response.json()["details"][0]
+        assert detail["field"].endswith("country_abroad")
+        assert detail["message"] == "Indiquez le pays"
+
+    @pytest.mark.integration
+    async def test_update_to_abroad_address_requires_country(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        existing = await make_complete_client(db_session)
+
+        response = await client.put(
+            f"/api/clients/{existing.id}",
+            json={"address_abroad": "5 avenue de Paris", "city_abroad": "Paris"},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        assert response.json()["details"][0]["field"].endswith("country_abroad")
+
+    @pytest.mark.integration
+    async def test_create_returns_country_abroad(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients", json=FULL_PAYLOAD, headers=auth_headers(commercial)
+        )
+
+        assert response.status_code == 201
+        assert response.json()["country_abroad"] == "France"
+
+    @pytest.mark.integration
+    async def test_search_by_country(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        target = await make_complete_client(
+            db_session,
+            address_abroad="Rue X",
+            city_abroad="Lyon",
+            country_abroad="Belgique",
+        )
+        await make_complete_client(db_session)
+
+        response = await client.get(
+            "/api/clients",
+            params={"search": "belgi"},
+            headers=auth_headers(commercial),
+        )
+
+        assert [c["id"] for c in response.json()] == [target.id]
 
     @pytest.mark.integration
     async def test_search_by_city(

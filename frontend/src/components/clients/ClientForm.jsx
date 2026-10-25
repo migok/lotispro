@@ -23,6 +23,7 @@ const EMPTY_VALUES = {
   city_morocco: '',
   address_abroad: '',
   city_abroad: '',
+  country_abroad: '',
   acte_address: '',
   acquisition_channel: '',
   acquisition_referrer: '',
@@ -30,6 +31,12 @@ const EMPTY_VALUES = {
   client_type: 'autre',
   notes: '',
 };
+
+// Suggestions de pays (saisie libre acceptée).
+const COUNTRY_SUGGESTIONS = [
+  'France', 'Espagne', 'Belgique', 'Italie', 'Allemagne', 'Pays-Bas', 'Suisse',
+  'Royaume-Uni', 'Canada', 'États-Unis', 'Émirats arabes unis', 'Arabie saoudite', 'Qatar',
+];
 
 const TEXT_FIELDS = Object.keys(EMPTY_VALUES);
 
@@ -245,6 +252,14 @@ export default function ClientForm({
             'city_abroad',
             values.address_abroad.trim() ? 'Ville (étranger) *' : 'Ville (étranger)',
             text('city_abroad')
+          )}
+          {field(
+            'country_abroad',
+            values.address_abroad.trim() ? 'Pays (étranger) *' : 'Pays (étranger)',
+            text('country_abroad', { list: 'client-country-suggestions' }),
+            <datalist id="client-country-suggestions">
+              {COUNTRY_SUGGESTIONS.map((country) => <option key={country} value={country} />)}
+            </datalist>
           )}
         </div>
         {hasBothAddresses && (

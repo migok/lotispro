@@ -303,6 +303,7 @@ class ClientModel(Base):
     city_morocco: Mapped[str | None] = mapped_column(String(100), nullable=True)
     address_abroad: Mapped[str | None] = mapped_column(String(500), nullable=True)
     city_abroad: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    country_abroad: Mapped[str | None] = mapped_column(String(100), nullable=True)
     acte_address: Mapped[str | None] = mapped_column(String(10), nullable=True)
     acquisition_channel: Mapped[str | None] = mapped_column(String(20), nullable=True)
     acquisition_referrer: Mapped[str | None] = mapped_column(String(200), nullable=True)

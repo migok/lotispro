@@ -50,6 +50,7 @@ class ClientRepository(BaseRepository[ClientModel]):
                     ClientModel.email.ilike(search_term),
                     ClientModel.city_morocco.ilike(search_term),
                     ClientModel.city_abroad.ilike(search_term),
+                    ClientModel.country_abroad.ilike(search_term),
                 )
             )
 
@@ -249,6 +250,7 @@ class ClientRepository(BaseRepository[ClientModel]):
             "city_morocco": client.city_morocco,
             "address_abroad": client.address_abroad,
             "city_abroad": client.city_abroad,
+            "country_abroad": client.country_abroad,
             "acte_address": client.acte_address,
             "acquisition_channel": client.acquisition_channel,
             "acquisition_referrer": client.acquisition_referrer,

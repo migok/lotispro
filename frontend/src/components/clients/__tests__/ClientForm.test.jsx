@@ -31,7 +31,7 @@ describe('ClientForm', () => {
     const labels = [
       'Nom *', 'Nom de jeune fille', 'Prénom *', 'CIN', 'Téléphone *',
       'WhatsApp', 'Email', 'Adresse Maroc', 'Ville (Maroc)',
-      "Adresse à l'étranger", 'Ville (étranger)',
+      "Adresse à l'étranger", 'Ville (étranger)', 'Pays (étranger)',
     ]
     // « WhatsApp » existe aussi comme canal de notification (plus bas) : on prend le 1er.
     const elements = labels.map((l) => screen.getAllByLabelText(l)[0])
@@ -109,6 +109,60 @@ describe('ClientForm', () => {
 
     expect(onSubmit).not.toHaveBeenCalled()
     expect(screen.getByText('Indiquez la ville')).toBeInTheDocument()
+  })
+
+  it('marks the country required once the foreign address is filled and blocks submit without it', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    renderWithProviders(<ClientForm onSubmit={onSubmit} />)
+    await fillRequired(user)
+    expect(screen.getByLabelText('Pays (étranger)')).toBeInTheDocument()
+    await fill(user, "Adresse à l'étranger", '5 rue Y')
+    await fill(user, 'Ville (étranger) *', 'Paris')
+    expect(screen.getByLabelText('Pays (étranger) *')).toBeInTheDocument()
+    await user.click(screen.getByLabelText('Étranger'))
+
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText('Indiquez le pays')).toBeInTheDocument()
+  })
+
+  it('suggests countries but accepts free input, and prints the country', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValue({})
+    const { container } = renderWithProviders(<ClientForm onSubmit={onSubmit} />)
+    const input = screen.getByLabelText('Pays (étranger)')
+    const options = [...container.querySelectorAll(`datalist#${input.getAttribute('list')} option`)]
+    expect(options.map((o) => o.value)).toEqual([
+      'France', 'Espagne', 'Belgique', 'Italie', 'Allemagne', 'Pays-Bas', 'Suisse',
+      'Royaume-Uni', 'Canada', 'États-Unis', 'Émirats arabes unis', 'Arabie saoudite', 'Qatar',
+    ])
+
+    await fill(user, "Adresse à l'étranger", '4 rue des murgers')
+    await fill(user, 'Ville (étranger) *', 'Paris')
+    await fill(user, 'Pays (étranger) *', 'Portugal')
+    expect(screen.getByText('Adresse imprimée : 4 rue des murgers, Paris, Portugal')).toBeInTheDocument()
+
+    await fillRequired(user)
+    await user.click(screen.getByLabelText('Étranger'))
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0].country_abroad).toBe('Portugal')
+  })
+
+  it('shows a server error on the country field without a toast-only fallback', async () => {
+    const user = userEvent.setup()
+    const error = Object.assign(new Error('Request validation failed'), {
+      status: 422,
+      details: [{ field: 'body.country_abroad', message: 'Indiquez le pays' }],
+    })
+    renderWithProviders(<ClientForm onSubmit={vi.fn().mockRejectedValue(error)} />)
+
+    await fillRequired(user)
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(await screen.findByText('Indiquez le pays')).toBeInTheDocument()
   })
 
   it('always shows the acte notice and the printed address once determined', async () => {

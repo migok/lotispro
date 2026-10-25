@@ -78,6 +78,7 @@ export function validateClientForm(values) {
   }
   if (hasMorocco && !filled(values.city_morocco)) errors.city_morocco = 'Indiquez la ville';
   if (hasAbroad && !filled(values.city_abroad)) errors.city_abroad = 'Indiquez la ville';
+  if (hasAbroad && !filled(values.country_abroad)) errors.country_abroad = 'Indiquez le pays';
 
   if (hasMorocco && hasAbroad && !values.acte_address) {
     errors.acte_address = "Choisissez l'adresse utilisée pour les actes";
@@ -110,7 +111,7 @@ export function fieldErrorsFromApi(error) {
 /** Champs que ClientForm sait afficher en erreur (clés des erreurs serveur). */
 const FORM_FIELDS = new Set([
   'last_name', 'maiden_name', 'first_name', 'cin', 'phone', 'whatsapp', 'email',
-  'address_morocco', 'city_morocco', 'address_abroad', 'city_abroad', 'acte_address', 'acquisition_channel',
+  'address_morocco', 'city_morocco', 'address_abroad', 'city_abroad', 'country_abroad', 'acte_address', 'acquisition_channel',
   'acquisition_referrer', 'acquisition_date', 'client_type', 'notes',
 ]);
 
@@ -123,7 +124,7 @@ export function shouldToastClientError(error) {
   return !Object.keys(fieldErrorsFromApi(error)).some((field) => FORM_FIELDS.has(field));
 }
 
-/** Miroir de backend acte_address_of : « adresse, ville » imprimée sur les actes. */
+/** Miroir de backend acte_address_of : « adresse, ville[, pays] » imprimée sur les actes. */
 export function acteAddressOf(client) {
   const morocco = filled(client?.address_morocco);
   const abroad = filled(client?.address_abroad);
@@ -133,9 +134,9 @@ export function acteAddressOf(client) {
   else if (morocco && !abroad) side = 'morocco';
   else if (abroad && !morocco) side = 'abroad';
   if (!side) return null;
-  const address = client[`address_${side}`];
-  const city = client[`city_${side}`];
-  return filled(city) ? `${address}, ${city}` : address;
+  const parts = [client[`address_${side}`], client[`city_${side}`]];
+  if (side === 'abroad') parts.push(client.country_abroad);
+  return parts.filter(filled).join(', ');
 }
 
 /** 'AAAA-MM-JJ' -> 'JJ/MM/AAAA' (sans passer par Date : pas de décalage de fuseau). */
@@ -157,7 +158,7 @@ export function describeAcquisition(client) {
 
 const SEARCH_FIELDS = [
   'name', 'first_name', 'last_name', 'maiden_name', 'phone', 'whatsapp', 'cin', 'email',
-  'city_morocco', 'city_abroad',
+  'city_morocco', 'city_abroad', 'country_abroad',
 ];
 
 /** Recherche locale (insensible à la casse) sur les mêmes champs que l'API. */

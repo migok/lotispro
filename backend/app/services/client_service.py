@@ -41,6 +41,7 @@ class ClientService:
         "city_morocco",
         "address_abroad",
         "city_abroad",
+        "country_abroad",
         "acte_address",
     )
 

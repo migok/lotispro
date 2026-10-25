@@ -89,6 +89,8 @@ def validate_client_profile(state: dict) -> dict:
     ):
         if has_address and not _filled(state.get(city_field)):
             raise ValidationError("Indiquez la ville", field=city_field)
+    if has_abroad and not _filled(state.get("country_abroad")):
+        raise ValidationError("Indiquez le pays", field="country_abroad")
     acte = state.get("acte_address")
     result = dict(state)
     if has_morocco and has_abroad and not acte:
@@ -110,8 +112,9 @@ def acte_address_of(client: object) -> str | None:
     """Address printed on legal documents (actes) for a client.
 
     The chosen address when ``acte_address`` is set and filled, otherwise the
-    only filled address, otherwise None. The city is appended ("<address>,
-    <city>") when known (legacy records may have none).
+    only filled address, otherwise None. The city (and, for the foreign address,
+    the country) is appended ("<address>, <city>, <country>") when known;
+    legacy records may have none.
     """
     morocco = getattr(client, "address_morocco", None)
     abroad = getattr(client, "address_abroad", None)
@@ -127,5 +130,7 @@ def acte_address_of(client: object) -> str | None:
     else:
         return None
     address = morocco if side == "morocco" else abroad
-    city = getattr(client, f"city_{side}", None)
-    return f"{address}, {city}" if _filled(city) else address
+    parts = [address, getattr(client, f"city_{side}", None)]
+    if side == "abroad":
+        parts.append(getattr(client, "country_abroad", None))
+    return ", ".join(part for part in parts if _filled(part))

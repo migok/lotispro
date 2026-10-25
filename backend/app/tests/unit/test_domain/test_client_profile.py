@@ -89,6 +89,7 @@ class TestValidateClientProfile:
             "city_morocco": "Casablanca",
             "address_abroad": "Lyon",
             "city_abroad": "Lyon",
+            "country_abroad": "France",
         }
         with pytest.raises(ValidationError) as exc:
             validate_client_profile(state)
@@ -103,7 +104,12 @@ class TestValidateClientProfile:
     ) -> None:
         city_field = address_field.replace("address", "city")
         result = validate_client_profile(
-            {**VALID, address_field: "Quelque part", city_field: "Ville"}
+            {
+                **VALID,
+                address_field: "Quelque part",
+                city_field: "Ville",
+                "country_abroad": "France",
+            }
         )
         assert result["acte_address"] == expected
 
@@ -140,8 +146,38 @@ class TestValidateClientProfile:
         assert exc.value.details["field"] == city_field
         assert exc.value.message == "Indiquez la ville"
 
+    @pytest.mark.parametrize("blank", [None, "  "])
+    def test_rule8_country_required_with_abroad_address(
+        self, blank: str | None
+    ) -> None:
+        state = {
+            **VALID,
+            "address_abroad": "Quelque part",
+            "city_abroad": "Lyon",
+            "country_abroad": blank,
+        }
+        with pytest.raises(ValidationError) as exc:
+            validate_client_profile(state)
+        assert exc.value.details["field"] == "country_abroad"
+        assert exc.value.message == "Indiquez le pays"
+
+    def test_rule8_city_is_checked_before_country(self) -> None:
+        state = {**VALID, "address_abroad": "Quelque part"}
+        with pytest.raises(ValidationError) as exc:
+            validate_client_profile(state)
+        assert exc.value.details["field"] == "city_abroad"
+
+    def test_country_not_required_without_abroad_address(self) -> None:
+        state = {**VALID, "address_morocco": "Casa", "city_morocco": "Casablanca"}
+        assert validate_client_profile(state)["acte_address"] == "morocco"
+
     def test_valid_state_with_city_is_returned_completed(self) -> None:
-        state = {**VALID, "address_abroad": "Lyon", "city_abroad": "Lyon"}
+        state = {
+            **VALID,
+            "address_abroad": "Lyon",
+            "city_abroad": "Lyon",
+            "country_abroad": "France",
+        }
         assert validate_client_profile(state) == {**state, "acte_address": "abroad"}
 
 
@@ -153,6 +189,7 @@ class TestActeAddressOf:
             "address_abroad": None,
             "city_morocco": None,
             "city_abroad": None,
+            "country_abroad": None,
             "acte_address": None,
         }
         return SimpleNamespace(**{**defaults, **fields})
@@ -183,9 +220,10 @@ class TestActeAddressOf:
             city_morocco="Casablanca",
             address_abroad="Lyon",
             city_abroad="Paris",
+            country_abroad="France",
             acte_address="abroad",
         )
-        assert acte_address_of(client) == "Lyon, Paris"
+        assert acte_address_of(client) == "Lyon, Paris, France"
         client.acte_address = "morocco"
         assert acte_address_of(client) == "Casa, Casablanca"
 
@@ -195,3 +233,18 @@ class TestActeAddressOf:
             acte_address_of(self._client(address_morocco="Casa", city_morocco=" "))
             == "Casa"
         )
+
+    def test_legacy_abroad_address_without_country_is_omitted(self) -> None:
+        client = self._client(address_abroad="Lyon", city_abroad="Paris")
+        assert acte_address_of(client) == "Lyon, Paris"
+        client.country_abroad = "  "
+        assert acte_address_of(client) == "Lyon, Paris"
+
+    def test_country_only_applies_to_the_abroad_address(self) -> None:
+        client = self._client(
+            address_morocco="Casa",
+            city_morocco="Casablanca",
+            country_abroad="France",
+            acte_address="morocco",
+        )
+        assert acte_address_of(client) == "Casa, Casablanca"

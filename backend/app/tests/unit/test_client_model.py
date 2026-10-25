@@ -15,3 +15,7 @@ def test_user_last_name_untouched() -> None:
 def test_client_cities_length_100() -> None:
     assert ClientModel.__table__.c.city_morocco.type.length == 100
     assert ClientModel.__table__.c.city_abroad.type.length == 100
+
+
+def test_client_country_abroad_length_100() -> None:
+    assert ClientModel.__table__.c.country_abroad.type.length == 100

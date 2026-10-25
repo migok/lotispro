@@ -89,13 +89,25 @@ describe('validateClientForm', () => {
     expect(abroad.city_morocco).toBeUndefined()
   })
 
+  it('requires a country for the foreign address only', () => {
+    const abroad = validateClientForm({
+      ...base, address_abroad: 'Lyon', city_abroad: 'Paris', acte_address: 'morocco',
+    })
+    expect(abroad.country_abroad).toBe('Indiquez le pays')
+    expect(
+      validateClientForm({ ...base, address_abroad: 'Lyon', city_abroad: 'Paris', country_abroad: ' ' })
+        .country_abroad
+    ).toBe('Indiquez le pays')
+    expect(validateClientForm(base).country_abroad).toBeUndefined()
+  })
+
   it('flags a legacy client (last_name null, only name) as missing the last name', () => {
     const errors = validateClientForm({ ...base, last_name: null, name: 'Ancien Client' })
     expect(errors.last_name).toBe('Champ obligatoire')
   })
 
   it('requires the acte address only when both addresses are filled', () => {
-    const both = { ...base, address_abroad: 'Lyon', city_abroad: 'Paris' }
+    const both = { ...base, address_abroad: 'Lyon', city_abroad: 'Paris', country_abroad: 'France' }
     expect(validateClientForm(both).acte_address).toBeDefined()
     expect(validateClientForm({ ...both, acte_address: 'abroad' })).toEqual({})
     expect(validateClientForm(base)).toEqual({})
@@ -126,6 +138,18 @@ describe('acteAddressOf', () => {
     expect(acteAddressOf({ ...both, acte_address: 'abroad' })).toBe('Lyon, Paris')
     expect(acteAddressOf({ ...both, acte_address: 'morocco' })).toBe('Casa, Casablanca')
     expect(acteAddressOf({ address_morocco: 'Casa', city_morocco: ' ' })).toBe('Casa')
+  })
+
+  it('appends the country to the foreign address only, omitting it when empty', () => {
+    const both = {
+      address_morocco: 'Casa', city_morocco: 'Casablanca', country_abroad: 'France',
+      address_abroad: 'Lyon', city_abroad: 'Paris',
+    }
+    expect(acteAddressOf({ ...both, acte_address: 'abroad' })).toBe('Lyon, Paris, France')
+    expect(acteAddressOf({ ...both, acte_address: 'morocco' })).toBe('Casa, Casablanca')
+    expect(
+      acteAddressOf({ address_abroad: 'Lyon', city_abroad: 'Paris', country_abroad: ' ' })
+    ).toBe('Lyon, Paris')
   })
 })
 
