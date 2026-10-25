@@ -11,6 +11,12 @@
 
 ## Périmètre
 
+### E4-T0 Correctif PDF : police Unicode (ajouté le 2026-10-25, issue #49)
+- Les PDF d'acte et de reçu (`certificate_service.py`, fpdf2 + Helvetica) échouent en 500 (`FPDFUnicodeEncodingException`) sur tout caractère hors latin-1 : apostrophe typographique `’` (claviers mobiles), guillemets `“ ”`, écriture arabe.
+- Embarquer une police Unicode TTF (DejaVuSans regular + bold) et l'enregistrer via `pdf.add_font` pour tous les textes ; arabe : `set_text_shaping(True)` si disponible, sinon au minimum aucun crash.
+- Tests : certificat et reçu avec `’`, `“ ”`, « Côte d’Ivoire », « وجدة » → PDF valide ; `GET /api/reservations/{id}/certificate` → 200.
+- **Prérequis d'E4-T1** (l'acte devient automatique à l'engagement : un échec PDF ne doit plus arriver pour un caractère courant).
+
 ### E4-T1 Acte généré automatiquement
 - Sur **toute** arrivée en `reservation_engagee` (`direct-engage`, `engage`, `option-engage`), l'acte PDF est généré et
   enregistré comme document du lot (`document_service`, catégorie `acte_reservation`), dans la même requête.
@@ -42,6 +48,7 @@
 - Le job est une fonction testable `send_expiration_reminders(now) -> int` indépendante du scheduler.
 
 ## Critères d'acceptance (ticket Asana)
+- [ ] Les PDF acceptent les caractères hors latin-1 (’, “ ”, arabe) sans erreur.
 - [ ] L'acte est généré automatiquement sans action manuelle, données correctes, accessible depuis fiche lot et client, PDF téléchargeable.
 - [ ] Interface de choix des canaux après chaque étape, préférences pré-cochées.
 - [ ] Envoi effectif par email ; historique visible sur fiche lot et client.

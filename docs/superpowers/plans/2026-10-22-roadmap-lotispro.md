@@ -83,6 +83,7 @@ Chaque ligne = une sous-issue GitHub. Le détail (fichiers, tests, critères) es
 - [ ] **E3-T5** Frontend : paramètres projet, actions filtrées, écrans EDL, couleurs
 
 ### E4 — 🔄 #8 Réservation
+- [ ] **E4-T0** Correctif PDF : police Unicode (apostrophe typographique, arabe) — #49, à faire en premier
 - [ ] **E4-T1** Acte PDF généré automatiquement à l'engagement et stocké en document (+ vérif. sélection lot/client)
 - [ ] **E4-T2** Service de notifications (interface canal, email, table `notifications`, API)
 - [ ] **E4-T3** UI choix des canaux après chaque étape + historique fiche lot / client
