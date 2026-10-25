@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
+from app.domain.lot_workflow import DEFAULT_ENABLED_OPTIONAL, assert_transition_allowed
 from app.domain.schemas.lot import LotResponse
 from app.domain.schemas.payment import InstallmentConfig
 from app.domain.schemas.reservation import (
@@ -171,6 +172,9 @@ class ReservationService:
                 message=f"Lot is not available (current status: {lot.status})",
                 rule="lot_not_available",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "start_option", lot.status
+        )
 
         client = await self.client_repo.get_by_id(data.client_id)
         if not client:
@@ -187,8 +191,12 @@ class ReservationService:
             notes=data.notes,
         )
 
-        await self.lot_repo.update(
-            lot_id, status="option", current_reservation_id=reservation.id
+        await self.lot_repo.change_status(
+            lot_id,
+            new_status,
+            transition="start_option",
+            user_id=user_id,
+            reservation_id=reservation.id,
         )
 
         logger.info(
@@ -225,6 +233,9 @@ class ReservationService:
                 message=f"Lot is not in option status (current: {lot.status})",
                 rule="invalid_lot_status",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "cancel_option", lot.status
+        )
 
         if lot.current_reservation_id:
             reservation = await self.reservation_repo.get_by_id(
@@ -246,7 +257,13 @@ class ReservationService:
                 )
                 await self.payment_repo.delete_by_reservation(reservation.id)
 
-        await self.lot_repo.release_lot(lot_id, status="available")
+        await self.lot_repo.change_status(
+            lot_id,
+            new_status,
+            transition="cancel_option",
+            user_id=user_id,
+            clear_reservation=True,
+        )
 
         logger.info("Option cancelled", lot_id=lot_id, user_id=user_id)
         updated_lot = await self.lot_repo.get_by_id(lot_id)
@@ -279,6 +296,9 @@ class ReservationService:
                 message=f"Lot is not available (current status: {lot.status})",
                 rule="lot_not_available",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "direct_reservation", lot.status
+        )
 
         client = await self.client_repo.get_by_id(data.client_id)
         if not client:
@@ -300,10 +320,12 @@ class ReservationService:
             payment_type=data.payment_type,
         )
 
-        await self.lot_repo.update(
+        await self.lot_repo.change_status(
             lot_id,
-            status="reservation_a_finaliser",
-            current_reservation_id=reservation.id,
+            new_status,
+            transition="direct_reservation",
+            user_id=user_id,
+            reservation_id=reservation.id,
         )
 
         logger.info(
@@ -445,6 +467,9 @@ class ReservationService:
                 message=f"Lot is not available (current status: {lot.status})",
                 rule="lot_not_available",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "direct_engage", lot.status
+        )
 
         client = await self.client_repo.get_by_id(data.client_id)
         if not client:
@@ -489,10 +514,12 @@ class ReservationService:
 
         await self.reservation_repo.update(reservation.id, **reservation_update)
 
-        await self.lot_repo.update(
+        await self.lot_repo.change_status(
             lot_id,
-            status="reservation_engagee",
-            current_reservation_id=reservation.id,
+            new_status,
+            transition="direct_engage",
+            user_id=user_id,
+            reservation_id=reservation.id,
         )
 
         # Create payment schedule if plan provided
@@ -544,6 +571,9 @@ class ReservationService:
                 message=f"Lot must be in option status (current: {lot.status})",
                 rule="invalid_lot_status",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "to_reservation", lot.status
+        )
 
         if not lot.current_reservation_id:
             raise BusinessRuleError(
@@ -569,7 +599,9 @@ class ReservationService:
             notes=data.notes or reservation.notes,
         )
 
-        await self.lot_repo.update(lot_id, status="reservation_a_finaliser")
+        await self.lot_repo.change_status(
+            lot_id, new_status, transition="to_reservation", user_id=user_id
+        )
 
         logger.info(
             "Lot moved to reservation_a_finaliser",
@@ -604,6 +636,9 @@ class ReservationService:
                 message=f"Lot must be in reservation_a_finaliser status (current: {lot.status})",
                 rule="invalid_lot_status",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "refund", lot.status
+        )
 
         if lot.current_reservation_id:
             reservation = await self.reservation_repo.get_by_id(
@@ -627,7 +662,13 @@ class ReservationService:
                 )
                 await self.payment_repo.delete_by_reservation(reservation.id)
 
-        await self.lot_repo.release_lot(lot_id, status="available")
+        await self.lot_repo.change_status(
+            lot_id,
+            new_status,
+            transition="refund",
+            user_id=user_id,
+            clear_reservation=True,
+        )
 
         logger.info("Finaliser refund — lot back to available", lot_id=lot_id)
         updated_lot = await self.lot_repo.get_by_id(lot_id)
@@ -665,6 +706,9 @@ class ReservationService:
                 message=f"Lot must be in reservation_a_finaliser status (current: {lot.status})",
                 rule="invalid_lot_status",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "engage", lot.status
+        )
 
         current_reservation = None
         if lot.current_reservation_id:
@@ -723,7 +767,9 @@ class ReservationService:
                     current_reservation.id, **update_kwargs
                 )
 
-        await self.lot_repo.update(lot_id, status="reservation_engagee")
+        await self.lot_repo.change_status(
+            lot_id, new_status, transition="engage", user_id=user_id
+        )
 
         # Create payment schedule if plan provided
         # When guarantee is deducted it counts as first payment → subtract from plan base
@@ -836,6 +882,9 @@ class ReservationService:
                 message=f"Le lot doit être en statut réservation soldée (actuel : {lot.status})",
                 rule="invalid_lot_status",
             )
+        assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "set_notaire_intent", lot.status
+        )
 
         if not lot.current_reservation_id:
             raise BusinessRuleError(
@@ -895,6 +944,9 @@ class ReservationService:
                 message=f"Lot must be in reservation_engagee status (current: {lot.status})",
                 rule="invalid_lot_status",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "solde", lot.status
+        )
 
         if not lot.current_reservation_id:
             raise BusinessRuleError(
@@ -961,7 +1013,9 @@ class ReservationService:
         await self.reservation_repo.update(
             lot.current_reservation_id, status="converted"
         )
-        await self.lot_repo.update(lot_id, status="reservation_soldee")
+        await self.lot_repo.change_status(
+            lot_id, new_status, transition="solde", user_id=user_id
+        )
 
         project = await self.project_repo.get_by_id(lot.project_id)
         if project:
@@ -1015,6 +1069,9 @@ class ReservationService:
                 message=f"Lot must be in reservation_soldee status (current: {lot.status})",
                 rule="invalid_lot_status",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "notaire", lot.status
+        )
 
         # Guard : le client doit avoir exprimé son souhait de passer chez le notaire
         if lot.current_reservation_id:
@@ -1043,7 +1100,9 @@ class ReservationService:
                 notes=data.notes,
             )
 
-        await self.lot_repo.update(lot_id, status="chez_notaire")
+        await self.lot_repo.change_status(
+            lot_id, new_status, transition="notaire", user_id=user_id
+        )
 
         logger.info(
             "Lot moved to chez_notaire", lot_id=lot_id, notaire_id=data.notaire_id
@@ -1072,6 +1131,9 @@ class ReservationService:
                 message=f"Lot must be in chez_notaire status (current: {lot.status})",
                 rule="invalid_lot_status",
             )
+        assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "notaire_update", lot.status
+        )
 
         notaire = await self.notaire_repo.get_by_id(data.notaire_id)
         if not notaire:
@@ -1113,8 +1175,13 @@ class ReservationService:
                 message=f"Lot must be in chez_notaire status (current: {lot.status})",
                 rule="invalid_lot_status",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "proprietaire", lot.status
+        )
 
-        await self.lot_repo.update(lot_id, status="chez_proprietaire")
+        await self.lot_repo.change_status(
+            lot_id, new_status, transition="proprietaire", user_id=user_id
+        )
 
         if lot.current_reservation_id:
             await self.reservation_repo.update(
@@ -1151,9 +1218,16 @@ class ReservationService:
                 message=f"Cannot block lot with status '{lot.status}'",
                 rule="invalid_lot_status",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "block", lot.status
+        )
 
-        await self.lot_repo.update(
-            lot_id, status="blocked", blocked_reason=data.reason or ""
+        await self.lot_repo.change_status(
+            lot_id,
+            new_status,
+            transition="block",
+            user_id=user_id,
+            blocked_reason=data.reason or "",
         )
 
         logger.info("Lot blocked", lot_id=lot_id, reason=data.reason)
@@ -1181,8 +1255,17 @@ class ReservationService:
                 message=f"Lot is not blocked (current: {lot.status})",
                 rule="invalid_lot_status",
             )
+        new_status = assert_transition_allowed(
+            DEFAULT_ENABLED_OPTIONAL, "unblock", lot.status
+        )
 
-        await self.lot_repo.update(lot_id, status="available", blocked_reason="")
+        await self.lot_repo.change_status(
+            lot_id,
+            new_status,
+            transition="unblock",
+            user_id=user_id,
+            blocked_reason="",
+        )
 
         logger.info("Lot unblocked", lot_id=lot_id)
         updated_lot = await self.lot_repo.get_by_id(lot_id)

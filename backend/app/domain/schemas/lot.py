@@ -30,9 +30,6 @@ ACTIVE_LOT_STATUSES = (
     "chez_proprietaire",
 )
 
-# Statuses that can be set via direct lot update (not transition endpoints)
-DIRECT_UPDATE_STATUSES = ("creation", "available", "blocked")
-
 # Statuses that prevent lot deletion
 NON_DELETABLE_STATUSES = (
     "option",

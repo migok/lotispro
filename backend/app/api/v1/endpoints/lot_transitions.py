@@ -43,7 +43,7 @@ async def activate_lot(
     lot_service: LotServiceDep,
 ) -> LotResponse:
     """Activate a lot in creation status, transitioning it to available."""
-    return await lot_service.activate_lot(lot_id)
+    return await lot_service.activate_lot(lot_id, user_id=current_user.id)
 
 
 @router.post(

@@ -14,6 +14,7 @@ from app.core.exceptions import (
     StorageError,
 )
 from app.core.logging import get_logger
+from app.domain.lot_workflow import DEFAULT_ENABLED_OPTIONAL, assert_transition_allowed
 from app.domain.schemas.project import (
     ProjectCreate,
     ProjectFinancingPlanCreate,
@@ -1892,7 +1893,15 @@ class ProjectService:
                         and effective_surface
                         and effective_surface > 0
                     ):
-                        await self.lot_repo.update(existing_lot.id, status="available")
+                        new_status = assert_transition_allowed(
+                            DEFAULT_ENABLED_OPTIONAL, "activate", existing_lot.status
+                        )
+                        await self.lot_repo.change_status(
+                            existing_lot.id,
+                            new_status,
+                            transition="activate",
+                            user_id=user_id,
+                        )
                         activated += 1
                 else:
                     skipped += 1

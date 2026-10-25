@@ -282,6 +282,38 @@ class LotModel(Base):
     )
 
 
+class LotStatusHistoryModel(Base):
+    """One lot status change, written by ``LotRepository.change_status``."""
+
+    __tablename__ = "lot_status_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lot_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("lots.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    from_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    transition: Mapped[str] = mapped_column(String(30), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Reservation concerned by the change (no FK, like lots.current_reservation_id).
+    reservation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    __table_args__ = (
+        Index("ix_lot_status_history_lot_changed", "lot_id", "changed_at"),
+    )
+
+
 class ClientModel(Base):
     """Client ORM model."""
 

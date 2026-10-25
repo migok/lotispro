@@ -462,6 +462,7 @@ async def bulk_update_lot_metadata(
     count = await lot_service.bulk_update_lot_metadata(
         project_id=project_id,
         data=data,
+        user_id=current_user.id,
     )
     return {"updated": count, "message": f"{count} lot(s) mis à jour"}
 

@@ -370,9 +370,14 @@ class PaymentService:
             notes="Vente automatique — toutes les échéances réglées",
         )
 
-        # Update lot status to sold
+        # Update lot status to sold.
+        # Legacy path: "sold" is not a valid lot status (the DB check constraint
+        # rejects it) and bypasses the workflow; left as-is, see
+        # docs/AVANCEMENT.md "Anomalies constatées".
         lot_repo = LotRepository(self.session)
-        await lot_repo.release_lot(lot.id, "sold")
+        await lot_repo.release_lot(  # status-guard: legacy invalid "sold" status
+            lot.id, "sold"
+        )
 
         # Update project sold count
         if project:

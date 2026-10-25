@@ -184,8 +184,11 @@ class SaleService:
             notes=data.notes,
         )
 
-        # Update lot status
-        await self.lot_repo.update(
+        # Update lot status.
+        # Legacy path: "sold" is not a valid lot status (the DB check constraint
+        # rejects it) and bypasses the workflow; left as-is, see
+        # docs/AVANCEMENT.md "Anomalies constatées".
+        await self.lot_repo.update(  # status-guard: legacy invalid "sold" status
             data.lot_id,
             status="sold",
             current_reservation_id=None,

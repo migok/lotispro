@@ -11,6 +11,7 @@ from app.domain.schemas.common import (
     PaginationParams,
 )
 from app.domain.schemas.lot import LotCreate, LotFilter, LotResponse, LotUpdate
+from app.domain.schemas.lot_status_history import LotStatusHistoryResponse
 
 router = APIRouter()
 
@@ -122,6 +123,21 @@ async def get_lot(
     return await lot_service.get_lot(lot_id)
 
 
+@router.get(
+    "/{lot_id}/status-history",
+    response_model=list[LotStatusHistoryResponse],
+    summary="Historique des statuts du lot",
+    description="Changements de statut du lot, du plus récent au plus ancien.",
+)
+async def get_lot_status_history(
+    lot_id: int,
+    current_user: CurrentUser,
+    lot_service: LotServiceDep,
+) -> list[LotStatusHistoryResponse]:
+    """List the status changes of a lot, newest first."""
+    return await lot_service.get_status_history(lot_id)
+
+
 @router.post(
     "",
     response_model=LotResponse,
@@ -135,7 +151,7 @@ async def create_lot(
     lot_service: LotServiceDep,
 ) -> LotResponse:
     """Create a new lot."""
-    return await lot_service.create_lot(data)
+    return await lot_service.create_lot(data, user_id=current_user.id)
 
 
 @router.put(
@@ -151,7 +167,7 @@ async def update_lot(
     lot_service: LotServiceDep,
 ) -> LotResponse:
     """Update a lot."""
-    return await lot_service.update_lot(lot_id, data)
+    return await lot_service.update_lot(lot_id, data, user_id=current_user.id)
 
 
 @router.delete(
