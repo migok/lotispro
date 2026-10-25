@@ -15,6 +15,8 @@ const fillRequired = async (user) => {
   await fill(user, 'Nom *', 'Benali')
   await fill(user, 'Prénom *', 'Fatima')
   await fill(user, 'Téléphone *', '0612345678')
+  await fill(user, 'Adresse Maroc', '12 rue X')
+  await fill(user, 'Ville (Maroc) *', 'Casablanca')
   await user.selectOptions(screen.getByLabelText("Canal d'acquisition *"), 'smap')
 }
 
@@ -28,7 +30,8 @@ describe('ClientForm', () => {
     renderWithProviders(<ClientForm onSubmit={vi.fn()} />)
     const labels = [
       'Nom *', 'Nom de jeune fille', 'Prénom *', 'CIN', 'Téléphone *',
-      'WhatsApp', 'Email', 'Adresse Maroc', 'Adresse étranger',
+      'WhatsApp', 'Email', 'Adresse Maroc', 'Ville (Maroc)',
+      "Adresse à l'étranger", 'Ville (étranger)',
     ]
     // « WhatsApp » existe aussi comme canal de notification (plus bas) : on prend le 1er.
     const elements = labels.map((l) => screen.getAllByLabelText(l)[0])
@@ -58,9 +61,9 @@ describe('ClientForm', () => {
     const user = userEvent.setup()
     renderWithProviders(<ClientForm onSubmit={vi.fn()} />)
 
-    await fill(user, 'Adresse Maroc', '12 rue X, Casablanca')
+    await fill(user, 'Adresse Maroc', '12 rue X')
     expect(screen.queryByText(/Adresse utilisée pour les actes/)).not.toBeInTheDocument()
-    await fill(user, 'Adresse étranger', '5 rue Y, Paris')
+    await fill(user, "Adresse à l'étranger", '5 rue Y')
     expect(screen.getByText(/Adresse utilisée pour les actes/)).toBeInTheDocument()
   })
 
@@ -88,6 +91,39 @@ describe('ClientForm', () => {
 
     expect(onSubmit).not.toHaveBeenCalled()
     expect(screen.getAllByText('Champ obligatoire')).toHaveLength(4)
+    expect(
+      screen.getByText('Renseignez au moins une adresse (Maroc ou étranger)')
+    ).toBeInTheDocument()
+  })
+
+  it('marks the city required once its address is filled and blocks submit without it', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    renderWithProviders(<ClientForm onSubmit={onSubmit} />)
+    await fillRequired(user)
+    await fill(user, "Adresse à l'étranger", '5 rue Y')
+    expect(screen.getByLabelText('Ville (étranger) *')).toBeInTheDocument()
+    await user.click(screen.getByLabelText('Étranger'))
+
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText('Indiquez la ville')).toBeInTheDocument()
+  })
+
+  it('always shows the acte notice and the printed address once determined', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ClientForm onSubmit={vi.fn()} />)
+    expect(
+      screen.getByText(
+        "ℹ L'adresse utilisée pour les actes figurera sur l'acte de réservation et l'acte final."
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Adresse imprimée/)).not.toBeInTheDocument()
+
+    await fill(user, 'Adresse Maroc', '12 rue X')
+    await fill(user, 'Ville (Maroc) *', 'Casablanca')
+    expect(screen.getByText('Adresse imprimée : 12 rue X, Casablanca')).toBeInTheDocument()
   })
 
   it('maps server field errors under fields', async () => {

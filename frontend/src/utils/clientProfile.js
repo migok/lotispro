@@ -71,7 +71,15 @@ export function validateClientForm(values) {
     errors.acquisition_date = 'Indiquez quand';
   }
 
-  if (filled(values.address_morocco) && filled(values.address_abroad) && !values.acte_address) {
+  const hasMorocco = filled(values.address_morocco);
+  const hasAbroad = filled(values.address_abroad);
+  if (!hasMorocco && !hasAbroad) {
+    errors.address_morocco = 'Renseignez au moins une adresse (Maroc ou étranger)';
+  }
+  if (hasMorocco && !filled(values.city_morocco)) errors.city_morocco = 'Indiquez la ville';
+  if (hasAbroad && !filled(values.city_abroad)) errors.city_abroad = 'Indiquez la ville';
+
+  if (hasMorocco && hasAbroad && !values.acte_address) {
     errors.acte_address = "Choisissez l'adresse utilisée pour les actes";
   }
 
@@ -102,7 +110,7 @@ export function fieldErrorsFromApi(error) {
 /** Champs que ClientForm sait afficher en erreur (clés des erreurs serveur). */
 const FORM_FIELDS = new Set([
   'last_name', 'maiden_name', 'first_name', 'cin', 'phone', 'whatsapp', 'email',
-  'address_morocco', 'address_abroad', 'acte_address', 'acquisition_channel',
+  'address_morocco', 'city_morocco', 'address_abroad', 'city_abroad', 'acte_address', 'acquisition_channel',
   'acquisition_referrer', 'acquisition_date', 'client_type', 'notes',
 ]);
 
@@ -115,15 +123,19 @@ export function shouldToastClientError(error) {
   return !Object.keys(fieldErrorsFromApi(error)).some((field) => FORM_FIELDS.has(field));
 }
 
-/** Miroir de backend acte_address_of : l'adresse imprimée sur les actes. */
+/** Miroir de backend acte_address_of : « adresse, ville » imprimée sur les actes. */
 export function acteAddressOf(client) {
-  const morocco = filled(client?.address_morocco) ? client.address_morocco : null;
-  const abroad = filled(client?.address_abroad) ? client.address_abroad : null;
-  if (client?.acte_address === 'abroad' && abroad) return abroad;
-  if (client?.acte_address === 'morocco' && morocco) return morocco;
-  if (morocco && !abroad) return morocco;
-  if (abroad && !morocco) return abroad;
-  return null;
+  const morocco = filled(client?.address_morocco);
+  const abroad = filled(client?.address_abroad);
+  let side = null;
+  if (client?.acte_address === 'abroad' && abroad) side = 'abroad';
+  else if (client?.acte_address === 'morocco' && morocco) side = 'morocco';
+  else if (morocco && !abroad) side = 'morocco';
+  else if (abroad && !morocco) side = 'abroad';
+  if (!side) return null;
+  const address = client[`address_${side}`];
+  const city = client[`city_${side}`];
+  return filled(city) ? `${address}, ${city}` : address;
 }
 
 /** 'AAAA-MM-JJ' -> 'JJ/MM/AAAA' (sans passer par Date : pas de décalage de fuseau). */
@@ -145,6 +157,7 @@ export function describeAcquisition(client) {
 
 const SEARCH_FIELDS = [
   'name', 'first_name', 'last_name', 'maiden_name', 'phone', 'whatsapp', 'cin', 'email',
+  'city_morocco', 'city_abroad',
 ];
 
 /** Recherche locale (insensible à la casse) sur les mêmes champs que l'API. */

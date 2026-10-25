@@ -69,10 +69,24 @@ describe('validateClientForm', () => {
     first_name: 'Fatima',
     phone: '0612345678',
     acquisition_channel: 'smap',
+    address_morocco: '12 rue X',
+    city_morocco: 'Casablanca',
   }
 
   it('accepts a valid form', () => {
     expect(validateClientForm(base)).toEqual({})
+  })
+
+  it('requires at least one address', () => {
+    const errors = validateClientForm({ ...base, address_morocco: '', city_morocco: '' })
+    expect(errors.address_morocco).toBe('Renseignez au moins une adresse (Maroc ou étranger)')
+  })
+
+  it('requires a city for each filled address', () => {
+    expect(validateClientForm({ ...base, city_morocco: ' ' }).city_morocco).toBe('Indiquez la ville')
+    const abroad = validateClientForm({ ...base, address_abroad: 'Lyon', acte_address: 'morocco' })
+    expect(abroad.city_abroad).toBe('Indiquez la ville')
+    expect(abroad.city_morocco).toBeUndefined()
   })
 
   it('flags a legacy client (last_name null, only name) as missing the last name', () => {
@@ -81,10 +95,10 @@ describe('validateClientForm', () => {
   })
 
   it('requires the acte address only when both addresses are filled', () => {
-    const both = { ...base, address_morocco: 'Casa', address_abroad: 'Lyon' }
+    const both = { ...base, address_abroad: 'Lyon', city_abroad: 'Paris' }
     expect(validateClientForm(both).acte_address).toBeDefined()
     expect(validateClientForm({ ...both, acte_address: 'abroad' })).toEqual({})
-    expect(validateClientForm({ ...base, address_abroad: 'Lyon' })).toEqual({})
+    expect(validateClientForm(base)).toEqual({})
   })
 
   it('requires referrer and date for samsar', () => {
@@ -102,6 +116,16 @@ describe('acteAddressOf', () => {
     expect(acteAddressOf({ address_morocco: 'Casa' })).toBe('Casa')
     expect(acteAddressOf({ address_abroad: 'Lyon' })).toBe('Lyon')
     expect(acteAddressOf({})).toBeNull()
+  })
+
+  it('appends the city when known', () => {
+    const both = {
+      address_morocco: 'Casa', city_morocco: 'Casablanca',
+      address_abroad: 'Lyon', city_abroad: 'Paris',
+    }
+    expect(acteAddressOf({ ...both, acte_address: 'abroad' })).toBe('Lyon, Paris')
+    expect(acteAddressOf({ ...both, acte_address: 'morocco' })).toBe('Casa, Casablanca')
+    expect(acteAddressOf({ address_morocco: 'Casa', city_morocco: ' ' })).toBe('Casa')
   })
 })
 

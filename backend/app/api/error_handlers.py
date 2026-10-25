@@ -252,7 +252,7 @@ async def request_validation_handler(
     return create_error_response(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         error="VALIDATION_ERROR",
-        message="Request validation failed",
+        message="Certains champs sont invalides",
         details=details,
     )
 

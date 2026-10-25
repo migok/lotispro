@@ -83,7 +83,13 @@ class TestValidateClientProfile:
         assert exc.value.details["field"] == "acquisition_date"
 
     def test_rule4_two_addresses_require_acte_address(self) -> None:
-        state = {**VALID, "address_morocco": "Casa", "address_abroad": "Lyon"}
+        state = {
+            **VALID,
+            "address_morocco": "Casa",
+            "city_morocco": "Casablanca",
+            "address_abroad": "Lyon",
+            "city_abroad": "Lyon",
+        }
         with pytest.raises(ValidationError) as exc:
             validate_client_profile(state)
         assert exc.value.details["field"] == "acte_address"
@@ -95,17 +101,48 @@ class TestValidateClientProfile:
     def test_rule5_single_address_infers_acte_address(
         self, address_field: str, expected: str
     ) -> None:
-        result = validate_client_profile({**VALID, address_field: "Quelque part"})
+        city_field = address_field.replace("address", "city")
+        result = validate_client_profile(
+            {**VALID, address_field: "Quelque part", city_field: "Ville"}
+        )
         assert result["acte_address"] == expected
 
     def test_rule6_acte_address_points_to_empty_address(self) -> None:
-        state = {**VALID, "address_morocco": "Casa", "acte_address": "abroad"}
+        state = {
+            **VALID,
+            "address_morocco": "Casa",
+            "city_morocco": "Casablanca",
+            "acte_address": "abroad",
+        }
         with pytest.raises(ValidationError) as exc:
             validate_client_profile(state)
         assert exc.value.details["field"] == "acte_address"
 
-    def test_valid_state_without_addresses_is_returned_unchanged(self) -> None:
-        assert validate_client_profile(VALID) == VALID
+    @pytest.mark.parametrize("blank", [None, "", "  "])
+    def test_rule7_requires_at_least_one_address(self, blank: str | None) -> None:
+        state = {**VALID, "address_morocco": blank, "address_abroad": blank}
+        with pytest.raises(ValidationError) as exc:
+            validate_client_profile(state)
+        assert exc.value.details["field"] == "address_morocco"
+        assert (
+            exc.value.message == "Renseignez au moins une adresse (Maroc ou étranger)"
+        )
+
+    @pytest.mark.parametrize("address_field", ["address_morocco", "address_abroad"])
+    @pytest.mark.parametrize("blank", [None, "  "])
+    def test_rule8_city_required_with_address(
+        self, address_field: str, blank: str | None
+    ) -> None:
+        city_field = address_field.replace("address", "city")
+        state = {**VALID, address_field: "Quelque part", city_field: blank}
+        with pytest.raises(ValidationError) as exc:
+            validate_client_profile(state)
+        assert exc.value.details["field"] == city_field
+        assert exc.value.message == "Indiquez la ville"
+
+    def test_valid_state_with_city_is_returned_completed(self) -> None:
+        state = {**VALID, "address_abroad": "Lyon", "city_abroad": "Lyon"}
+        assert validate_client_profile(state) == {**state, "acte_address": "abroad"}
 
 
 class TestActeAddressOf:
@@ -114,6 +151,8 @@ class TestActeAddressOf:
         defaults = {
             "address_morocco": None,
             "address_abroad": None,
+            "city_morocco": None,
+            "city_abroad": None,
             "acte_address": None,
         }
         return SimpleNamespace(**{**defaults, **fields})
@@ -137,3 +176,22 @@ class TestActeAddressOf:
     def test_no_address(self) -> None:
         assert acte_address_of(self._client()) is None
         assert acte_address_of(self._client(address_morocco="  ")) is None
+
+    def test_city_is_appended(self) -> None:
+        client = self._client(
+            address_morocco="Casa",
+            city_morocco="Casablanca",
+            address_abroad="Lyon",
+            city_abroad="Paris",
+            acte_address="abroad",
+        )
+        assert acte_address_of(client) == "Lyon, Paris"
+        client.acte_address = "morocco"
+        assert acte_address_of(client) == "Casa, Casablanca"
+
+    def test_missing_city_is_omitted(self) -> None:
+        assert acte_address_of(self._client(address_morocco="Casa")) == "Casa"
+        assert (
+            acte_address_of(self._client(address_morocco="Casa", city_morocco=" "))
+            == "Casa"
+        )

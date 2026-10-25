@@ -21,8 +21,10 @@ FULL_PAYLOAD = {
     "phone": "+212612345678",
     "whatsapp": "+212612345679",
     "email": "fatima@example.com",
-    "address_morocco": "12 rue des Orangers, Casablanca",
-    "address_abroad": "5 avenue de Paris, Lyon",
+    "address_morocco": "12 rue des Orangers",
+    "city_morocco": "Casablanca",
+    "address_abroad": "5 avenue de Paris",
+    "city_abroad": "Lyon",
     "acte_address": "abroad",
     "acquisition_channel": "samsar",
     "acquisition_referrer": "Karim",
@@ -35,7 +37,13 @@ async def make_complete_client(db_session: AsyncSession, **overrides: Any):
     """A client satisfying every required-field rule (valid to edit)."""
     return await make_client(
         db_session,
-        **{"first_name": "Fatima", "acquisition_channel": "smap", **overrides},
+        **{
+            "first_name": "Fatima",
+            "acquisition_channel": "smap",
+            "address_morocco": "12 rue des Orangers",
+            "city_morocco": "Casablanca",
+            **overrides,
+        },
     )
 
 
@@ -222,6 +230,7 @@ class TestClientProfile:
             db_session,
             acquisition_channel="smap",
             address_abroad="Lyon",
+            city_abroad="Lyon",
             acte_address="abroad",
         )
 
@@ -234,6 +243,7 @@ class TestClientProfile:
         assert data["acquisition_channel"] == "smap"
         assert data["address_abroad"] == "Lyon"
         assert data["acte_address"] == "abroad"
+        assert data["city_abroad"] == "Lyon"
 
     @pytest.mark.integration
     async def test_update_legacy_client_keeps_name_as_last_name(
@@ -243,7 +253,13 @@ class TestClientProfile:
         commercial: UserModel,
         auth_headers: Callable[[UserModel], dict[str, str]],
     ) -> None:
-        legacy = await make_client(db_session, name="Ancien Client", last_name=None)
+        legacy = await make_client(
+            db_session,
+            name="Ancien Client",
+            last_name=None,
+            address_morocco="1 rue X",
+            city_morocco="Rabat",
+        )
 
         response = await client.put(
             f"/api/clients/{legacy.id}",
@@ -367,7 +383,12 @@ class TestClientValidation:
         commercial: UserModel,
         auth_headers: Callable[[UserModel], dict[str, str]],
     ) -> None:
-        payload = {**FULL_PAYLOAD, "address_abroad": None, "acte_address": None}
+        payload = {
+            **FULL_PAYLOAD,
+            "address_abroad": None,
+            "city_abroad": None,
+            "acte_address": None,
+        }
         response = await client.post(
             "/api/clients", json=payload, headers=auth_headers(commercial)
         )
@@ -534,12 +555,18 @@ class TestClientValidation:
         commercial: UserModel,
         auth_headers: Callable[[UserModel], dict[str, str]],
     ) -> None:
-        existing = await make_complete_client(db_session)
+        existing = await make_complete_client(
+            db_session,
+            address_morocco=None,
+            city_morocco=None,
+            address_abroad="Lyon",
+            city_abroad="Lyon",
+        )
         headers = auth_headers(commercial)
 
         put = await client.put(
             f"/api/clients/{existing.id}",
-            json={"address_abroad": "5 avenue de Paris, Lyon"},
+            json={"address_abroad": "5 avenue de Paris", "city_abroad": "Paris"},
             headers=headers,
         )
         assert put.status_code == 200
@@ -627,8 +654,10 @@ class TestClientValidation:
     ) -> None:
         buyer = await make_complete_client(
             db_session,
-            address_morocco="12 rue des Orangers, Casablanca",
-            address_abroad="5 avenue de Paris, Lyon",
+            address_morocco="12 rue des Orangers",
+            city_morocco="Casablanca",
+            address_abroad="4 rue des murgers",
+            city_abroad="Paris",
             acte_address="abroad",
         )
         project = await make_project(db_session, manager)
@@ -658,4 +687,83 @@ class TestClientValidation:
         )
 
         assert details is not None
-        assert details["client_address"] == "5 avenue de Paris, Lyon"
+        assert details["client_address"] == "4 rue des murgers, Paris"
+
+    @pytest.mark.integration
+    async def test_create_requires_at_least_one_address(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        address_keys = (
+            "address_morocco",
+            "city_morocco",
+            "address_abroad",
+            "city_abroad",
+        )
+        payload = {k: v for k, v in FULL_PAYLOAD.items() if k not in address_keys}
+        payload["acte_address"] = None
+        response = await client.post(
+            "/api/clients", json=payload, headers=auth_headers(commercial)
+        )
+
+        assert response.status_code == 422
+        detail = response.json()["details"][0]
+        assert detail["field"].endswith("address_morocco")
+        assert (
+            detail["message"] == "Renseignez au moins une adresse (Maroc ou étranger)"
+        )
+
+    @pytest.mark.integration
+    async def test_create_abroad_address_requires_city(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "city_abroad": None},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        detail = response.json()["details"][0]
+        assert detail["field"].endswith("city_abroad")
+        assert detail["message"] == "Indiquez la ville"
+
+    @pytest.mark.integration
+    async def test_search_by_city(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        target = await make_complete_client(db_session, city_morocco="Tanger")
+        await make_complete_client(db_session)
+
+        response = await client.get(
+            "/api/clients",
+            params={"search": "tang"},
+            headers=auth_headers(commercial),
+        )
+
+        assert [c["id"] for c in response.json()] == [target.id]
+
+    @pytest.mark.integration
+    async def test_validation_error_top_level_message_is_french(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients", json={}, headers=auth_headers(commercial)
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["error"] == "VALIDATION_ERROR"
+        assert body["message"] == "Certains champs sont invalides"

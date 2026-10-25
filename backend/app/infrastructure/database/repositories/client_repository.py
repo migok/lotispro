@@ -26,7 +26,7 @@ class ClientRepository(BaseRepository[ClientModel]):
         """Get clients with filtering.
 
         Args:
-            search: Search term for name parts, phone, WhatsApp, CIN or email
+            search: Search term for name parts, phone, WhatsApp, CIN, email or city
             client_type: Filter by client type
             offset: Pagination offset
             limit: Pagination limit
@@ -48,6 +48,8 @@ class ClientRepository(BaseRepository[ClientModel]):
                     ClientModel.whatsapp.ilike(search_term),
                     ClientModel.cin.ilike(search_term),
                     ClientModel.email.ilike(search_term),
+                    ClientModel.city_morocco.ilike(search_term),
+                    ClientModel.city_abroad.ilike(search_term),
                 )
             )
 
@@ -244,7 +246,9 @@ class ClientRepository(BaseRepository[ClientModel]):
             "first_name": client.first_name,
             "maiden_name": client.maiden_name,
             "whatsapp": client.whatsapp,
+            "city_morocco": client.city_morocco,
             "address_abroad": client.address_abroad,
+            "city_abroad": client.city_abroad,
             "acte_address": client.acte_address,
             "acquisition_channel": client.acquisition_channel,
             "acquisition_referrer": client.acquisition_referrer,

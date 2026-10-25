@@ -894,21 +894,24 @@ export default function ClientDetailPage() {
                 <h4 className="cd-subsection-title">Adresses</h4>
                 <div className="cd-info-rows">
                   {[
-                    ['morocco', 'Maroc', client.address_morocco],
-                    ['abroad', 'Étranger', client.address_abroad],
-                  ].filter(([, , value]) => value).map(([key, label, value]) => (
+                    ['morocco', 'Maroc', client.address_morocco, client.city_morocco],
+                    ['abroad', 'Étranger', client.address_abroad, client.city_abroad],
+                  ].filter(([, , value]) => value).map(([key, label, value, city]) => {
+                    const full = city ? `${value}, ${city}` : value;
+                    return (
                     <div className="cd-info-row" key={key}>
                       <span className="cd-info-icon"><IconNote /></span>
                       <span className="cd-info-val">
-                        {label} : {value}
-                        {value === acteAddressOf(client) && (
+                        {label} : {full}
+                        {full === acteAddressOf(client) && (
                           <>
                             {' '}<span className="badge badge-gold" title="Adresse utilisée pour les actes">Actes</span>
                           </>
                         )}
                       </span>
                     </div>
-                  ))}
+                    );
+                  })}
                   {!client.address_morocco && !client.address_abroad && (
                     <div className="cd-info-row"><span className="cd-info-val">—</span></div>
                   )}

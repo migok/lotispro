@@ -38,7 +38,9 @@ class ClientService:
         "acquisition_referrer",
         "acquisition_date",
         "address_morocco",
+        "city_morocco",
         "address_abroad",
+        "city_abroad",
         "acte_address",
     )
 

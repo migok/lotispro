@@ -13,8 +13,10 @@ const CLIENT = {
   whatsapp: '+212612345679',
   email: 'fatima@exemple.ma',
   cin: 'AB123456',
-  address_morocco: '12 rue des Orangers, Casablanca',
-  address_abroad: '5 avenue de Paris, Lyon',
+  address_morocco: '12 rue des Orangers',
+  city_morocco: 'Casablanca',
+  address_abroad: '5 avenue de Paris',
+  city_abroad: 'Lyon',
   acte_address: 'abroad',
   acquisition_channel: 'samsar',
   acquisition_referrer: 'Karim',
@@ -63,6 +65,8 @@ describe('ClientDetailPage - fiche client', () => {
 
     const morocco = await screen.findByText(/12 rue des Orangers/)
     const abroad = screen.getByText(/5 avenue de Paris/)
+    expect(abroad).toHaveTextContent('Étranger : 5 avenue de Paris, Lyon')
+    expect(morocco).toHaveTextContent('Maroc : 12 rue des Orangers, Casablanca')
     expect(abroad).toHaveTextContent('Actes')
     expect(morocco).not.toHaveTextContent('Actes')
     expect(screen.getByTitle("Adresse utilisée pour les actes")).toBeInTheDocument()

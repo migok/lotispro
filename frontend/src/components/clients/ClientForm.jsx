@@ -3,6 +3,7 @@ import { apiGet } from '../../utils/api';
 import { CLIENT_TYPES } from '../../utils/constants';
 import {
   ACQUISITION_CHANNEL_LABELS,
+  acteAddressOf,
   NOTIFICATION_CHANNEL_LABELS,
   effectiveActeAddress,
   fieldErrorsFromApi,
@@ -19,7 +20,9 @@ const EMPTY_VALUES = {
   whatsapp: '',
   email: '',
   address_morocco: '',
+  city_morocco: '',
   address_abroad: '',
+  city_abroad: '',
   acte_address: '',
   acquisition_channel: '',
   acquisition_referrer: '',
@@ -88,6 +91,7 @@ export default function ClientForm({
     initialValues.last_name === initialValues.name;
 
   const hasBothAddresses = values.address_morocco.trim() && values.address_abroad.trim();
+  const printedAddress = acteAddressOf({ ...values, acte_address: effectiveActeAddress(values) });
   const channel = values.acquisition_channel;
   const needsReferrer = channel === 'recommandation' || channel === 'samsar';
 
@@ -228,10 +232,20 @@ export default function ClientForm({
       </section>
 
       <section className="client-form-section">
-        <h4 className="client-form-section-title">Adresses</h4>
+        <h4 className="client-form-section-title">Adresses * (au moins une)</h4>
         <div className="form-2col">
           {field('address_morocco', 'Adresse Maroc', text('address_morocco'))}
-          {field('address_abroad', 'Adresse étranger', text('address_abroad'))}
+          {field(
+            'city_morocco',
+            values.address_morocco.trim() ? 'Ville (Maroc) *' : 'Ville (Maroc)',
+            text('city_morocco')
+          )}
+          {field('address_abroad', "Adresse à l'étranger", text('address_abroad'))}
+          {field(
+            'city_abroad',
+            values.address_abroad.trim() ? 'Ville (étranger) *' : 'Ville (étranger)',
+            text('city_abroad')
+          )}
         </div>
         {hasBothAddresses && (
           <div className="field-group">
@@ -254,6 +268,12 @@ export default function ClientForm({
             </div>
             {errors.acte_address && <span className="client-form-error" role="alert">{errors.acte_address}</span>}
           </div>
+        )}
+        <p className="client-form-hint">
+          ℹ L&apos;adresse utilisée pour les actes figurera sur l&apos;acte de réservation et l&apos;acte final.
+        </p>
+        {printedAddress && (
+          <p className="client-form-hint">Adresse imprimée : {printedAddress}</p>
         )}
       </section>
 

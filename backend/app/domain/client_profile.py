@@ -78,6 +78,17 @@ def validate_client_profile(state: dict) -> dict:
 
     has_morocco = _filled(state.get("address_morocco"))
     has_abroad = _filled(state.get("address_abroad"))
+    if not (has_morocco or has_abroad):
+        raise ValidationError(
+            "Renseignez au moins une adresse (Maroc ou étranger)",
+            field="address_morocco",
+        )
+    for has_address, city_field in (
+        (has_morocco, "city_morocco"),
+        (has_abroad, "city_abroad"),
+    ):
+        if has_address and not _filled(state.get(city_field)):
+            raise ValidationError("Indiquez la ville", field=city_field)
     acte = state.get("acte_address")
     result = dict(state)
     if has_morocco and has_abroad and not acte:
@@ -99,17 +110,22 @@ def acte_address_of(client: object) -> str | None:
     """Address printed on legal documents (actes) for a client.
 
     The chosen address when ``acte_address`` is set and filled, otherwise the
-    only filled address, otherwise None.
+    only filled address, otherwise None. The city is appended ("<address>,
+    <city>") when known (legacy records may have none).
     """
     morocco = getattr(client, "address_morocco", None)
     abroad = getattr(client, "address_abroad", None)
     choice = getattr(client, "acte_address", None)
     if choice == "abroad" and _filled(abroad):
-        return abroad
-    if choice == "morocco" and _filled(morocco):
-        return morocco
-    if _filled(morocco) and not _filled(abroad):
-        return morocco
-    if _filled(abroad) and not _filled(morocco):
-        return abroad
-    return None
+        side = "abroad"
+    elif (choice == "morocco" and _filled(morocco)) or (
+        _filled(morocco) and not _filled(abroad)
+    ):
+        side = "morocco"
+    elif _filled(abroad) and not _filled(morocco):
+        side = "abroad"
+    else:
+        return None
+    address = morocco if side == "morocco" else abroad
+    city = getattr(client, f"city_{side}", None)
+    return f"{address}, {city}" if _filled(city) else address

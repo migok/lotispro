@@ -76,7 +76,9 @@ class ClientCreate(_ClientNormalizationMixin):
         default=None, max_length=30, description="National ID (CIN)"
     )
     address_morocco: str | None = Field(default=None, max_length=500)
+    city_morocco: str | None = Field(default=None, max_length=100)
     address_abroad: str | None = Field(default=None, max_length=500)
+    city_abroad: str | None = Field(default=None, max_length=100)
     acte_address: OptionalActeAddress = None
     acquisition_channel: AcquisitionChannel
     acquisition_referrer: str | None = Field(default=None, max_length=200)
@@ -99,7 +101,9 @@ class ClientUpdate(_ClientNormalizationMixin):
     email: EmailStr | None = None
     cin: str | None = Field(default=None, max_length=30)
     address_morocco: str | None = Field(default=None, max_length=500)
+    city_morocco: str | None = Field(default=None, max_length=100)
     address_abroad: str | None = Field(default=None, max_length=500)
+    city_abroad: str | None = Field(default=None, max_length=100)
     acte_address: OptionalActeAddress = None
     acquisition_channel: OptionalAcquisitionChannel = None
     acquisition_referrer: str | None = Field(default=None, max_length=200)
@@ -122,7 +126,9 @@ class ClientResponse(BaseSchema):
     email: str | None
     cin: str | None
     address_morocco: str | None = None
+    city_morocco: str | None = None
     address_abroad: str | None = None
+    city_abroad: str | None = None
     acte_address: str | None = None
     acquisition_channel: str | None = None
     acquisition_referrer: str | None = None
