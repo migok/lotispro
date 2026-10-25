@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-25 (E3-T1 : `lot_workflow` + historique des statuts)_
+_Dernière mise à jour : 2026-10-25 (E3-T1 : `lot_workflow` + historique des statuts ; correctif #50)_
 
 ## Vue d'ensemble
 
@@ -42,6 +42,7 @@ _Dernière mise à jour : 2026-10-25 (E3-T1 : `lot_workflow` + historique des st
 | E2-T5 | Villes, adresse obligatoire, notice acte | ✅ | — | [#48](https://github.com/migok/lotispro/pull/48) | 2026-10-25 |
 | E2-T6 | Pays de l'adresse à l'étranger | ✅ | — | [#48](https://github.com/migok/lotispro/pull/48) | 2026-10-25 |
 | E3-T1 | `lot_workflow` + `lot_status_history` | ✅ | [#24](https://github.com/migok/lotispro/issues/24) | | 2026-10-25 |
+| E3-FIX | Dernière échéance payée → 500 (#50) | ✅ | [#50](https://github.com/migok/lotispro/issues/50) | | 2026-10-25 |
 | E3-T2 | Statuts optionnels par projet | ⬜ | [#25](https://github.com/migok/lotispro/issues/25) | | |
 | E3-T3 | Transition option → engagée | ⬜ | [#26](https://github.com/migok/lotispro/issues/26) | | |
 | E3-T4 | États des lieux backend | ⬜ | [#27](https://github.com/migok/lotispro/issues/27) | | |
@@ -143,7 +144,7 @@ Relevés lors de E0-T3 (`test_lot_transitions.py`) ; le code applicatif n'a pas 
 
 Relevés lors de E3-T1 (`lot_workflow` + `lot_status_history`) :
 
-- **Statut `sold` écrit par deux chemins hérités** : `sale_service.create_sale` (`POST /api/sales`, `lot_repo.update(status="sold")`) et `payment_service._auto_convert_to_sale` (dernière échéance encaissée, `lot_repo.release_lot(lot.id, "sold")`). `sold` ne fait pas partie de la contrainte `valid_lot_status` : sur PostgreSQL ces écritures devraient échouer (non vérifié). Non recâblés sur `change_status` (pas d'historique), exemptés de la garde statique `test_no_direct_status_writes.py` par le marqueur `status-guard: legacy`.
+- ✅ **Corrigé ([#50](https://github.com/migok/lotispro/issues/50)) — statut `sold` écrit par deux chemins hérités** : payer la dernière échéance (`PATCH /api/payments/installments/{id}` → `_auto_convert_to_sale` → `release_lot(lot.id, "sold")`) renvoyait une 500 (contrainte `valid_lot_status`), de même que `POST /api/sales`. Décision utilisateur : plus de conversion automatique — l'échéance est enregistrée, le lot reste `reservation_engagee`, le commercial utilise « Marquer soldé ». `POST /api/sales` (inutilisé par l'UI) est refusé en 400 (`use_transition_endpoint`). `release_lot` supprimé.
 - **`PUT /api/lots/{id}` avec `status` depuis un statut du workflow** : auparavant seul le statut cible était contrôlé (`creation` / `available` / `blocked`), si bien qu'un lot en `option` (ou plus loin) pouvait être remis `available` ou `blocked` directement. La table `lot_workflow` (`direct_update` : depuis `creation`, `available`, `blocked` uniquement) refuse désormais ce cas (400, `invalid_lot_status`). Aucun test de caractérisation ne couvrait ce chemin.
 
 ## Recette E1 (plein écran)

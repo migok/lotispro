@@ -539,20 +539,6 @@ class LotRepository(BaseRepository[LotModel]):
         rows.sort(key=lambda r: r["days_remaining"])
         return rows
 
-    async def release_lot(self, lot_id: int, status: str) -> None:
-        """Update lot status and explicitly clear current_reservation_id to NULL.
-
-        Used when a reservation is released, expired, or converted to sale.
-        The base update() method filters None values, so this method handles
-        the explicit NULL assignment directly.
-        """
-        await self.session.execute(
-            update(LotModel)
-            .where(LotModel.id == lot_id)
-            .values(status=status, current_reservation_id=None)
-        )
-        await self.session.flush()
-
     async def change_status(
         self,
         lot_id: int,

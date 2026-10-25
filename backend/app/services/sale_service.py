@@ -3,17 +3,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
-from app.core.logging import get_logger
 from app.domain.schemas.sale import SaleCreate, SaleResponse
-from app.infrastructure.database.repositories import (
-    ClientRepository,
-    LotRepository,
-    ProjectRepository,
-    ReservationRepository,
-    SaleRepository,
-)
-
-logger = get_logger(__name__)
+from app.infrastructure.database.repositories import SaleRepository
 
 
 class SaleService:
@@ -23,10 +14,6 @@ class SaleService:
         """Initialize with database session."""
         self.session = session
         self.sale_repo = SaleRepository(session)
-        self.lot_repo = LotRepository(session)
-        self.client_repo = ClientRepository(session)
-        self.project_repo = ProjectRepository(session)
-        self.reservation_repo = ReservationRepository(session)
 
     async def get_sales(
         self,
@@ -108,118 +95,15 @@ class SaleService:
         user_id: int | None = None,
         user_role: str | None = None,
     ) -> SaleResponse:
-        """Create a direct sale (without prior reservation).
+        """Refuse direct sales: a sale is created by the ``solde`` transition.
 
-        Args:
-            data: Sale creation data
-            user_id: User creating the sale
-            user_role: Role of the user (manager or commercial)
-
-        Returns:
-            Created sale response
+        This legacy path wrote the obsolete ``sold`` lot status, rejected by
+        the ``valid_lot_status`` constraint (500, issue #50).
 
         Raises:
-            NotFoundError: If lot or client not found
-            BusinessRuleError: If lot cannot be sold or user doesn't have permission
+            BusinessRuleError: Always
         """
-        # Check lot exists
-        lot = await self.lot_repo.get_by_id(data.lot_id)
-        if not lot:
-            raise NotFoundError("Lot", data.lot_id)
-
-        if lot.status == "sold":
-            raise BusinessRuleError(
-                message="Lot has already been sold",
-                rule="lot_already_sold",
-            )
-
-        if lot.status == "blocked":
-            raise BusinessRuleError(
-                message="Lot is blocked and cannot be sold",
-                rule="lot_blocked",
-            )
-
-        # Check client exists
-        client = await self.client_repo.get_by_id(data.client_id)
-        if not client:
-            raise NotFoundError("Client", data.client_id)
-
-        # If lot has active reservation, check permissions and release it
-        reservation_id_to_use = data.reservation_id
-        if lot.current_reservation_id:
-            active_reservation = await self.reservation_repo.get_active_for_lot(
-                data.lot_id
-            )
-            if active_reservation:
-                # Check permissions: only manager or the commercial who reserved can finalize
-                if (
-                    user_role
-                    and user_role != "manager"
-                    and active_reservation.reserved_by_user_id != user_id
-                ):
-                    raise BusinessRuleError(
-                        message="You don't have permission to finalize this reservation. Only the commercial who reserved the lot can finalize the sale.",
-                        rule="insufficient_permissions",
-                    )
-
-                await self.reservation_repo.update(
-                    active_reservation.id,
-                    status="converted",
-                )
-                reservation_id_to_use = active_reservation.id
-                logger.info(
-                    "Active reservation converted to sale",
-                    reservation_id=active_reservation.id,
-                    lot_id=data.lot_id,
-                )
-
-        # Create sale
-        sale = await self.sale_repo.create(
-            project_id=lot.project_id,
-            lot_id=data.lot_id,
-            client_id=data.client_id,
-            price=data.price,
-            sold_by_user_id=user_id,
-            reservation_id=reservation_id_to_use,
-            notes=data.notes,
-        )
-
-        # Update lot status.
-        # Legacy path: "sold" is not a valid lot status (the DB check constraint
-        # rejects it) and bypasses the workflow; left as-is, see
-        # docs/AVANCEMENT.md "Anomalies constatées".
-        await self.lot_repo.update(  # status-guard: legacy invalid "sold" status
-            data.lot_id,
-            status="sold",
-            current_reservation_id=None,
-        )
-
-        # Update project sold count
-        project = await self.project_repo.get_by_id(lot.project_id)
-        if project:
-            await self.project_repo.update_lot_counts(
-                lot.project_id,
-                sold_lots=project.sold_lots + 1,
-            )
-
-        logger.info(
-            "Sale created",
-            sale_id=sale.id,
-            lot_id=data.lot_id,
-            client_id=data.client_id,
-            price=data.price,
-            sold_by=user_id,
-        )
-
-        return SaleResponse(
-            id=sale.id,
-            project_id=sale.project_id,
-            lot_id=sale.lot_id,
-            client_id=sale.client_id,
-            reservation_id=sale.reservation_id,
-            sold_by_user_id=sale.sold_by_user_id,
-            sale_date=sale.sale_date,
-            price=sale.price,
-            notes=sale.notes,
-            created_at=sale.created_at,
+        raise BusinessRuleError(
+            message="Les ventes se font via le workflow de statuts (Marquer soldé).",
+            rule="use_transition_endpoint",
         )
