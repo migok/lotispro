@@ -3,9 +3,12 @@ import { apiGet, apiPost, apiPatch, apiPut, apiFetch, apiUploadFile } from '../u
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
 import { formatPrice, formatDate } from '../utils/formatters';
-import { STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
+import { ACTIVE_LOT_STATUSES, STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
 import ClientForm from './clients/ClientForm';
 import { shouldToastClientError } from '../utils/clientProfile';
+import { DEFAULT_ENABLED_OPTIONAL, EDL_STATUSES, allowedTransitions, openEdlActionsLabel } from '../utils/lotWorkflow';
+import EdlPanel from './lots/EdlPanel';
+import EdlTransitionForm from './lots/EdlTransitionForm';
 
 /* ── Default payment plan ─────────────────────────────────── */
 const DEFAULT_PAYMENT_PLAN = {
@@ -510,7 +513,13 @@ function AddClientPanel({ onSubmit, onCancel }) {
 }
 
 /* ════════════════════════════════════════════════════════════ */
-export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = null }) {
+export default function LotDetailModal({
+  lot,
+  onClose,
+  onRefresh,
+  initialMode = null,
+  enabledOptionalStatuses = DEFAULT_ENABLED_OPTIONAL,
+}) {
   const { user, isManager } = useAuth();
   const toast = useToast();
   const [clients, setClients] = useState([]);
@@ -553,6 +562,8 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   const [documents, setDocuments] = useState([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const docFileInputRef = useRef(null);
+  // Open EDL actions: from the lot summary, then from the EDL panel once loaded.
+  const [edlOpenCount, setEdlOpenCount] = useState(lot?.edl_open_actions_count ?? 0);
 
   useEffect(() => {
     loadClients();
@@ -578,7 +589,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   // When pricing config loads after handleSetMode was called without it, re-apply auto-calc
   useEffect(() => {
     if (!lotPricingConfig?.sale_price_computed) return;
-    if (!['direct_engage', 'finaliser_engage'].includes(mode)) return;
+    if (!['direct_engage', 'finaliser_engage', 'option_engage'].includes(mode)) return;
     if (lot?.price_per_sqm_acte) return; // already set on lot directly
     setSalePriceEngaged(String(lotPricingConfig.sale_price_computed));
   // eslint-disable-next-line react-hooks/exhaustive-deps -- re-applying auto-calc on mode change would overwrite the price the user typed; only run when the pricing config loads
@@ -827,7 +838,16 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
         refund_payment_type: gPayType,
       });
     }
-    if (newMode === 'finaliser_engage' || newMode === 'direct_engage') {
+    if (newMode === 'option_engage') {
+      const optionDeposit = reservation?.deposit ?? lot?.deposit ?? 0;
+      setReleaseData({
+        deposit_refund_amount: optionDeposit > 0 ? String(optionDeposit) : '',
+        deposit_refund_date: new Date().toISOString().split('T')[0],
+        release_reason: '',
+        refund_payment_type: 'cash',
+      });
+    }
+    if (newMode === 'finaliser_engage' || newMode === 'direct_engage' || newMode === 'option_engage') {
       setEnablePaymentPlan(true);
       if (lot?.price_per_sqm_acte && lot?.surface && lot.surface > 0) {
         setSalePriceEngaged(String(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100));
@@ -969,6 +989,57 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
         notes: notes || undefined,
       });
       toast.success('Réservation engagée créée');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  // option → reservation_engagee (project without « réservation à finaliser »)
+  const handleOptionEngage = async () => {
+    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
+    if (!guaranteeAmount || parseFloat(guaranteeAmount) <= 0) { toast.warning('Le montant du premier acompte (ND) est requis'); return; }
+    const optionDeposit = reservation?.deposit ?? lot?.deposit ?? 0;
+    let depositFields = {};
+    if (optionDeposit > 0) {
+      if (!validationChoice) { toast.warning("Indiquez si l'acompte de l'option est déduit ou remboursé"); return; }
+      depositFields = { deposit_action: validationChoice };
+      if (validationChoice === 'refund') {
+        const amount = releaseData.deposit_refund_amount !== '' ? parseFloat(releaseData.deposit_refund_amount) : null;
+        if (amount === null || amount < 0) { toast.warning('Le montant remboursé est requis'); return; }
+        if (!releaseData.deposit_refund_date) { toast.warning('La date de remboursement est requise'); return; }
+        depositFields = {
+          ...depositFields,
+          refund_amount: amount,
+          refund_date: releaseData.deposit_refund_date,
+          refund_payment_type: releaseData.refund_payment_type || undefined,
+        };
+      }
+    }
+    const salePrice = parseFloat(salePriceEngaged);
+    const promoAmt = lot?.price != null ? Math.max(0, lot.price - salePrice) : 0;
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/option-engage`, {
+        guarantee_amount: parseFloat(guaranteeAmount),
+        payment_type: paymentType,
+        sale_price: salePrice,
+        promotion_paid_timing: promoAmt > 0 ? promotionTiming : undefined,
+        promotion_received: promoAmt > 0 ? promotionTiming === 'debut' : false,
+        payment_plan: _buildPaymentPlanPayload(),
+        notes: notes || undefined,
+        ...depositFields,
+      });
+      toast.success('Réservation engagée');
+      onClose(); if (onRefresh) onRefresh();
+    } catch (error) { toast.error(error.message || 'Erreur'); }
+    finally { setLoading(false); }
+  };
+
+  const handleEdlFinalize = async () => {
+    setLoading(true);
+    try {
+      await apiPost(`/api/lots/${lot.id}/transitions/edl-finalize`, {});
+      toast.success('État des lieux finalisé');
       onClose(); if (onRefresh) onRefresh();
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
@@ -1226,8 +1297,14 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
 
   if (!lot) return null;
 
+  // Actions offered = transitions allowed for this status by the project settings
+  const allowed = new Set(allowedTransitions(lot.status, enabledOptionalStatuses));
+  const can = (transition) => allowed.has(transition);
+
   // Source de vérité pour la garantie : API reservation > lot prop > 0
   const activeGuarantee = reservation?.guarantee_amount ?? lot?.guarantee_amount ?? 0;
+  // Acompte versé pendant l'option (déduit ou remboursé à l'engagement)
+  const optionDeposit = reservation?.deposit ?? lot?.deposit ?? 0;
   const activePaymentType = reservation?.payment_type ?? lot?.payment_type ?? null;
 
   // Remaining balance after initial deposit — used as base for payment plan
@@ -1332,7 +1409,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
               </div>
             )}
 
-            {['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire'].includes(lot.status) && lot.client_name && (
+            {ACTIVE_LOT_STATUSES.includes(lot.status) && lot.client_name && (
               <div className="ldm-reservation-info">
                 <div className="ldm-ri-header">
                   <IcUser />
@@ -1350,8 +1427,8 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                   {activePaymentType && <div className="ldm-ri-row"><span className="ldm-ri-key">Paiement garantie</span><span className="ldm-ri-val">{PAYMENT_TYPES.find(p => p.value === activePaymentType)?.label || activePaymentType}</span></div>}
                   {lot.notary_name && <div className="ldm-ri-row"><span className="ldm-ri-key">Notaire</span><span className="ldm-ri-val">{lot.notary_name}</span></div>}
                   {lot.notary_date && <div className="ldm-ri-row"><span className="ldm-ri-key">Date acte</span><span className="ldm-ri-val">{formatDate(lot.notary_date)}</span></div>}
-                  {/* Tag intention notaire — visible pour reservation_soldee */}
-                  {lot.status === 'reservation_soldee' && (
+                  {/* Tag intention notaire — visible pour reservation_soldee et les statuts EDL */}
+                  {can('set_notaire_intent') && (
                     <div className="ldm-ri-row">
                       <span className="ldm-ri-key">Chez le notaire</span>
                       <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1375,7 +1452,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                     </div>
                   )}
                   {/* Bloc promotion — visible uniquement en réservation engagée et au-delà */}
-                  {['reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire'].includes(lot.status) && reservation?.sale_price != null && (
+                  {['reservation_engagee','reservation_soldee',...EDL_STATUSES,'chez_notaire','chez_proprietaire'].includes(lot.status) && reservation?.sale_price != null && (
                     <>
                       {reservation.sale_price !== lot.price && (
                         <div className="ldm-ri-row">
@@ -1513,8 +1590,12 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
             </div>
           )}
 
+          {EDL_STATUSES.includes(lot.status) && (
+            <EdlPanel lot={lot} onOpenCountChange={setEdlOpenCount} />
+          )}
+
           <div className="modal-footer ldm-footer">
-            {lot.status === 'creation' && (() => {
+            {lot.status === 'creation' && can('activate') && (() => {
               const missingFields = [!lot.price && 'Prix', !lot.surface && 'Surface'].filter(Boolean);
               const canActivate = missingFields.length === 0;
               return (
@@ -1538,35 +1619,56 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
             })()}
             {lot.status === 'available' && (
               <>
-                <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  onClick={() => handleSetMode('start_option')}><IcLock /> Option</button>
-                <button className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  onClick={() => handleSetMode('direct_reservation')}><IcCheck /> Résa. à finaliser</button>
-                <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  onClick={() => handleSetMode('direct_engage')}><IcCheck /> Résa. engagée</button>
-                <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  onClick={() => handleSetMode('block')}><IcLock /> Bloquer</button>
+                {can('start_option') && (
+                  <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('start_option')}><IcLock /> Option</button>
+                )}
+                {can('direct_reservation') && (
+                  <button className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('direct_reservation')}><IcCheck /> Résa. à finaliser</button>
+                )}
+                {can('direct_engage') && (
+                  <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('direct_engage')}><IcCheck /> Résa. engagée</button>
+                )}
+                {can('block') && (
+                  <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('block')}><IcLock /> Bloquer</button>
+                )}
               </>
             )}
             {lot.status === 'option' && (() => {
               const canManage = isManager || (lot.reserved_by_user_id && lot.reserved_by_user_id === user?.id);
               return (
                 <>
-                  <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    onClick={() => handleSetMode('cancel_option')} disabled={!canManage}
-                    title={!canManage ? 'Seul le commercial responsable ou un manager peut annuler' : ''}>
-                    <IcUnlock /> Annuler option
-                  </button>
-                  <button className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    onClick={() => handleSetMode('extend_option')} disabled={!canManage}
-                    title={!canManage ? 'Seul le commercial responsable ou un manager peut prolonger' : ''}>
-                    <IcCalendar /> Prolonger
-                  </button>
-                  <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    onClick={() => handleSetMode('to_reservation')} disabled={!canManage}
-                    title={!canManage ? 'Seul le commercial responsable ou un manager peut valider' : ''}>
-                    <IcCheck /> Passer à réservation à finaliser
-                  </button>
+                  {can('cancel_option') && (
+                    <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      onClick={() => handleSetMode('cancel_option')} disabled={!canManage}
+                      title={!canManage ? 'Seul le commercial responsable ou un manager peut annuler' : ''}>
+                      <IcUnlock /> Annuler option
+                    </button>
+                  )}
+                  {can('extend_option') && (
+                    <button className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      onClick={() => handleSetMode('extend_option')} disabled={!canManage}
+                      title={!canManage ? 'Seul le commercial responsable ou un manager peut prolonger' : ''}>
+                      <IcCalendar /> Prolonger
+                    </button>
+                  )}
+                  {can('to_reservation') && (
+                    <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      onClick={() => handleSetMode('to_reservation')} disabled={!canManage}
+                      title={!canManage ? 'Seul le commercial responsable ou un manager peut valider' : ''}>
+                      <IcCheck /> Passer à réservation à finaliser
+                    </button>
+                  )}
+                  {can('option_engage') && (
+                    <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      onClick={() => handleSetMode('option_engage')} disabled={!canManage}
+                      title={!canManage ? 'Seul le commercial responsable ou un manager peut engager' : 'Engager la réservation'}>
+                      <IcCheck /> Engager
+                    </button>
+                  )}
                 </>
               );
             })()}
@@ -1574,14 +1676,18 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
               const canManage = isManager || (lot.reserved_by_user_id && lot.reserved_by_user_id === user?.id);
               return (
                 <>
-                  <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    onClick={() => handleSetMode('finaliser_refund')} disabled={!canManage}>
-                    <IcUnlock /> Rembourser
-                  </button>
-                  <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    onClick={() => handleSetMode('finaliser_engage')} disabled={!canManage}>
-                    <IcCheck /> Valider
-                  </button>
+                  {can('refund') && (
+                    <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      onClick={() => handleSetMode('finaliser_refund')} disabled={!canManage}>
+                      <IcUnlock /> Rembourser
+                    </button>
+                  )}
+                  {can('engage') && (
+                    <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      onClick={() => handleSetMode('finaliser_engage')} disabled={!canManage}>
+                      <IcCheck /> Valider
+                    </button>
+                  )}
                 </>
               );
             })()}
@@ -1608,7 +1714,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                     <IcDownload /> {downloadingDoc ? 'Génération...' : 'Reçu de paiement'}
                   </button>
                 )}
-                {(() => {
+                {can('solde') && (() => {
                   const allPaid = !paymentSchedule || paymentSchedule.installments.every(i => i.status === 'paid');
                   return (
                     <button
@@ -1624,10 +1730,10 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                 })()}
               </>
             )}
-            {lot.status === 'reservation_soldee' && (
+            {['reservation_soldee', ...EDL_STATUSES].includes(lot.status) && (
               <>
                 {/* Tag : intention notaire */}
-                {reservation?.wants_notaire ? (
+                {!can('set_notaire_intent') ? null : reservation?.wants_notaire ? (
                   <button
                     className="btn btn-warning"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
@@ -1646,37 +1752,75 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                     <IcTag /> {settingNotaireIntent ? 'En cours...' : 'Notaire : Non'}
                   </button>
                 )}
+                {/* États des lieux (projets avec EDL) */}
+                {can('edl_schedule') && (
+                  <button className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('edl_schedule')}>
+                    <IcCalendar /> Programmer l'EDL
+                  </button>
+                )}
+                {can('edl_reschedule') && (
+                  <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('edl_reschedule')}>
+                    <IcCalendar /> Reprogrammer
+                  </button>
+                )}
+                {can('edl_done') && (
+                  <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('edl_done')}>
+                    <IcCheck /> EDL réalisé
+                  </button>
+                )}
+                {can('edl_finalize') && (
+                  <>
+                    {edlOpenCount > 0 && (
+                      <span style={{ fontSize: '0.78rem', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <IcAlertTriangle /> {openEdlActionsLabel(edlOpenCount)}
+                      </span>
+                    )}
+                    <button className="btn btn-success"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, ...(edlOpenCount > 0 ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
+                      onClick={handleEdlFinalize} disabled={loading || edlOpenCount > 0}
+                      title={edlOpenCount > 0 ? 'Toutes les actions doivent être faites avant de finaliser' : "Finaliser l'état des lieux"}>
+                      <IcCheck /> Finaliser l'EDL
+                    </button>
+                  </>
+                )}
                 {/* Passage chez le notaire — seulement si intention confirmée */}
-                <button
-                  className="btn btn-primary"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    ...(!reservation?.wants_notaire ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
-                  }}
-                  onClick={() => reservation?.wants_notaire && handleSetMode('to_notaire')}
-                  disabled={!reservation?.wants_notaire}
-                  title={!reservation?.wants_notaire
-                    ? "Activez d'abord le tag 'Notaire : Oui' pour ce lot"
-                    : 'Passer chez le notaire'}>
-                  <IcCalendar /> Chez le notaire
-                </button>
+                {can('notaire') && (
+                  <button
+                    className="btn btn-primary"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      ...(!reservation?.wants_notaire ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
+                    }}
+                    onClick={() => reservation?.wants_notaire && handleSetMode('to_notaire')}
+                    disabled={!reservation?.wants_notaire}
+                    title={!reservation?.wants_notaire
+                      ? "Activez d'abord le tag 'Notaire : Oui' pour ce lot"
+                      : 'Passer chez le notaire'}>
+                    <IcCalendar /> Chez le notaire
+                  </button>
+                )}
               </>
             )}
             {lot.status === 'chez_notaire' && (
               <>
-                {isManager && (
+                {isManager && can('proprietaire') && (
                   <button className="btn btn-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     onClick={() => handleSetMode('to_proprietaire')}>
                     <IcHome /> Confirmer acte
                   </button>
                 )}
-                <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  onClick={() => handleSetMode('update_notaire')}>
-                  <IcCompass /> Modifier notaire
-                </button>
+                {can('notaire_update') && (
+                  <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => handleSetMode('update_notaire')}>
+                    <IcCompass /> Modifier notaire
+                  </button>
+                )}
               </>
             )}
-            {lot.status === 'blocked' && isManager && (
+            {lot.status === 'blocked' && isManager && can('unblock') && (
               <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                 onClick={() => handleSetMode('unblock')}>
                 <IcUnlock /> Libérer
@@ -1696,6 +1840,10 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
     extend_option: "Prolonger l'option",
     direct_reservation: "Réservation à finaliser (direct)",
     direct_engage: "Réservation engagée (direct)",
+    option_engage: "Engager la réservation (option)",
+    edl_schedule: "Programmer l'état des lieux",
+    edl_reschedule: "Reprogrammer l'état des lieux",
+    edl_done: "État des lieux réalisé",
     cancel_option: "Annuler l'option",
     to_reservation: "Passer à réservation à finaliser",
     finaliser_refund: "Rembourser la garantie",
@@ -1709,12 +1857,17 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
   };
 
   const isStartOption = mode === 'start_option';
-  const isEngageMode = mode === 'direct_engage' || mode === 'finaliser_engage';
+  const isEngageMode = mode === 'direct_engage' || mode === 'finaliser_engage' || mode === 'option_engage';
+  const isEdlMode = ['edl_schedule', 'edl_reschedule', 'edl_done'].includes(mode);
   const showThirdPanel = (isStartOption || isEngageMode) && enablePaymentPlan && lot.price;
   // Price to use in the third panel for engage modes (sale price if set, else catalogue)
   const engagePlanPrice = salePriceEngaged ? parseFloat(salePriceEngaged) : (lot?.price || 0);
   // When finaliser_engage + deduct: guarantee already paid → subtract from plan base
-  const finaliserDeductOffset = (mode === 'finaliser_engage' && validationChoice === 'deduct') ? activeGuarantee : 0;
+  // Same for option_engage + deduct: the option deposit is subtracted
+  const finaliserDeductOffset = validationChoice !== 'deduct' ? 0
+    : mode === 'finaliser_engage' ? activeGuarantee
+    : mode === 'option_engage' ? optionDeposit
+    : 0;
   const thirdPanelPrice = isEngageMode ? Math.max(0, engagePlanPrice - finaliserDeductOffset) : remainingBalance;
   // Promotion = catalogue − prix de vente (si engage mode, sinon 0)
   const engagePromoAmount = isEngageMode ? Math.max(0, (lot?.price || 0) - engagePlanPrice) : 0;
@@ -1775,13 +1928,21 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
               <span className="msr-price-pill-value">{formatPrice(lot.price)}</span>
             </div>
           )}
-          {['direct_engage', 'finaliser_engage'].includes(mode) && !lot.price_per_sqm_acte && lotPricingConfig?.sale_price_computed && Math.abs(lotPricingConfig.sale_price_computed - lot.price) > 1 && (
+          {['direct_engage', 'finaliser_engage', 'option_engage'].includes(mode) && !lot.price_per_sqm_acte && lotPricingConfig?.sale_price_computed && Math.abs(lotPricingConfig.sale_price_computed - lot.price) > 1 && (
             <div className="msr-price-pill" style={{ background: 'rgba(139,92,246,0.08)', borderColor: 'rgba(139,92,246,0.25)' }}>
               <span className="msr-price-pill-label">Prix acte</span>
               <span className="msr-price-pill-value" style={{ color: '#8b5cf6' }}>{formatPrice(lotPricingConfig.sale_price_computed)}</span>
             </div>
           )}
 
+          {isEdlMode ? (
+            <EdlTransitionForm
+              mode={mode}
+              lot={lot}
+              onCancel={() => handleSetMode(null)}
+              onDone={() => { onClose(); if (onRefresh) onRefresh(); }}
+            />
+          ) : (<>
           <div className="msr-form">
 
             {/* ── complete_lot form ── */}
@@ -1965,31 +2126,57 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
               </>
             )}
 
-            {/* ── direct_engage form (available → reservation_engagee) ── */}
-            {mode === 'direct_engage' && (() => {
+            {/* ── direct_engage (available → engagée) / option_engage (option → engagée) form ── */}
+            {(mode === 'direct_engage' || mode === 'option_engage') && (() => {
               const salePrice = salePriceEngaged ? parseFloat(salePriceEngaged) : null;
               const promoAmt = (salePrice != null && lot?.price != null) ? Math.max(0, lot.price - salePrice) : 0;
               return (
                 <>
-                  {/* Client */}
-                  <div className="msr-field-group">
-                    <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
-                    <div className="msr-client-row">
-                      <select className="msr-select"
-                        value={selectedClient?.id || ''}
-                        onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
-                        <option value="">Sélectionner un client</option>
-                        {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
-                      </select>
-                      <button type="button" className="msr-btn-add-client"
-                        onClick={() => setShowAddClient(!showAddClient)}>
-                        {showAddClient ? <IcClose /> : <IcPlus />}
-                        {showAddClient ? 'Annuler' : 'Nouveau'}
-                      </button>
+                  {/* Client — choisi en direct, celui de l'option sinon */}
+                  {mode === 'direct_engage' ? (
+                    <div className="msr-field-group">
+                      <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
+                      <div className="msr-client-row">
+                        <select className="msr-select"
+                          value={selectedClient?.id || ''}
+                          onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
+                          <option value="">Sélectionner un client</option>
+                          {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
+                        </select>
+                        <button type="button" className="msr-btn-add-client"
+                          onClick={() => setShowAddClient(!showAddClient)}>
+                          {showAddClient ? <IcClose /> : <IcPlus />}
+                          {showAddClient ? 'Annuler' : 'Nouveau'}
+                        </button>
+                      </div>
+                      {showAddClient && (
+                        <AddClientPanel onSubmit={handleCreateClient} onCancel={() => setShowAddClient(false)} />
+                      )}
                     </div>
-                    {showAddClient && (
-                      <AddClientPanel onSubmit={handleCreateClient} onCancel={() => setShowAddClient(false)} />
-                    )}
+                  ) : lot.client_name && (
+                    <div className="msr-field-group">
+                      <label className="msr-label"><IcUser /> Client</label>
+                      <div className="msr-client-locked">
+                        <div className="msr-client-locked-monogram">{lot.client_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>
+                        <div><div className="msr-client-locked-name">{lot.client_name}</div></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Premier acompte (ND) — requis par l'engagement */}
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcMoney /> Premier acompte (ND) <span className="msr-required">*</span></label>
+                    <div className="msr-price-input-wrap">
+                      <input type="number" className="msr-price-input" placeholder="Montant reçu"
+                        min="0" step="1000" value={guaranteeAmount} onChange={e => setGuaranteeAmount(e.target.value)} />
+                      <span className="msr-price-input-currency">MAD</span>
+                    </div>
+                  </div>
+                  <div className="msr-field-group">
+                    <label className="msr-label"><IcPayments /> Mode de paiement <span className="msr-required">*</span></label>
+                    <select className="msr-select" value={paymentType} onChange={e => setPaymentType(e.target.value)}>
+                      {PAYMENT_TYPES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    </select>
                   </div>
 
                   {/* Prix de vente (acte) — calculé automatiquement si prix/m² acte défini */}
@@ -2085,6 +2272,59 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                       </span>
                     </button>
                   </div>
+
+                  {/* Acompte de l'option — déduit ou remboursé (option_engage) */}
+                  {mode === 'option_engage' && optionDeposit > 0 && (
+                    <>
+                      <div className="msr-field-group">
+                        <label className="msr-label">Acompte de l'option : {formatPrice(optionDeposit)} <span className="msr-required">*</span></label>
+                        <div className="msr-validation-choice">
+                          <button type="button"
+                            className={`msr-vc-btn${validationChoice === 'refund' ? ' msr-vc-btn--refund-active' : ''}`}
+                            onClick={() => setValidationChoice('refund')}>
+                            <IcUnlock />
+                            <span className="msr-vc-label">Rembourser l'acompte</span>
+                            <span className="msr-vc-desc">Acompte rendu au client</span>
+                          </button>
+                          <button type="button"
+                            className={`msr-vc-btn${validationChoice === 'deduct' ? ' msr-vc-btn--deduct-active' : ''}`}
+                            onClick={() => setValidationChoice('deduct')}>
+                            <IcCheck />
+                            <span className="msr-vc-label">Déduire l'acompte</span>
+                            <span className="msr-vc-desc">Acompte conservé — déduit du prix</span>
+                          </button>
+                        </div>
+                      </div>
+                      {validationChoice === 'refund' && (
+                        <>
+                          <div className="msr-field-group">
+                            <label className="msr-label"><IcMoney /> Montant remboursé <span className="msr-required">*</span></label>
+                            <div className="msr-deposit-row">
+                              <input type="number" className="msr-input" min="0" step="1000"
+                                placeholder={optionDeposit.toString()}
+                                value={releaseData.deposit_refund_amount}
+                                onChange={e => setReleaseData(d => ({ ...d, deposit_refund_amount: e.target.value }))} />
+                              <span className="msr-currency">MAD</span>
+                            </div>
+                          </div>
+                          <div className="msr-field-group">
+                            <label className="msr-label"><IcCalendar /> Date de remboursement <span className="msr-required">*</span></label>
+                            <input type="date" className="msr-input"
+                              value={releaseData.deposit_refund_date}
+                              onChange={e => setReleaseData(d => ({ ...d, deposit_refund_date: e.target.value }))} />
+                          </div>
+                          <div className="msr-field-group">
+                            <label className="msr-label"><IcPayments /> Mode de remboursement <span className="msr-required">*</span></label>
+                            <select className="msr-select"
+                              value={releaseData.refund_payment_type || 'cash'}
+                              onChange={e => setReleaseData(d => ({ ...d, refund_payment_type: e.target.value }))}>
+                              {PAYMENT_TYPES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                            </select>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
 
                   {/* Notes */}
                   <div className="msr-field-group">
@@ -2572,6 +2812,16 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
                 <IcCheck />{loading ? 'En cours...' : 'Engager la réservation'}
               </button>
             )}
+            {mode === 'option_engage' && (optionDeposit > 0 && !validationChoice ? (
+              <button type="button" className="msr-btn-confirm" disabled>
+                Choisir une décision
+              </button>
+            ) : (
+              <button type="button" className="msr-btn-confirm msr-btn-confirm--sell"
+                onClick={handleOptionEngage} disabled={loading}>
+                <IcCheck />{loading ? 'En cours...' : 'Engager la réservation'}
+              </button>
+            ))}
             {mode === 'cancel_option' && (
               <button type="button" className="msr-btn-confirm msr-btn-confirm--release"
                 onClick={handleCancelOption} disabled={loading}>
@@ -2650,6 +2900,7 @@ export default function LotDetailModal({ lot, onClose, onRefresh, initialMode = 
               </button>
             )}
           </div>
+          </>)}
         </div>
 
         {/* ── THIRD PANEL: Payment plan (start_option / direct_engage / finaliser_engage) ── */}

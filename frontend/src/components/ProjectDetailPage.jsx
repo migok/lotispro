@@ -9,18 +9,13 @@ import LotPricingConfigPanel from './LotPricingConfigPanel';
 import { useAuth } from '../contexts/authHooks';
 import { getCarteMapContainerStyle } from './carteMapContainerStyle';
 import useLeafletAutoResize from './useLeafletAutoResize';
+import WorkflowSettings from './project/WorkflowSettings';
+import { ACTIVE_LOT_STATUSES, STATUS_HEX_COLORS } from '../utils/constants';
+import { ALL_STATUSES, DEFAULT_ENABLED_OPTIONAL, allowedTransitions, enabledStatuses } from '../utils/lotWorkflow';
 
-const STATUS_COLORS = {
-  creation:               '#6b7280',
-  available:              '#10b981',
-  option:                 '#f59e0b',
-  reservation_a_finaliser:'#ef6c00',
-  reservation_engagee:    '#7c3aed',
-  reservation_soldee:     '#2563eb',
-  chez_notaire:           '#0891b2',
-  chez_proprietaire:      '#16a34a',
-  blocked:                '#e05555',
-};
+const STATUS_COLORS = STATUS_HEX_COLORS;
+
+const emptyStatusCounts = () => Object.fromEntries(ALL_STATUSES.map((status) => [status, 0]));
 
 const getLotColor = (status) => STATUS_COLORS[status] || '#999';
 
@@ -100,7 +95,7 @@ export default function ProjectDetailPage() {
   const geoRef = useRef(null);
   const labelsLayerRef = useRef(null);
   const mapContainerRef = useRef(null);
-  const [stats, setStats] = useState({ creation: 0, available: 0, option: 0, reservation_a_finaliser: 0, reservation_engagee: 0, reservation_soldee: 0, chez_notaire: 0, chez_proprietaire: 0, blocked: 0 });
+  const [stats, setStats] = useState(emptyStatusCounts);
   const [filterStatus, setFilterStatus] = useState(null);
   const [surfaceMin, setSurfaceMin] = useState('');
   const [surfaceMax, setSurfaceMax] = useState('');
@@ -223,7 +218,7 @@ export default function ProjectDetailPage() {
 
       // Calculate stats and extract metadata options
       const features = geojson.features || [];
-      const newStats = { creation: 0, available: 0, option: 0, reservation_a_finaliser: 0, reservation_engagee: 0, reservation_soldee: 0, chez_notaire: 0, chez_proprietaire: 0, blocked: 0 };
+      const newStats = emptyStatusCounts();
       const typeLotSet = new Set();
       const emplacementSet = new Set();
       const typeMaisonSet = new Set();
@@ -320,7 +315,8 @@ export default function ProjectDetailPage() {
             const labels = {
               creation: 'En création', available: 'Disponible', option: 'Option',
               reservation_a_finaliser: 'Résa. à finaliser', reservation_engagee: 'Résa. engagée',
-              reservation_soldee: 'Résa. soldée', chez_notaire: 'Chez notaire',
+              reservation_soldee: 'Résa. soldée', edl_programme: 'EDL programmé',
+              edl_realise: 'EDL réalisé', edl_finalise: 'EDL finalisé', chez_notaire: 'Chez notaire',
               chez_proprietaire: 'Chez propriétaire', blocked: 'Bloqué',
             };
             return labels[s] || s;
@@ -385,7 +381,7 @@ export default function ProjectDetailPage() {
           }
 
           // Afficher le client si statut actif
-          if (['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire'].includes(status) && props.client_name) {
+          if (ACTIVE_LOT_STATUSES.includes(status) && props.client_name) {
             tooltipContent += `
               <div class="lot-tooltip-row">
                 <span class="lot-tooltip-label">Client:</span>
@@ -453,6 +449,9 @@ export default function ProjectDetailPage() {
                 deposit_paid_pct: props.deposit_paid_pct ?? null,
                 balance_paid_pct: props.balance_paid_pct ?? null,
                 first_deposit_days: props.first_deposit_days ?? null,
+                edl_scheduled_at: props.edl_scheduled_at ?? null,
+                edl_intervenant: props.edl_intervenant ?? null,
+                edl_open_actions_count: props.edl_open_actions_count ?? null,
               });
               setShowPopup(true);
             }
@@ -573,6 +572,8 @@ export default function ProjectDetailPage() {
     );
   }
 
+  const enabledOptional = project.enabled_optional_statuses ?? DEFAULT_ENABLED_OPTIONAL;
+
   return (
     <div className="project-detail-page">
       {/* Header */}
@@ -665,6 +666,7 @@ export default function ProjectDetailPage() {
             onToggleSelectionMode={toggleSelectionMode}
             onClearSelection={clearSelection}
             projectId={projectId}
+            enabledOptional={enabledOptional}
             onBulkSuccess={() => {
               setSelectionMode(false);
               setSelectedLotIds(new Set());
@@ -692,6 +694,7 @@ export default function ProjectDetailPage() {
           onClose={closeModal}
           onRefresh={handleRefresh}
           initialMode={modalInitialMode}
+          enabledOptionalStatuses={enabledOptional}
         />
       )}
 
@@ -737,8 +740,10 @@ function CarteTab({
   onToggleSelectionMode,
   onClearSelection,
   projectId,
+  enabledOptional,
   onBulkSuccess,
 }) {
+  const projectStatuses = enabledStatuses(enabledOptional);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [showBulkEdit, setShowBulkEdit] = useState(false);
@@ -936,10 +941,13 @@ function CarteTab({
                 { key: 'reservation_a_finaliser',label: 'Résa. à finaliser' },
                 { key: 'reservation_engagee',    label: 'Résa. engagée' },
                 { key: 'reservation_soldee',     label: 'Résa. soldée' },
+                { key: 'edl_programme',          label: 'EDL programmé' },
+                { key: 'edl_realise',            label: 'EDL réalisé' },
+                { key: 'edl_finalise',           label: 'EDL finalisé' },
                 { key: 'chez_notaire',           label: 'Chez notaire' },
                 { key: 'chez_proprietaire',      label: 'Chez propriétaire' },
                 { key: 'blocked',                label: 'Bloqué' },
-              ].map(({ key, label }) => (
+              ].filter(({ key }) => projectStatuses.includes(key) || stats[key] > 0).map(({ key, label }) => (
                 <button
                   key={key}
                   className={`btn-status-filter ${filterStatus === key ? 'active' : ''} ${key}`}
@@ -1119,6 +1127,7 @@ function CarteTab({
             onClose={onClosePopup}
             onViewDetails={onOpenFullModal}
             isManager={isManager}
+            enabledOptional={enabledOptional}
           />
         )}
       </div>
@@ -1130,6 +1139,7 @@ function CarteTab({
           onClose={onCloseModal}
           onRefresh={onRefresh}
           initialMode={modalInitialMode}
+          enabledOptionalStatuses={enabledOptional}
         />
       )}
 
@@ -1140,7 +1150,7 @@ function CarteTab({
 // ============================================================
 // Lot Map Popup — compact card overlay on map click
 // ============================================================
-function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
+function LotMapPopup({ lot, onClose, onViewDetails, isManager, enabledOptional }) {
   const STATUS_CONFIG = {
     creation:               { label: 'En création',        color: '#6b7280', bg: 'rgba(107,114,128,0.12)' },
     available:              { label: 'Disponible',         color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
@@ -1148,6 +1158,9 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
     reservation_a_finaliser:{ label: 'Résa. à finaliser',  color: '#ef6c00', bg: 'rgba(239,108,0,0.12)' },
     reservation_engagee:    { label: 'Résa. engagée',      color: '#7c3aed', bg: 'rgba(124,58,237,0.12)' },
     reservation_soldee:     { label: 'Résa. soldée',       color: '#2563eb', bg: 'rgba(37,99,235,0.12)' },
+    edl_programme:          { label: 'EDL programmé',      color: '#38bdf8', bg: 'rgba(56,189,248,0.12)' },
+    edl_realise:            { label: 'EDL réalisé',        color: '#0ea5e9', bg: 'rgba(14,165,233,0.12)' },
+    edl_finalise:           { label: 'EDL finalisé',       color: '#0284c7', bg: 'rgba(2,132,199,0.12)' },
     chez_notaire:           { label: 'Chez le notaire',    color: '#0891b2', bg: 'rgba(8,145,178,0.12)' },
     chez_proprietaire:      { label: 'Chez le propriétaire',color: '#16a34a', bg: 'rgba(22,163,74,0.12)' },
     blocked:                { label: 'Bloqué',             color: '#e05555', bg: 'rgba(224,85,85,0.12)' },
@@ -1162,6 +1175,7 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
   const balancePct = lot.balance_paid_pct ?? null;
   const firstDepositDays = lot.first_deposit_days ?? null;
   const hasPaymentData = depositPct !== null || balancePct !== null;
+  const allowed = allowedTransitions(lot.status, enabledOptional);
 
   return (
     <div className="lot-map-popup">
@@ -1281,7 +1295,7 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
         </div>
       )}
 
-      {['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire'].includes(lot.status) && lot.client_name && (
+      {ACTIVE_LOT_STATUSES.includes(lot.status) && lot.client_name && (
         <div className="lot-map-popup-meta">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
@@ -1297,7 +1311,7 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
 
       {/* Actions */}
       <div className="lot-map-popup-actions">
-        {lot.status === 'available' && (
+        {allowed.includes('start_option') && (
           <button className="lot-map-popup-btn lot-map-popup-btn--primary" onClick={() => onViewDetails('start_option')}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
@@ -1305,7 +1319,7 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager }) {
             Mettre en option
           </button>
         )}
-        {lot.status === 'option' && (
+        {allowed.includes('to_reservation') && (
           <button className="lot-map-popup-btn lot-map-popup-btn--primary" onClick={() => onViewDetails('to_reservation')}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polyline points="20 6 9 17 4 12"/>
@@ -2423,6 +2437,7 @@ function HistoriqueTab({ projectId, userId, isCommercial }) {
 
 // Parametres Tab Component
 function ParametresTab({ project, onUpdate }) {
+  const { isManager } = useAuth();
   const [formData, setFormData] = useState({
     name: project.name || '',
     description: project.description || '',
@@ -2637,6 +2652,8 @@ function ParametresTab({ project, onUpdate }) {
           </button>
         </form>
       </div>
+
+      {isManager() && <WorkflowSettings key={project.id} project={project} onUpdate={onUpdate} />}
 
       {/* CSV Import Section */}
       <div className="section-card" style={{ marginTop: 'var(--spacing-lg)' }}>

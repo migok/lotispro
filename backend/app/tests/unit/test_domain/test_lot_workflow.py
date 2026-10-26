@@ -1,5 +1,9 @@
 """Unit tests for the lot workflow table (statuses, groups, transitions)."""
 
+import json
+import os
+from pathlib import Path
+
 import pytest
 
 from app.core.exceptions import BusinessRuleError
@@ -263,3 +267,58 @@ class TestProjectConditions:
         assert label
         assert label != transition
         assert "_" not in label
+
+
+# The frontend mirrors the table (frontend/src/utils/lotWorkflow.js); its test
+# compares the mirror to this snapshot, so any drift fails one of the suites.
+FRONTEND_SNAPSHOT = (
+    Path(__file__).resolve().parents[5]
+    / "frontend"
+    / "src"
+    / "utils"
+    / "__tests__"
+    / "lotWorkflow.snapshot.json"
+)
+
+
+def _workflow_snapshot() -> dict:
+    return {
+        "all_statuses": list(ALL_STATUSES),
+        "optional_keys": list(OPTIONAL_KEYS),
+        "edl_statuses": list(EDL_STATUSES),
+        "default_enabled_optional": list(DEFAULT_ENABLED_OPTIONAL),
+        "transitions": {
+            name: {
+                "from_statuses": sorted(rule.from_statuses),
+                "to_status": rule.to_status,
+                "requires_enabled": rule.requires_enabled,
+                "requires_disabled": rule.requires_disabled,
+            }
+            for name, rule in TRANSITIONS.items()
+        },
+    }
+
+
+def test_export_snapshot() -> None:
+    """Frontend snapshot is up to date.
+
+    Regenerate with ``UPDATE_WORKFLOW_SNAPSHOT=1 python -m pytest -k export_snapshot``.
+    """
+    if not FRONTEND_SNAPSHOT.parent.is_dir():
+        pytest.skip("frontend sources not available (backend-only checkout)")
+    expected = _workflow_snapshot()
+    if os.environ.get("UPDATE_WORKFLOW_SNAPSHOT") == "1":
+        FRONTEND_SNAPSHOT.write_text(
+            json.dumps(expected, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+    actual = (
+        json.loads(FRONTEND_SNAPSHOT.read_text(encoding="utf-8"))
+        if FRONTEND_SNAPSHOT.exists()
+        else None
+    )
+    assert actual == expected, (
+        "lotWorkflow.snapshot.json is stale: regenerate it with "
+        "UPDATE_WORKFLOW_SNAPSHOT=1 and update frontend/src/utils/lotWorkflow.js"
+    )

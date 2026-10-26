@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-26 (E3-T4 : états des lieux backend)_
+_Dernière mise à jour : 2026-10-26 (E3-T5 : frontend statuts + EDL)_
 
 ## Vue d'ensemble
 
@@ -17,7 +17,7 @@ _Dernière mise à jour : 2026-10-26 (E3-T4 : états des lieux backend)_
 | E0 Fondations & nettoyage | ✅ | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | [#46](https://github.com/migok/lotispro/pull/46) |
 | E1 🐛 #5 Plein écran | ✅ | 2 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | [#47](https://github.com/migok/lotispro/pull/47) |
 | E2 👤 #7 Fiche client | ✅ | 6 / 6 | [#18](https://github.com/migok/lotispro/issues/18) | [#48](https://github.com/migok/lotispro/pull/48) |
-| E3 Statuts par projet + états des lieux | 🟦 | 4 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
+| E3 Statuts par projet + états des lieux | 🟨 | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
 | E4 🔄 #8 Réservation | ⬜ | 0 / 5 | [#29](https://github.com/migok/lotispro/issues/29) | |
 | E5 📊 #3 Vue projet | ⬜ | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | |
 | E6 📅 #4 Dashboard par période | ⬜ | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | |
@@ -46,7 +46,7 @@ _Dernière mise à jour : 2026-10-26 (E3-T4 : états des lieux backend)_
 | E3-T2 | Statuts optionnels par projet | ✅ | [#25](https://github.com/migok/lotispro/issues/25) | | 2026-10-25 |
 | E3-T3 | Transition option → engagée | ✅ | [#26](https://github.com/migok/lotispro/issues/26) | | 2026-10-25 |
 | E3-T4 | États des lieux backend | ✅ | [#27](https://github.com/migok/lotispro/issues/27) | | 2026-10-26 |
-| E3-T5 | Frontend statuts + EDL | ⬜ | [#28](https://github.com/migok/lotispro/issues/28) | | |
+| E3-T5 | Frontend statuts + EDL | ✅ | [#28](https://github.com/migok/lotispro/issues/28) | | 2026-10-26 |
 | E4-T0 | Correctif PDF : police Unicode (’, arabe) | ⬜ | [#49](https://github.com/migok/lotispro/issues/49) | | |
 | E4-T1 | Acte auto à l'engagement | ⬜ | [#30](https://github.com/migok/lotispro/issues/30) | | |
 | E4-T2 | Service de notifications | ⬜ | [#31](https://github.com/migok/lotispro/issues/31) | | |

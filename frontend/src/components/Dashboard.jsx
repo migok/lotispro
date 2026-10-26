@@ -37,7 +37,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [users, setUsers] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(null);
-  const [selectedStatuses, setSelectedStatuses] = useState(['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire','blocked']);
+  const [selectedStatuses, setSelectedStatuses] = useState(['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','edl_programme','edl_realise','edl_finalise','chez_notaire','chez_proprietaire','blocked']);
 
   // Onglet principal
   const [activeMainTab, setActiveMainTab] = useState('overview'); // 'overview' | 'options'
@@ -700,7 +700,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           }
           const price = parseFloat(lot.price) || 0;
           groups[key].amount_total += price;
-          const ACTIVE = ['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire'];
+          const ACTIVE = ['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','edl_programme','edl_realise','edl_finalise','chez_notaire'];
 
           if (hasUserFilter) {
             const isMine = myLotIds.has(lot.id);
@@ -1435,6 +1435,9 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                     { key: 'reservation_a_finaliser', cls: 'filter-reservation_a_finaliser', label: 'Résa. à finaliser' },
                     { key: 'reservation_engagee',     cls: 'filter-reservation_engagee',     label: 'Résa. engagée' },
                     { key: 'reservation_soldee',      cls: 'filter-reservation_soldee',      label: 'Résa. soldée' },
+                    { key: 'edl_programme',           cls: 'filter-edl_programme',           label: 'EDL programmé' },
+                    { key: 'edl_realise',             cls: 'filter-edl_realise',             label: 'EDL réalisé' },
+                    { key: 'edl_finalise',            cls: 'filter-edl_finalise',            label: 'EDL finalisé' },
                     { key: 'chez_notaire',            cls: 'filter-chez_notaire',            label: 'Notaire' },
                     { key: 'chez_proprietaire',       cls: 'filter-chez_proprietaire',       label: 'Propriétaire' },
                     { key: 'blocked',                 cls: 'filter-blocked',                 label: 'Bloqué' },
