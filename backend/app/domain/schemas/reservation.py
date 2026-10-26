@@ -233,12 +233,8 @@ class DirectToRAFData(BaseSchema):
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
 
 
-class OptionEngageData(BaseSchema):
-    """Schema for option → reservation_engagee (réservation d'option existante).
-
-    Mêmes champs que ``DirectToEngageeData`` sans ``client_id`` : le client est
-    celui de la réservation d'option.
-    """
+class EngageBaseData(BaseSchema):
+    """Champs communs aux engagements directs (premier versement, prix, échéancier)."""
 
     guarantee_amount: float = Field(
         gt=0, description="Initial deposit / first payment received"
@@ -266,7 +262,36 @@ class OptionEngageData(BaseSchema):
     )
 
 
-class DirectToEngageeData(OptionEngageData):
+class OptionEngageData(EngageBaseData):
+    """Schema for option → reservation_engagee (réservation d'option existante).
+
+    Mêmes champs que ``DirectToEngageeData`` sans ``client_id`` (le client est
+    celui de l'option), plus le sort de l'acompte versé pendant l'option.
+    """
+
+    deposit_action: Literal["deduct", "refund"] | None = Field(
+        default=None,
+        description=(
+            "Sort de l'acompte de l'option : conservé (deduct) ou remboursé "
+            "(refund). Requis si l'option a un acompte."
+        ),
+    )
+    refund_amount: float | None = Field(
+        default=None,
+        ge=0,
+        description="Amount returned to client (only when deposit_action=refund)",
+    )
+    refund_date: date | None = Field(
+        default=None,
+        description="Date the deposit was returned (only when deposit_action=refund)",
+    )
+    refund_payment_type: PAYMENT_TYPE | None = Field(
+        default=None,
+        description="Payment method used for the refund (only when deposit_action=refund)",
+    )
+
+
+class DirectToEngageeData(EngageBaseData):
     """Schema for direct transition available → reservation_engagee (avec ND + premier acompte)."""
 
     client_id: int = Field(description="Client associated with the reservation")

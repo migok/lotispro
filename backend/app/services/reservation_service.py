@@ -14,6 +14,7 @@ from app.domain.schemas.reservation import (
     ChezNotaireData,
     DirectToEngageeData,
     DirectToRAFData,
+    EngageBaseData,
     FinaliserEngageData,
     FinaliserRefundData,
     MarkPromotionReceivedData,
@@ -506,17 +507,21 @@ class ReservationService:
         self,
         lot: LotModel,
         reservation_id: int,
-        data: OptionEngageData,
+        data: EngageBaseData,
         *,
         new_status: str,
         transition: str,
         user_id: int | None,
+        extra_reservation_update: dict | None = None,
+        schedule_deduction: float = 0.0,
     ) -> None:
         """Record the engagement of ``reservation_id`` and move the lot.
 
         Shared by ``direct_engage`` and ``option_engage``: sale price,
         promotion, first payment, lot status change (history) and the optional
-        payment schedule.
+        payment schedule. ``extra_reservation_update`` is merged into the
+        reservation update; ``schedule_deduction`` is subtracted from the
+        schedule base (amount already paid and kept).
         """
         # Auto-fill sale_price from pricing config if not provided
         if data.sale_price is None:
@@ -544,6 +549,7 @@ class ReservationService:
             reservation_update["promotion_paid_timing"] = data.promotion_paid_timing
         if data.promotion_received:
             reservation_update["promotion_received"] = True
+        reservation_update.update(extra_reservation_update or {})
 
         await self.reservation_repo.update(reservation_id, **reservation_update)
 
@@ -560,6 +566,7 @@ class ReservationService:
             schedule_price = (
                 data.sale_price if data.sale_price is not None else (lot.price or 0)
             )
+            schedule_price = max(0.0, schedule_price - schedule_deduction)
             await self._create_payment_schedule_from_plan(
                 reservation_id=reservation_id,
                 lot_price=schedule_price,
@@ -621,6 +628,32 @@ class ReservationService:
                 rule="insufficient_permissions",
             )
 
+        option_deposit = reservation.deposit or 0
+        if option_deposit > 0 and data.deposit_action is None:
+            raise BusinessRuleError(
+                message="Indiquez si l'acompte de l'option est déduit ou remboursé.",
+                rule="deposit_action_required",
+            )
+        deduct = option_deposit > 0 and data.deposit_action == "deduct"
+        refund = option_deposit > 0 and data.deposit_action == "refund"
+
+        extra_update: dict = {
+            "expiration_date": datetime.now(UTC) + timedelta(days=365),
+        }
+        if data.notes:
+            extra_update["notes"] = (
+                f"{reservation.notes}\n{data.notes}"
+                if reservation.notes
+                else data.notes
+            )
+        if refund:
+            if data.refund_amount is not None:
+                extra_update["deposit_refund_amount"] = data.refund_amount
+            if data.refund_date is not None:
+                extra_update["deposit_refund_date"] = data.refund_date
+            if data.refund_payment_type is not None:
+                extra_update["deposit_refund_payment_type"] = data.refund_payment_type
+
         await self._apply_engagement(
             lot,
             reservation.id,
@@ -628,9 +661,9 @@ class ReservationService:
             new_status=new_status,
             transition="option_engage",
             user_id=user_id,
+            extra_reservation_update=extra_update,
+            schedule_deduction=option_deposit if deduct else 0.0,
         )
-        if data.notes:
-            await self.reservation_repo.update(reservation.id, notes=data.notes)
 
         updated = await self.reservation_repo.get_by_id(reservation.id)
         return _reservation_to_response(updated)  # type: ignore[arg-type]
