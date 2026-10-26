@@ -12,7 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
-from app.domain.lot_workflow import STATUS_LABELS, assert_transition_allowed
+from app.domain.lot_workflow import (
+    EDL_VISIBLE_STATUSES,
+    STATUS_LABELS,
+    assert_transition_allowed,
+)
 from app.domain.schemas.etat_des_lieux import (
     EdlActionCreate,
     EdlActionResponse,
@@ -94,10 +98,15 @@ class EtatDesLieuxService:
     async def get_for_lot(self, lot_id: int) -> EtatDesLieuxResponse:
         """État des lieux of the lot's current reservation, with its actions.
 
+        Only shown in ``EDL_VISIBLE_STATUSES``: a lot blocked then unblocked
+        keeps its current reservation, but its old EDL no longer applies.
+
         Raises:
             NotFoundError: Lot not found or no état des lieux
         """
         lot = await self._get_lot(lot_id)
+        if lot.status not in EDL_VISIBLE_STATUSES:
+            raise NotFoundError("État des lieux", lot.id)
         edl = await self._require_edl(lot)
         actions = await self.edl_repo.list_actions(edl.id)
         response = EtatDesLieuxResponse.model_validate(edl)

@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, get_args
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -662,6 +663,50 @@ class TestReadAndCounts:
         assert properties["edl_intervenant"] == "M. Expert"
         assert properties["edl_open_actions_count"] == 2
         assert properties["edl_scheduled_at"] is not None
+
+    async def test_edl_hidden_once_lot_back_to_available(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        """Blocking then unblocking keeps current_reservation_id: the old EDL
+        must not show on an available lot."""
+        headers = auth_headers(commercial)
+        lot = await _realised_lot(
+            client, db_session, manager, headers, [{"description": "Volet"}]
+        )
+        manager_headers = auth_headers(manager)
+        block = await _post(client, manager_headers, lot.id, "block", {})
+        assert block.status_code == 200, block.json()
+        unblock = await _post(client, manager_headers, lot.id, "unblock")
+        assert unblock.status_code == 200, unblock.json()
+
+        edl = await client.get(f"/api/lots/{lot.id}/edl", headers=headers)
+        geojson = await client.get(
+            f"/api/projects/{lot.project_id}/lots.geojson", headers=manager_headers
+        )
+
+        assert edl.status_code == 404
+        [feature] = geojson.json()["features"]
+        properties = feature["properties"]
+        assert properties["status"] == "available"
+        assert properties.get("edl_intervenant") is None
+        assert properties.get("edl_open_actions_count") is None
+        assert properties.get("edl_scheduled_at") is None
+
+    async def test_openapi_documents_edl_contract(self, app: FastAPI) -> None:
+        schema = app.openapi()
+
+        action_status = schema["components"]["schemas"]["EdlActionResponse"][
+            "properties"
+        ]["status"]
+        alerts = schema["paths"]["/api/dashboard/notaire-alerts"]["get"]
+
+        assert action_status.get("enum") == ["ouverte", "faite"]
+        assert "edl_finalise" in alerts["description"]
 
 
 class TestDisableInUse:

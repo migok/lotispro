@@ -51,6 +51,13 @@ SOLD_STATUSES: tuple[str, ...] = (
     "chez_notaire",
     "chez_proprietaire",
 )
+# Statuses where the lot's état des lieux is shown (a lot sent back to
+# ``available`` keeps its current reservation, hence its old EDL).
+EDL_VISIBLE_STATUSES: tuple[str, ...] = (
+    *EDL_STATUSES,
+    "chez_notaire",
+    "chez_proprietaire",
+)
 MANDATORY_STATUSES: tuple[str, ...] = tuple(
     s
     for s in ALL_STATUSES

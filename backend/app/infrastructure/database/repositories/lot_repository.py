@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import and_, func, select, update
 
 from app.core.exceptions import NotFoundError
-from app.domain.lot_workflow import ALL_STATUSES
+from app.domain.lot_workflow import ALL_STATUSES, EDL_VISIBLE_STATUSES
 from app.domain.schemas.lot import LotFilter
 from app.infrastructure.database.models import (
     LotModel,
@@ -270,13 +270,16 @@ class LotRepository(BaseRepository[LotModel]):
 
             lots_data.append(lot_dict)
 
+        edl_lots = [
+            lot
+            for lot in lots_data
+            if lot.get("reservation_id") and lot["status"] in EDL_VISIBLE_STATUSES
+        ]
         edl_summaries = await EtatDesLieuxRepository(
             self.session
-        ).summaries_by_reservation(
-            [lot["reservation_id"] for lot in lots_data if lot.get("reservation_id")]
-        )
-        for lot_dict in lots_data:
-            summary = edl_summaries.get(lot_dict.get("reservation_id"))
+        ).summaries_by_reservation([lot["reservation_id"] for lot in edl_lots])
+        for lot_dict in edl_lots:
+            summary = edl_summaries.get(lot_dict["reservation_id"])
             if summary:
                 lot_dict.update(summary)
 

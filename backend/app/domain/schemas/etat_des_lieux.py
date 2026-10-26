@@ -48,7 +48,7 @@ class EdlActionResponse(BaseSchema):
     etat_des_lieux_id: int
     description: str
     responsable: str | None
-    status: str
+    status: EDL_ACTION_STATUS
     done_at: datetime | None
     created_at: datetime
     updated_at: datetime
