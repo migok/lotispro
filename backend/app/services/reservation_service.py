@@ -18,6 +18,7 @@ from app.domain.schemas.reservation import (
     FinaliserRefundData,
     MarkPromotionReceivedData,
     OptionCreate,
+    OptionEngageData,
     PaymentPlanData,
     ReservationAFinaliserData,
     ReservationCreate,
@@ -489,6 +490,34 @@ class ReservationService:
             notes=data.notes,
         )
 
+        await self._apply_engagement(
+            lot,
+            reservation.id,
+            data,
+            new_status=new_status,
+            transition="direct_engage",
+            user_id=user_id,
+        )
+
+        updated = await self.reservation_repo.get_by_id(reservation.id)
+        return _reservation_to_response(updated)  # type: ignore[arg-type]
+
+    async def _apply_engagement(
+        self,
+        lot: LotModel,
+        reservation_id: int,
+        data: OptionEngageData,
+        *,
+        new_status: str,
+        transition: str,
+        user_id: int | None,
+    ) -> None:
+        """Record the engagement of ``reservation_id`` and move the lot.
+
+        Shared by ``direct_engage`` and ``option_engage``: sale price,
+        promotion, first payment, lot status change (history) and the optional
+        payment schedule.
+        """
         # Auto-fill sale_price from pricing config if not provided
         if data.sale_price is None:
             pricing_cfg = await self.pricing_repo.get_for_combination(
@@ -516,14 +545,14 @@ class ReservationService:
         if data.promotion_received:
             reservation_update["promotion_received"] = True
 
-        await self.reservation_repo.update(reservation.id, **reservation_update)
+        await self.reservation_repo.update(reservation_id, **reservation_update)
 
         await self.lot_repo.change_status(
-            lot_id,
+            lot.id,
             new_status,
-            transition="direct_engage",
+            transition=transition,
             user_id=user_id,
-            reservation_id=reservation.id,
+            reservation_id=reservation_id,
         )
 
         # Create payment schedule if plan provided
@@ -532,20 +561,77 @@ class ReservationService:
                 data.sale_price if data.sale_price is not None else (lot.price or 0)
             )
             await self._create_payment_schedule_from_plan(
-                reservation_id=reservation.id,
+                reservation_id=reservation_id,
                 lot_price=schedule_price,
                 plan=data.payment_plan,
                 promotion_amount=promotion_amount or 0.0,
             )
 
         logger.info(
-            "Direct available → reservation_engagee",
-            lot_id=lot_id,
-            reservation_id=reservation.id,
+            "Lot engaged",
+            transition=transition,
+            lot_id=lot.id,
+            reservation_id=reservation_id,
             guarantee_amount=data.guarantee_amount,
             sale_price=data.sale_price,
             promotion_amount=promotion_amount,
         )
+
+    # ------------------------------------------------------------------
+    # Transition: option → reservation_engagee (réservation à finaliser désactivée)
+    # ------------------------------------------------------------------
+
+    async def option_to_reservation_engagee(
+        self,
+        lot_id: int,
+        data: OptionEngageData,
+        user_id: int,
+        user_role: str,
+    ) -> ReservationResponse:
+        """Engage the existing option reservation directly.
+
+        Only allowed when the project disabled ``reservation_a_finaliser``.
+
+        Raises:
+            NotFoundError: If lot or reservation not found
+            BusinessRuleError: Wrong status, status path not allowed, no active
+                reservation, or caller is neither manager nor owner
+        """
+        lot = await self.lot_repo.get_by_id(lot_id)
+        if not lot:
+            raise NotFoundError("Lot", lot_id)
+
+        new_status = assert_transition_allowed(
+            await self._enabled_optional(lot), "option_engage", lot.status
+        )
+
+        if not lot.current_reservation_id:
+            raise BusinessRuleError(
+                message="No active reservation found for this lot",
+                rule="no_active_reservation",
+            )
+
+        reservation = await self.reservation_repo.get_by_id(lot.current_reservation_id)
+        if not reservation:
+            raise NotFoundError("Reservation", lot.current_reservation_id)
+
+        if user_role != "manager" and reservation.reserved_by_user_id != user_id:
+            raise BusinessRuleError(
+                message="Insufficient permissions",
+                rule="insufficient_permissions",
+            )
+
+        await self._apply_engagement(
+            lot,
+            reservation.id,
+            data,
+            new_status=new_status,
+            transition="option_engage",
+            user_id=user_id,
+        )
+        if data.notes:
+            await self.reservation_repo.update(reservation.id, notes=data.notes)
+
         updated = await self.reservation_repo.get_by_id(reservation.id)
         return _reservation_to_response(updated)  # type: ignore[arg-type]
 

@@ -21,6 +21,7 @@ from app.domain.schemas.reservation import (
     FinaliserEngageData,
     FinaliserRefundData,
     OptionCreate,
+    OptionEngageData,
     ReservationAFinaliserData,
     ReservationResponse,
     SetNotaireIntentData,
@@ -83,6 +84,27 @@ async def available_to_engagee(
         lot_id=lot_id,
         data=data,
         user_id=current_user.id,
+    )
+
+
+@router.post(
+    "/{lot_id}/transitions/option-engage",
+    response_model=ReservationResponse,
+    summary="Passer d'une option à une réservation engagée",
+    description="Passage option → réservation engagée, uniquement si « Réservation à finaliser » est désactivé pour le projet.",
+)
+async def option_to_engagee(
+    lot_id: int,
+    data: OptionEngageData,
+    current_user: CurrentUser,
+    reservation_service: ReservationServiceDep,
+) -> ReservationResponse:
+    """Move from option to reservation_engagee."""
+    return await reservation_service.option_to_reservation_engagee(
+        lot_id=lot_id,
+        data=data,
+        user_id=current_user.id,
+        user_role=current_user.role,
     )
 
 

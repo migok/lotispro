@@ -233,10 +233,13 @@ class DirectToRAFData(BaseSchema):
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
 
 
-class DirectToEngageeData(BaseSchema):
-    """Schema for direct transition available → reservation_engagee (avec ND + premier acompte)."""
+class OptionEngageData(BaseSchema):
+    """Schema for option → reservation_engagee (réservation d'option existante).
 
-    client_id: int = Field(description="Client associated with the reservation")
+    Mêmes champs que ``DirectToEngageeData`` sans ``client_id`` : le client est
+    celui de la réservation d'option.
+    """
+
     guarantee_amount: float = Field(
         gt=0, description="Initial deposit / first payment received"
     )
@@ -261,6 +264,12 @@ class DirectToEngageeData(BaseSchema):
         default=None,
         description="Plan de paiement à créer lors de l'engagement (optionnel)",
     )
+
+
+class DirectToEngageeData(OptionEngageData):
+    """Schema for direct transition available → reservation_engagee (avec ND + premier acompte)."""
+
+    client_id: int = Field(description="Client associated with the reservation")
 
 
 class SetNotaireIntentData(BaseSchema):
