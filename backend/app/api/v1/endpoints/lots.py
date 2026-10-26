@@ -1,16 +1,31 @@
 """Lot management endpoints with CRUD + pagination example."""
 
-from typing import Literal
-
 from fastapi import APIRouter, Query, status
 
-from app.api.dependencies import CurrentUser, LotPricingServiceDep, LotServiceDep
+from app.api.dependencies import (
+    CurrentUser,
+    EtatDesLieuxServiceDep,
+    LotPricingServiceDep,
+    LotServiceDep,
+)
 from app.domain.schemas.common import (
     MessageResponse,
     PaginatedResponse,
     PaginationParams,
 )
-from app.domain.schemas.lot import LotCreate, LotFilter, LotResponse, LotUpdate
+from app.domain.schemas.etat_des_lieux import (
+    EdlActionCreate,
+    EdlActionResponse,
+    EdlActionUpdate,
+    EtatDesLieuxResponse,
+)
+from app.domain.schemas.lot import (
+    LOT_STATUS,
+    LotCreate,
+    LotFilter,
+    LotResponse,
+    LotUpdate,
+)
 from app.domain.schemas.lot_status_history import LotStatusHistoryResponse
 
 router = APIRouter()
@@ -32,18 +47,7 @@ async def list_lots(
     project_id: int | None = Query(default=None, description="Filter by project"),
     numero: str | None = Query(default=None, description="Search by lot number"),
     zone: str | None = Query(default=None, description="Filter by zone"),
-    status: Literal[
-        "creation",
-        "available",
-        "option",
-        "reservation_a_finaliser",
-        "reservation_engagee",
-        "reservation_soldee",
-        "chez_notaire",
-        "chez_proprietaire",
-        "blocked",
-    ]
-    | None = Query(default=None, description="Filter by status"),
+    status: LOT_STATUS | None = Query(default=None, description="Filter by status"),
     surface_min: float | None = Query(default=None, ge=0, description="Min surface"),
     surface_max: float | None = Query(default=None, ge=0, description="Max surface"),
 ) -> PaginatedResponse[LotResponse]:
@@ -136,6 +140,75 @@ async def get_lot_status_history(
 ) -> list[LotStatusHistoryResponse]:
     """List the status changes of a lot, newest first."""
     return await lot_service.get_status_history(lot_id)
+
+
+@router.get(
+    "/{lot_id}/edl",
+    response_model=EtatDesLieuxResponse,
+    summary="État des lieux du lot",
+    description="État des lieux de la réservation courante avec ses actions (404 si aucun).",
+)
+async def get_lot_edl(
+    lot_id: int,
+    current_user: CurrentUser,
+    edl_service: EtatDesLieuxServiceDep,
+) -> EtatDesLieuxResponse:
+    """Get the état des lieux of the lot's current reservation."""
+    return await edl_service.get_for_lot(lot_id)
+
+
+@router.post(
+    "/{lot_id}/edl/actions",
+    response_model=EdlActionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Ajouter une action d'état des lieux",
+    description="Uniquement au statut « État des lieux réalisé ».",
+)
+async def add_edl_action(
+    lot_id: int,
+    data: EdlActionCreate,
+    current_user: CurrentUser,
+    edl_service: EtatDesLieuxServiceDep,
+) -> EdlActionResponse:
+    """Add an open action to the état des lieux."""
+    return await edl_service.add_action(lot_id, data)
+
+
+@router.put(
+    "/{lot_id}/edl/actions/{action_id}",
+    response_model=EdlActionResponse,
+    summary="Modifier une action d'état des lieux",
+    description=(
+        "Uniquement au statut « État des lieux réalisé ». status=faite renseigne "
+        "la date de réalisation, status=ouverte la vide."
+    ),
+)
+async def update_edl_action(
+    lot_id: int,
+    action_id: int,
+    data: EdlActionUpdate,
+    current_user: CurrentUser,
+    edl_service: EtatDesLieuxServiceDep,
+) -> EdlActionResponse:
+    """Edit an action of the état des lieux."""
+    return await edl_service.update_action(lot_id, action_id, data)
+
+
+@router.delete(
+    "/{lot_id}/edl/actions/{action_id}",
+    response_model=MessageResponse,
+    summary="Supprimer une action d'état des lieux",
+    description="Uniquement au statut « État des lieux réalisé ».",
+)
+async def delete_edl_action(
+    lot_id: int,
+    action_id: int,
+    current_user: CurrentUser,
+    edl_service: EtatDesLieuxServiceDep,
+) -> MessageResponse:
+    """Remove an action of the état des lieux."""
+    await edl_service.delete_action(lot_id, action_id)
+    return MessageResponse(message="Action supprimée")
 
 
 @router.post(

@@ -15,6 +15,9 @@ LOT_STATUS = Literal[
     "reservation_a_finaliser",
     "reservation_engagee",
     "reservation_soldee",
+    "edl_programme",
+    "edl_realise",
+    "edl_finalise",
     "chez_notaire",
     "chez_proprietaire",
     "blocked",
@@ -26,6 +29,9 @@ ACTIVE_LOT_STATUSES = (
     "reservation_a_finaliser",
     "reservation_engagee",
     "reservation_soldee",
+    "edl_programme",
+    "edl_realise",
+    "edl_finalise",
     "chez_notaire",
     "chez_proprietaire",
 )
@@ -36,6 +42,9 @@ NON_DELETABLE_STATUSES = (
     "reservation_a_finaliser",
     "reservation_engagee",
     "reservation_soldee",
+    "edl_programme",
+    "edl_realise",
+    "edl_finalise",
     "chez_notaire",
     "chez_proprietaire",
 )
@@ -191,6 +200,11 @@ class LotWithDetails(LotResponse):
 
     # Clôture définitive
     closed_at: datetime | None = None
+
+    # État des lieux of the current reservation
+    edl_scheduled_at: datetime | None = None
+    edl_intervenant: str | None = None
+    edl_open_actions_count: int | None = None
 
     # Computed fields
     days_in_status: int | None = None

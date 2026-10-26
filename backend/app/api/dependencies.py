@@ -17,6 +17,7 @@ from app.services import (
     ClientService,
     DashboardService,
     DocumentService,
+    EtatDesLieuxService,
     LotPricingService,
     LotService,
     NotaireService,
@@ -151,6 +152,11 @@ def get_reservation_service(session: DBSession) -> ReservationService:
     return ReservationService(session)
 
 
+def get_etat_des_lieux_service(session: DBSession) -> EtatDesLieuxService:
+    """Get état des lieux service instance."""
+    return EtatDesLieuxService(session)
+
+
 def get_sale_service(session: DBSession) -> SaleService:
     """Get sale service instance."""
     return SaleService(session)
@@ -198,6 +204,9 @@ ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
 LotServiceDep = Annotated[LotService, Depends(get_lot_service)]
 ClientServiceDep = Annotated[ClientService, Depends(get_client_service)]
 ReservationServiceDep = Annotated[ReservationService, Depends(get_reservation_service)]
+EtatDesLieuxServiceDep = Annotated[
+    EtatDesLieuxService, Depends(get_etat_des_lieux_service)
+]
 SaleServiceDep = Annotated[SaleService, Depends(get_sale_service)]
 DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]

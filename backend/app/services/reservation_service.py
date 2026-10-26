@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
-from app.domain.lot_workflow import assert_transition_allowed
+from app.domain.lot_workflow import EDL_STATUSES, assert_transition_allowed
 from app.domain.schemas.lot import LotResponse
 from app.domain.schemas.payment import InstallmentConfig
 from app.domain.schemas.reservation import (
@@ -978,7 +978,7 @@ class ReservationService:
         return _reservation_to_response(updated)
 
     # ------------------------------------------------------------------
-    # Set notaire intent on a reservation_soldee lot
+    # Set notaire intent on a sold lot (soldée or EDL status)
     # ------------------------------------------------------------------
 
     async def set_notaire_intent(
@@ -987,22 +987,26 @@ class ReservationService:
         data: SetNotaireIntentData,
         user_id: int | None = None,
     ) -> ReservationResponse:
-        """Toggle the wants_notaire tag on a reservation_soldee lot.
+        """Toggle the wants_notaire tag on a sold lot.
 
         Allows commercials/managers to record whether the client wants to
-        proceed to the notary step or stay in reservation_soldee.
+        proceed to the notary step. Allowed in reservation_soldee and in the
+        three état des lieux statuses.
 
         Raises:
             NotFoundError: If lot not found or no active reservation
-            BusinessRuleError: If lot is not in reservation_soldee status
+            BusinessRuleError: If lot is not in one of those statuses
         """
         lot = await self.lot_repo.get_by_id(lot_id)
         if not lot:
             raise NotFoundError("Lot", lot_id)
 
-        if lot.status != "reservation_soldee":
+        if lot.status not in ("reservation_soldee", *EDL_STATUSES):
             raise BusinessRuleError(
-                message=f"Le lot doit être en statut réservation soldée (actuel : {lot.status})",
+                message=(
+                    "Le lot doit être en statut réservation soldée ou état des "
+                    f"lieux (actuel : {lot.status})"
+                ),
                 rule="invalid_lot_status",
             )
         assert_transition_allowed(
@@ -1168,7 +1172,7 @@ class ReservationService:
         )
 
     # ------------------------------------------------------------------
-    # Transition: reservation_soldee → chez_notaire
+    # Transition: reservation_soldee | edl_finalise → chez_notaire
     # ------------------------------------------------------------------
 
     async def soldee_to_notaire(
@@ -1177,19 +1181,27 @@ class ReservationService:
         data: ChezNotaireData,
         user_id: int | None = None,
     ) -> LotResponse:
-        """Move from reservation_soldee to chez_notaire with notary info.
+        """Move to chez_notaire with notary info.
+
+        From reservation_soldee when the project has no état des lieux, from
+        edl_finalise when it has one (checked by ``assert_transition_allowed``).
 
         Raises:
             NotFoundError: If lot not found
-            BusinessRuleError: If lot is not in reservation_soldee status
+            BusinessRuleError: If lot is not in reservation_soldee /
+                edl_finalise status, EDL required (``edl_required``) or
+                notaire intent not set
         """
         lot = await self.lot_repo.get_by_id(lot_id)
         if not lot:
             raise NotFoundError("Lot", lot_id)
 
-        if lot.status != "reservation_soldee":
+        if lot.status not in ("reservation_soldee", "edl_finalise"):
             raise BusinessRuleError(
-                message=f"Lot must be in reservation_soldee status (current: {lot.status})",
+                message=(
+                    "Lot must be in reservation_soldee or edl_finalise status "
+                    f"(current: {lot.status})"
+                ),
                 rule="invalid_lot_status",
             )
         new_status = assert_transition_allowed(

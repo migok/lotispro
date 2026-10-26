@@ -7,6 +7,7 @@ from app.services.client_service import ClientService
 from app.services.dashboard_service import DashboardService
 from app.services.document_service import DocumentService
 from app.services.email_service import EmailService
+from app.services.etat_des_lieux_service import EtatDesLieuxService
 from app.services.lot_pricing_service import LotPricingService
 from app.services.lot_service import LotService
 from app.services.notaire_service import NotaireService
@@ -24,6 +25,7 @@ __all__ = [
     "DashboardService",
     "DocumentService",
     "EmailService",
+    "EtatDesLieuxService",
     "LotPricingService",
     "LotService",
     "NotaireService",

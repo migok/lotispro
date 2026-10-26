@@ -1762,6 +1762,10 @@ class ProjectService:
                 properties["days_in_status"] = lot["days_in_status"]
             if lot.get("reservation_status"):
                 properties["reservation_status"] = lot["reservation_status"]
+            if lot.get("edl_scheduled_at"):
+                properties["edl_scheduled_at"] = lot["edl_scheduled_at"].isoformat()
+                properties["edl_intervenant"] = lot["edl_intervenant"]
+                properties["edl_open_actions_count"] = lot["edl_open_actions_count"]
             # Payment schedule enrichment
             rid = lot.get("reservation_id")
             if rid and rid in _payment_info:

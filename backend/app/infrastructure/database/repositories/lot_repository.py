@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import and_, func, select, update
 
 from app.core.exceptions import NotFoundError
+from app.domain.lot_workflow import ALL_STATUSES
 from app.domain.schemas.lot import LotFilter
 from app.infrastructure.database.models import (
     LotModel,
@@ -14,6 +15,9 @@ from app.infrastructure.database.models import (
     utc_now,
 )
 from app.infrastructure.database.repositories.base import BaseRepository
+from app.infrastructure.database.repositories.etat_des_lieux_repository import (
+    EtatDesLieuxRepository,
+)
 
 
 class LotRepository(BaseRepository[LotModel]):
@@ -118,17 +122,7 @@ class LotRepository(BaseRepository[LotModel]):
             .group_by(LotModel.status)
         )
 
-        counts = {
-            "creation": 0,
-            "available": 0,
-            "option": 0,
-            "reservation_a_finaliser": 0,
-            "reservation_engagee": 0,
-            "reservation_soldee": 0,
-            "chez_notaire": 0,
-            "chez_proprietaire": 0,
-            "blocked": 0,
-        }
+        counts = dict.fromkeys(ALL_STATUSES, 0)
 
         for status, count in result.all():
             counts[status] = count
@@ -275,6 +269,16 @@ class LotRepository(BaseRepository[LotModel]):
                 )
 
             lots_data.append(lot_dict)
+
+        edl_summaries = await EtatDesLieuxRepository(
+            self.session
+        ).summaries_by_reservation(
+            [lot["reservation_id"] for lot in lots_data if lot.get("reservation_id")]
+        )
+        for lot_dict in lots_data:
+            summary = edl_summaries.get(lot_dict.get("reservation_id"))
+            if summary:
+                lot_dict.update(summary)
 
         return lots_data
 
