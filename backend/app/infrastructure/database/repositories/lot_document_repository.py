@@ -19,3 +19,18 @@ class LotDocumentRepository(BaseRepository[LotDocumentModel]):
             .order_by(LotDocumentModel.created_at.desc())
         )
         return list(result.scalars().all())
+
+    async def get_latest_by_reservation(
+        self, reservation_id: int, category: str
+    ) -> LotDocumentModel | None:
+        """Return the most recent document of ``category`` for a reservation."""
+        result = await self.session.execute(
+            select(LotDocumentModel)
+            .where(
+                LotDocumentModel.reservation_id == reservation_id,
+                LotDocumentModel.category == category,
+            )
+            .order_by(LotDocumentModel.created_at.desc(), LotDocumentModel.id.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()

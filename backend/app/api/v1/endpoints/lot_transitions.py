@@ -7,6 +7,7 @@ Generic lot updates (PUT /lots/{id}) only handle creation/available/blocked.
 from fastapi import APIRouter
 
 from app.api.dependencies import (
+    ActeServiceDep,
     CurrentUser,
     EtatDesLieuxServiceDep,
     LotServiceDep,
@@ -80,13 +81,16 @@ async def available_to_engagee(
     data: DirectToEngageeData,
     current_user: CurrentUser,
     reservation_service: ReservationServiceDep,
+    acte_service: ActeServiceDep,
 ) -> ReservationResponse:
-    """Move directly from available to reservation_engagee."""
-    return await reservation_service.available_to_reservation_engagee(
+    """Move directly from available to reservation_engagee; archive the deed."""
+    reservation = await reservation_service.available_to_reservation_engagee(
         lot_id=lot_id,
         data=data,
         user_id=current_user.id,
     )
+    await acte_service.generate_and_store(reservation.id, current_user.id)
+    return reservation
 
 
 @router.post(
@@ -100,14 +104,17 @@ async def option_to_engagee(
     data: OptionEngageData,
     current_user: CurrentUser,
     reservation_service: ReservationServiceDep,
+    acte_service: ActeServiceDep,
 ) -> ReservationResponse:
-    """Move from option to reservation_engagee."""
-    return await reservation_service.option_to_reservation_engagee(
+    """Move from option to reservation_engagee; archive the deed."""
+    reservation = await reservation_service.option_to_reservation_engagee(
         lot_id=lot_id,
         data=data,
         user_id=current_user.id,
         user_role=current_user.role,
     )
+    await acte_service.generate_and_store(reservation.id, current_user.id)
+    return reservation
 
 
 @router.post(
@@ -226,15 +233,21 @@ async def finaliser_engage(
     lot_id: int,
     current_user: CurrentUser,
     reservation_service: ReservationServiceDep,
+    acte_service: ActeServiceDep,
     data: FinaliserEngageData | None = None,
 ) -> LotResponse:
-    """Move from reservation_a_finaliser to reservation_engagee."""
-    return await reservation_service.finaliser_engage(
+    """Move from reservation_a_finaliser to reservation_engagee; archive the deed."""
+    lot = await reservation_service.finaliser_engage(
         lot_id=lot_id,
         data=data or FinaliserEngageData(),
         user_id=current_user.id,
         user_role=current_user.role,
     )
+    if lot.current_reservation_id is not None:
+        await acte_service.generate_and_store(
+            lot.current_reservation_id, current_user.id
+        )
+    return lot
 
 
 @router.post(

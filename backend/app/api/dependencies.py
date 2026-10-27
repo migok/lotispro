@@ -11,9 +11,9 @@ from app.core.security import security_scheme, validate_credentials
 from app.domain.schemas.user import UserResponse
 from app.infrastructure.database import get_session
 from app.services import (
+    ActeService,
     AuditService,
     AuthService,
-    CertificateService,
     ClientService,
     DashboardService,
     DocumentService,
@@ -177,14 +177,14 @@ def get_payment_service(session: DBSession) -> PaymentService:
     return PaymentService(session)
 
 
-def get_certificate_service() -> CertificateService:
-    """Get certificate service instance (no DB session needed)."""
-    return CertificateService()
-
-
 def get_document_service(session: DBSession) -> DocumentService:
     """Get document service instance."""
     return DocumentService(session)
+
+
+def get_acte_service(session: DBSession) -> ActeService:
+    """Get acte (reservation deed) service instance."""
+    return ActeService(session)
 
 
 def get_notaire_service(session: DBSession) -> NotaireService:
@@ -211,7 +211,7 @@ SaleServiceDep = Annotated[SaleService, Depends(get_sale_service)]
 DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
 PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
-CertificateServiceDep = Annotated[CertificateService, Depends(get_certificate_service)]
 DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
+ActeServiceDep = Annotated[ActeService, Depends(get_acte_service)]
 NotaireServiceDep = Annotated[NotaireService, Depends(get_notaire_service)]
 LotPricingServiceDep = Annotated[LotPricingService, Depends(get_lot_pricing_service)]

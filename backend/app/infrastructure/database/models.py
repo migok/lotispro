@@ -885,6 +885,8 @@ class LotDocumentModel(Base):
     content_type: Mapped[str] = mapped_column(
         String(100), nullable=False, default="application/octet-stream"
     )
+    # Set for generated documents (e.g. "acte_reservation"); NULL for uploads.
+    category: Mapped[str | None] = mapped_column(String(30), nullable=True)
     uploaded_by_user_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id"),
@@ -899,7 +901,10 @@ class LotDocumentModel(Base):
     # Relationships
     lot: Mapped["LotModel"] = relationship("LotModel")
 
-    __table_args__ = (Index("ix_lot_documents_lot", "lot_id"),)
+    __table_args__ = (
+        Index("ix_lot_documents_lot", "lot_id"),
+        Index("ix_lot_documents_reservation_category", "reservation_id", "category"),
+    )
 
 
 class EtatDesLieuxModel(Base):

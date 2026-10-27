@@ -1,13 +1,18 @@
 """Reservation management endpoints."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.api.dependencies import (
-    CertificateServiceDep,
+    ActeServiceDep,
     CurrentUser,
-    PaymentServiceDep,
+    DocumentServiceDep,
     ReservationServiceDep,
 )
+from app.core.exceptions import BusinessRuleError, NotFoundError
+from app.domain.schemas.document import LotDocumentResponse
 from app.domain.schemas.reservation import (
     MarkPromotionReceivedData,
     ReservationCreate,
@@ -17,6 +22,11 @@ from app.domain.schemas.reservation import (
     ReservationResponse,
 )
 from app.domain.schemas.sale import SaleFromReservation, SaleResponse
+from app.services.acte_service import (
+    DEPOSIT_UNPAID,
+    PROMOTION_PENDING,
+    ActeNotReadyError,
+)
 from app.services.email_service import EmailService
 
 _email_service = EmailService()
@@ -171,6 +181,36 @@ async def check_expirations(
     }
 
 
+def _pdf_response(content: bytes, filename: str) -> Response:
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@contextmanager
+def _legacy_pdf_errors(
+    reservation_id: int, not_ready_messages: dict[str, str] | None = None
+) -> Iterator[None]:
+    """Keep the historical HTTP errors of the certificate / receipt endpoints.
+
+    ``not_ready_messages`` overrides the message per ``ActeNotReadyError.rule``.
+    """
+    try:
+        yield
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reservation {reservation_id} not found",
+        ) from exc
+    except ActeNotReadyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(not_ready_messages or {}).get(exc.rule or "", exc.message),
+        ) from exc
+
+
 @router.get(
     "/{reservation_id}/certificate",
     summary="Download reservation certificate",
@@ -180,82 +220,24 @@ async def check_expirations(
 async def download_reservation_certificate(
     reservation_id: int,
     current_user: CurrentUser,
-    reservation_service: ReservationServiceDep,
-    certificate_service: CertificateServiceDep,
-    payment_service: PaymentServiceDep,
+    acte_service: ActeServiceDep,
 ) -> Response:
-    """Generate PDF certificate for a reservation."""
-    details = await reservation_service.get_reservation_details(reservation_id)
-    if not details:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Reservation {reservation_id} not found",
-        )
+    """Generate PDF certificate for a reservation (first deposit paid required)."""
+    with _legacy_pdf_errors(reservation_id):
+        pdf_bytes, filename = await acte_service.build_certificate_pdf(reservation_id)
+    return _pdf_response(pdf_bytes, filename)
 
-    # Require the first deposit installment to be paid before generating the certificate.
-    # Use schedule.lot_price (= remaining balance after initial payment) so that the
-    # certificate balance = schedule.lot_price - first_installment.amount.
-    deposit_for_cert = details["deposit"]
-    # Prefer sale_price (prix de vente sur l'acte) over catalogue price
-    lot_price_for_cert = details.get("sale_price") or details.get("lot_price")
-    try:
-        schedule = await payment_service.get_schedule_for_reservation(reservation_id)
-        deposit_installments = sorted(
-            [i for i in schedule.installments if i.payment_type == "deposit"],
-            key=lambda i: i.installment_number,
-        )
-        if deposit_installments:
-            first = deposit_installments[0]
-            if first.status != "paid":
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=(
-                        "Le premier versement d'acompte doit être effectué "
-                        "avant de générer l'acte de réservation."
-                    ),
-                )
-            deposit_for_cert = first.amount
-            # Use sale_price if captured, otherwise fall back to schedule.lot_price
-            lot_price_for_cert = details.get("sale_price") or schedule.lot_price
-    except HTTPException:
-        raise
-    except Exception:
-        pass  # no schedule — fall back to reservation values
 
-    # Require promotion to be received when a promotion amount was applied.
-    # If the promotion has not been collected yet, only the receipt is available.
-    if (details.get("promotion_amount") or 0) > 0 and not details.get(
-        "promotion_received"
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Le montant de la promotion n'a pas encore été reçu. "
-                "Téléchargez le reçu de paiement en attendant la réception de la promotion."
-            ),
-        )
-
-    pdf_bytes = certificate_service.generate_reservation_certificate(
-        reservation_id=details["id"],
-        reservation_date=details["reservation_date"],
-        deposit=deposit_for_cert,
-        deposit_date=details.get("deposit_date"),
-        lot_numero=details["lot_numero"],
-        lot_surface=details.get("lot_surface"),
-        lot_price=lot_price_for_cert,
-        project_name=details["project_name"],
-        client_name=details["client_name"],
-        client_cin=details.get("client_cin"),
-        client_address=details.get("client_address"),
-    )
-
-    safe_lot = details["lot_numero"].replace("/", "-").replace(" ", "_")
-    filename = f"acte_reservation_{reservation_id}_lot{safe_lot}.pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+_EMAIL_NOT_READY_MESSAGES = {
+    DEPOSIT_UNPAID: (
+        "Le premier versement d'acompte doit être effectué "
+        "avant d'envoyer l'acte de réservation."
+    ),
+    PROMOTION_PENDING: (
+        "Le montant de la promotion n'a pas encore été reçu. "
+        "L'acte de réservation ne peut être envoyé qu'après réception de la promotion."
+    ),
+}
 
 
 @router.post(
@@ -266,77 +248,20 @@ async def download_reservation_certificate(
 async def send_reservation_certificate_email(
     reservation_id: int,
     current_user: CurrentUser,
-    reservation_service: ReservationServiceDep,
-    certificate_service: CertificateServiceDep,
-    payment_service: PaymentServiceDep,
+    acte_service: ActeServiceDep,
 ) -> dict:
     """Generate PDF certificate and email it to the client."""
-    details = await reservation_service.get_reservation_details(reservation_id)
-    if not details:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Reservation {reservation_id} not found",
-        )
+    with _legacy_pdf_errors(reservation_id, _EMAIL_NOT_READY_MESSAGES):
+        details = await acte_service.load_details(reservation_id)
 
-    client_email = details.get("client_email")
-    if not client_email:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Le client n'a pas d'adresse email enregistrée.",
-        )
+        client_email = details.get("client_email")
+        if not client_email:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Le client n'a pas d'adresse email enregistrée.",
+            )
 
-    deposit_for_cert = details["deposit"]
-    lot_price_for_cert = details.get("sale_price") or details.get("lot_price")
-    try:
-        schedule = await payment_service.get_schedule_for_reservation(reservation_id)
-        deposit_installments = sorted(
-            [i for i in schedule.installments if i.payment_type == "deposit"],
-            key=lambda i: i.installment_number,
-        )
-        if deposit_installments:
-            first = deposit_installments[0]
-            if first.status != "paid":
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=(
-                        "Le premier versement d'acompte doit être effectué "
-                        "avant d'envoyer l'acte de réservation."
-                    ),
-                )
-            deposit_for_cert = first.amount
-            lot_price_for_cert = details.get("sale_price") or schedule.lot_price
-    except HTTPException:
-        raise
-    except Exception:
-        pass  # no schedule — fall back to reservation values
-
-    if (details.get("promotion_amount") or 0) > 0 and not details.get(
-        "promotion_received"
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "Le montant de la promotion n'a pas encore été reçu. "
-                "L'acte de réservation ne peut être envoyé qu'après réception de la promotion."
-            ),
-        )
-
-    pdf_bytes = certificate_service.generate_reservation_certificate(
-        reservation_id=details["id"],
-        reservation_date=details["reservation_date"],
-        deposit=deposit_for_cert,
-        deposit_date=details.get("deposit_date"),
-        lot_numero=details["lot_numero"],
-        lot_surface=details.get("lot_surface"),
-        lot_price=lot_price_for_cert,
-        project_name=details["project_name"],
-        client_name=details["client_name"],
-        client_cin=details.get("client_cin"),
-        client_address=details.get("client_address"),
-    )
-
-    safe_lot = details["lot_numero"].replace("/", "-").replace(" ", "_")
-    filename = f"acte_reservation_{reservation_id}_lot{safe_lot}.pdf"
+        pdf_bytes, filename = await acte_service.build_certificate_pdf(reservation_id)
 
     sent = await _email_service.send_certificate_email(
         client_name=details["client_name"],
@@ -372,75 +297,67 @@ async def send_reservation_certificate_email(
 async def download_payment_receipt(
     reservation_id: int,
     current_user: CurrentUser,
-    reservation_service: ReservationServiceDep,
-    certificate_service: CertificateServiceDep,
-    payment_service: PaymentServiceDep,
+    acte_service: ActeServiceDep,
 ) -> Response:
     """Generate PDF Reçu de Paiement for a reservation (first deposit receipt)."""
+    with _legacy_pdf_errors(reservation_id):
+        pdf_bytes, filename = await acte_service.build_receipt_pdf(reservation_id)
+    return _pdf_response(pdf_bytes, filename)
 
-    details = await reservation_service.get_reservation_details(reservation_id)
-    if not details:
+
+@router.post(
+    "/{reservation_id}/acte",
+    response_model=LotDocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Régénérer l'acte archivé",
+    description=(
+        "Génère l'acte de réservation et l'archive comme nouvelle version dans les "
+        "documents du lot (les versions précédentes sont conservées)."
+    ),
+)
+async def regenerate_acte(
+    reservation_id: int,
+    current_user: CurrentUser,
+    acte_service: ActeServiceDep,
+) -> LotDocumentResponse:
+    """Archive a new version of the reservation deed."""
+    await acte_service.load_details(reservation_id)  # 404 if unknown
+    result = await acte_service.generate_and_store(reservation_id, current_user.id)
+    if result.status == "not_ready":
+        raise BusinessRuleError(message=result.error or "", rule="acte_not_ready")
+    if result.status == "failed":
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="La génération de l'acte a échoué. Réessayez.",
+        )
+    return LotDocumentResponse.model_validate(
+        await acte_service.latest_acte(reservation_id)
+    )
+
+
+@router.get(
+    "/{reservation_id}/acte",
+    summary="Télécharger l'acte archivé",
+    description="Télécharge la dernière version archivée de l'acte de réservation.",
+    response_class=Response,
+)
+async def download_archived_acte(
+    reservation_id: int,
+    current_user: CurrentUser,
+    acte_service: ActeServiceDep,
+    document_service: DocumentServiceDep,
+) -> Response:
+    """Download the latest archived deed of a reservation."""
+    acte = await acte_service.latest_acte(reservation_id)
+    if acte is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Reservation {reservation_id} not found",
+            detail="Aucun acte archivé pour cette réservation.",
         )
-
-    deposit_for_receipt = details["deposit"]
-    deposit_date_for_receipt = details.get("deposit_date")
-    sale_price = details.get("sale_price")
-    promotion_amount = details.get("promotion_amount")
-
-    # Use the first paid deposit installment if available
-    try:
-        schedule = await payment_service.get_schedule_for_reservation(reservation_id)
-        deposit_installments = sorted(
-            [i for i in schedule.installments if i.payment_type == "deposit"],
-            key=lambda i: i.installment_number,
-        )
-        if deposit_installments:
-            first = deposit_installments[0]
-            if first.status != "paid":
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=(
-                        "Le premier versement d'acompte doit être effectué "
-                        "avant de générer le reçu de paiement."
-                    ),
-                )
-            deposit_for_receipt = first.amount
-            if first.paid_date:
-                deposit_date_for_receipt = (
-                    first.paid_date.date()
-                    if hasattr(first.paid_date, "date")
-                    else first.paid_date
-                )
-    except HTTPException:
-        raise
-    except Exception:
-        pass  # no schedule — fall back to reservation values
-
-    pdf_bytes = certificate_service.generate_payment_receipt(
-        reservation_id=details["id"],
-        receipt_date=details["reservation_date"],
-        deposit_amount=deposit_for_receipt,
-        deposit_date=deposit_date_for_receipt,
-        lot_numero=details["lot_numero"],
-        lot_surface=details.get("lot_surface"),
-        sale_price=sale_price,
-        promotion_amount=promotion_amount,
-        project_name=details["project_name"],
-        client_name=details["client_name"],
-        client_cin=details.get("client_cin"),
-        client_address=details.get("client_address"),
+    content, _, filename = await document_service.get_document_file(
+        acte.lot_id, acte.id
     )
-
-    safe_lot = details["lot_numero"].replace("/", "-").replace(" ", "_")
-    filename = f"recu_paiement_{reservation_id}_lot{safe_lot}.pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    return _pdf_response(content, filename)
 
 
 @router.post(
@@ -457,10 +374,14 @@ async def mark_promotion_received(
     data: MarkPromotionReceivedData,
     current_user: CurrentUser,
     reservation_service: ReservationServiceDep,
+    acte_service: ActeServiceDep,
 ) -> ReservationResponse:
-    """Mark promotion amount as received on an engaged reservation."""
-    return await reservation_service.mark_promotion_received(
+    """Mark promotion amount as received; archive the deed it was blocking."""
+    reservation = await reservation_service.mark_promotion_received(
         reservation_id=reservation_id,
         data=data,
         user_id=current_user.id,
     )
+    if await acte_service.latest_acte(reservation_id) is None:
+        await acte_service.generate_and_store(reservation_id, current_user.id)
+    return reservation

@@ -64,6 +64,42 @@ async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
         yield http_client
 
 
+class FakeStorage:
+    """In-memory stand-in for the Supabase storage client (documents)."""
+
+    def __init__(self) -> None:
+        self.files: dict[tuple[str, str], bytes] = {}
+
+    def upload_bytes(
+        self,
+        bucket: str,
+        path: str,
+        content: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> None:
+        self.files[(bucket, path)] = content
+
+    def download_bytes(self, bucket: str, path: str) -> bytes:
+        return self.files[(bucket, path)]
+
+    def delete_from_bucket(self, bucket: str, path: str) -> None:
+        self.files.pop((bucket, path), None)
+
+
+@pytest.fixture(autouse=True)
+def fake_storage(monkeypatch: pytest.MonkeyPatch) -> FakeStorage:
+    """Documents never reach Supabase in tests.
+
+    Every engagement now archives the reservation deed, so without this a
+    developer ``.env`` would upload test PDFs to the real bucket.
+    """
+    storage = FakeStorage()
+    monkeypatch.setattr(
+        "app.services.document_service.get_storage_client", lambda: storage
+    )
+    return storage
+
+
 @pytest.fixture
 async def manager(db_session: AsyncSession) -> UserModel:
     return await make_user(db_session, role="manager", email="manager@example.com")
