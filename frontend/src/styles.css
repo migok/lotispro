@@ -29,6 +29,9 @@
   --color-raf:          #ef6c00;
   --color-engaged:      #7c3aed;
   --color-soldee:       #2563eb;
+  --color-edl-programme: #38bdf8;
+  --color-edl-realise:   #0ea5e9;
+  --color-edl-finalise:  #0284c7;
   --color-notaire:      #0891b2;
   --color-proprietaire: #10b981;
 
@@ -105,6 +108,9 @@
   --color-raf:          #c2410c;
   --color-engaged:      #6d28d9;
   --color-soldee:       #1d4ed8;
+  --color-edl-programme: #0284c7;
+  --color-edl-realise:   #0369a1;
+  --color-edl-finalise:  #075985;
   --color-notaire:      #0e7490;
   --color-proprietaire: #15803d;
 
@@ -963,6 +969,9 @@ body {
 .lot-tooltip-status.reservation_a_finaliser{ background: rgba(239,108,0,0.15);  color: #ef6c00; }
 .lot-tooltip-status.reservation_engagee    { background: rgba(124,58,237,0.15); color: #7c3aed; }
 .lot-tooltip-status.reservation_soldee     { background: rgba(37,99,235,0.15);  color: #2563eb; }
+.lot-tooltip-status.edl_programme          { background: rgba(56,189,248,0.15); color: #38bdf8; }
+.lot-tooltip-status.edl_realise            { background: rgba(14,165,233,0.15); color: #0ea5e9; }
+.lot-tooltip-status.edl_finalise           { background: rgba(2,132,199,0.15);  color: #0284c7; }
 .lot-tooltip-status.chez_notaire           { background: rgba(8,145,178,0.15);  color: #0891b2; }
 .lot-tooltip-status.chez_proprietaire      { background: rgba(16,185,129,0.2);  color: #16a34a; }
 .lot-tooltip-status.blocked                { background: rgba(107,114,128,0.2); color: #6b7280; }
@@ -1483,6 +1492,18 @@ body {
   background-color: rgba(37, 99, 235, 0.15);
   color: var(--color-soldee);
 }
+.status-badge.edl_programme {
+  background-color: rgba(56, 189, 248, 0.15);
+  color: var(--color-edl-programme);
+}
+.status-badge.edl_realise {
+  background-color: rgba(14, 165, 233, 0.15);
+  color: var(--color-edl-realise);
+}
+.status-badge.edl_finalise {
+  background-color: rgba(2, 132, 199, 0.15);
+  color: var(--color-edl-finalise);
+}
 .status-badge.chez_notaire {
   background-color: rgba(8, 145, 178, 0.15);
   color: var(--color-notaire);
@@ -1570,6 +1591,12 @@ body {
 .lots-filter-pill.filter-reservation_engagee.active { background: rgba(124,58,237,0.12); }
 .lots-filter-pill.filter-reservation_soldee       { color: var(--color-soldee);       border-color: var(--color-soldee); }
 .lots-filter-pill.filter-reservation_soldee.active { background: rgba(37,99,235,0.12); }
+.lots-filter-pill.filter-edl_programme            { color: var(--color-edl-programme); border-color: var(--color-edl-programme); }
+.lots-filter-pill.filter-edl_programme.active     { background: rgba(56,189,248,0.12); }
+.lots-filter-pill.filter-edl_realise              { color: var(--color-edl-realise);   border-color: var(--color-edl-realise); }
+.lots-filter-pill.filter-edl_realise.active       { background: rgba(14,165,233,0.12); }
+.lots-filter-pill.filter-edl_finalise             { color: var(--color-edl-finalise);  border-color: var(--color-edl-finalise); }
+.lots-filter-pill.filter-edl_finalise.active      { background: rgba(2,132,199,0.12); }
 .lots-filter-pill.filter-chez_notaire             { color: var(--color-notaire);      border-color: var(--color-notaire); }
 .lots-filter-pill.filter-chez_notaire.active      { background: rgba(8,145,178,0.12); }
 .lots-filter-pill.filter-chez_proprietaire        { color: var(--color-proprietaire); border-color: var(--color-proprietaire); }

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.logging import get_logger
+from app.domain.lot_workflow import assert_transition_allowed
 from app.domain.schemas.lot_pricing import (
     LotPricingCombination,
     LotPricingConfigBulkUpsert,
@@ -74,6 +75,21 @@ class LotPricingService:
         if not result.scalar_one_or_none():
             raise AuthorizationError("Access denied to this project")
 
+    async def _activate(
+        self,
+        lot_id: int,
+        from_status: str,
+        user_id: int,
+        enabled_optional: list[str],
+    ) -> None:
+        """Auto-activate a lot (creation → available) through ``change_status``."""
+        new_status = assert_transition_allowed(
+            enabled_optional, "activate", from_status
+        )
+        await self.lot_repo.change_status(
+            lot_id, new_status, transition="activate", user_id=user_id
+        )
+
     async def get_project_configs(
         self,
         project_id: int,
@@ -131,6 +147,7 @@ class LotPricingService:
 
         await self._check_project_access(project_id, requester_id, requester_role)
 
+        enabled_optional = await self.project_repo.get_enabled_optional(project_id)
         for item in data.configs:
             await self.pricing_repo.upsert(
                 project_id=project_id,
@@ -151,6 +168,8 @@ class LotPricingService:
                 emplacement=item.emplacement,
                 prix_m2_acte=item.prix_m2_acte,
                 prix_m2_catalogue=item.prix_m2_catalogue,
+                user_id=requester_id,
+                enabled_optional=enabled_optional,
             )
 
         await self.session.flush()
@@ -172,6 +191,8 @@ class LotPricingService:
         emplacement: str | None,
         prix_m2_acte: float,
         prix_m2_catalogue: float,
+        user_id: int,
+        enabled_optional: list[str],
     ) -> None:
         """Update prices on lots in creation/available status, then auto-activate creation lots."""
         lots_result = await self.session.execute(
@@ -196,17 +217,17 @@ class LotPricingService:
                 "price_per_sqm": prix_m2_catalogue,
                 "price_per_sqm_acte": prix_m2_acte,
             }
+            await self.session.execute(
+                update(LotModel).where(LotModel.id == lot.id).values(**new_values)
+            )
             # Auto-activate: lot en création avec surface → disponible
             if lot.status == "creation" and lot.surface and new_price:
-                new_values["status"] = "available"
+                await self._activate(lot.id, lot.status, user_id, enabled_optional)
                 logger.info(
                     "Lot auto-activated via pricing config",
                     lot_id=lot.id,
                     project_id=project_id,
                 )
-            await self.session.execute(
-                update(LotModel).where(LotModel.id == lot.id).values(**new_values)
-            )
 
     async def apply_configs_to_existing_lots(
         self,
@@ -222,6 +243,7 @@ class LotPricingService:
         await self._check_project_access(project_id, requester_id, requester_role)
 
         configs = await self.pricing_repo.list_by_project(project_id)
+        enabled_optional = await self.project_repo.get_enabled_optional(project_id)
         total_updated = 0
         total_activated = 0
 
@@ -250,17 +272,19 @@ class LotPricingService:
                     "price_per_sqm": cfg.prix_m2_catalogue,
                     "price_per_sqm_acte": cfg.prix_m2_acte,
                 }
+                await self.session.execute(
+                    update(LotModel).where(LotModel.id == lot.id).values(**new_values)
+                )
                 if lot.status == "creation" and lot.surface and new_price:
-                    new_values["status"] = "available"
+                    await self._activate(
+                        lot.id, lot.status, requester_id, enabled_optional
+                    )
                     total_activated += 1
                     logger.info(
                         "Lot auto-activated via apply-configs",
                         lot_id=lot.id,
                         project_id=project_id,
                     )
-                await self.session.execute(
-                    update(LotModel).where(LotModel.id == lot.id).values(**new_values)
-                )
                 total_updated += 1
 
         await self.session.flush()

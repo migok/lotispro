@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.domain.lot_workflow import EDL_STATUSES, SOLD_STATUSES
 from app.domain.schemas.dashboard import (
     AlertsSummary,
     AverageDurations,
@@ -24,6 +25,7 @@ from app.infrastructure.database.models import (
     LotModel,
     PaymentInstallmentModel,
     PaymentScheduleModel,
+    ProjectModel,
     ReservationModel,
     SaleModel,
 )
@@ -43,13 +45,8 @@ _ACTIVE_LOT_STATUSES = (
     "option",
     "reservation_a_finaliser",
     "reservation_engagee",
-    "reservation_soldee",
-    "chez_notaire",
-    "chez_proprietaire",
+    *SOLD_STATUSES,
 )
-
-# Lot statuses representing completed/closed sales for CA réalisé
-_SOLD_LOT_STATUSES = ("reservation_soldee", "chez_notaire", "chez_proprietaire")
 
 
 class DashboardService:
@@ -97,6 +94,10 @@ class DashboardService:
             func.count()
             .filter(LotModel.status == "reservation_soldee")
             .label("reservation_soldee"),
+            *(
+                func.count().filter(LotModel.status == status).label(status)
+                for status in EDL_STATUSES
+            ),
             func.count()
             .filter(LotModel.status == "chez_notaire")
             .label("chez_notaire"),
@@ -200,6 +201,9 @@ class DashboardService:
                 + global_row.reservation_a_finaliser
                 + global_row.reservation_engagee
                 + global_row.reservation_soldee
+                + global_row.edl_programme
+                + global_row.edl_realise
+                + global_row.edl_finalise
                 + global_row.chez_notaire
                 + global_row.chez_proprietaire
             )
@@ -211,6 +215,9 @@ class DashboardService:
                 reservation_a_finaliser=global_row.reservation_a_finaliser,
                 reservation_engagee=global_row.reservation_engagee,
                 reservation_soldee=global_row.reservation_soldee,
+                edl_programme=global_row.edl_programme,
+                edl_realise=global_row.edl_realise,
+                edl_finalise=global_row.edl_finalise,
                 chez_notaire=global_row.chez_notaire,
                 chez_proprietaire=global_row.chez_proprietaire,
                 blocked=global_row.blocked,
@@ -234,6 +241,9 @@ class DashboardService:
                 + global_row.reservation_a_finaliser
                 + global_row.reservation_engagee
                 + global_row.reservation_soldee
+                + global_row.edl_programme
+                + global_row.edl_realise
+                + global_row.edl_finalise
                 + global_row.chez_notaire
                 + global_row.chez_proprietaire
             )
@@ -245,6 +255,9 @@ class DashboardService:
                 reservation_a_finaliser=global_row.reservation_a_finaliser,
                 reservation_engagee=global_row.reservation_engagee,
                 reservation_soldee=global_row.reservation_soldee,
+                edl_programme=global_row.edl_programme,
+                edl_realise=global_row.edl_realise,
+                edl_finalise=global_row.edl_finalise,
                 chez_notaire=global_row.chez_notaire,
                 chez_proprietaire=global_row.chez_proprietaire,
                 blocked=global_row.blocked,
@@ -515,7 +528,10 @@ class DashboardService:
         project_id: int | None = None,
         user_id: int | None = None,
     ) -> list[dict]:
-        """Return reservation_soldee lots where the client wants to pass chez le notaire.
+        """Return lots ready for the notary whose client wants to go there.
+
+        Ready means reservation_soldee (projects without état des lieux) or
+        edl_finalise (projects with one).
 
         Only lots explicitly tagged with wants_notaire=True are included.
 
@@ -523,13 +539,19 @@ class DashboardService:
         """
 
         query = (
-            select(LotModel, ReservationModel, ClientModel)
+            select(
+                LotModel,
+                ReservationModel,
+                ClientModel,
+                ProjectModel.enabled_optional_statuses,
+            )
             .join(
                 ReservationModel, LotModel.current_reservation_id == ReservationModel.id
             )
             .join(ClientModel, ReservationModel.client_id == ClientModel.id)
+            .join(ProjectModel, LotModel.project_id == ProjectModel.id)
             .where(
-                LotModel.status == "reservation_soldee",
+                LotModel.status.in_(("reservation_soldee", "edl_finalise")),
                 ReservationModel.wants_notaire.is_(True),
             )
         )
@@ -543,7 +565,12 @@ class DashboardService:
         rows = result.all()
 
         alerts = []
-        for lot, reservation, client in rows:
+        for lot, reservation, client, enabled in rows:
+            # A project with an état des lieux never sends a soldée lot to the
+            # notary directly (edl_required); one without never reaches edl_finalise.
+            ready_status = "edl_finalise" if "edl" in enabled else "reservation_soldee"
+            if lot.status != ready_status:
+                continue
             alerts.append(
                 {
                     "lot_id": lot.id,

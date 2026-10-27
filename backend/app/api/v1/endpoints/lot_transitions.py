@@ -8,10 +8,12 @@ from fastapi import APIRouter
 
 from app.api.dependencies import (
     CurrentUser,
+    EtatDesLieuxServiceDep,
     LotServiceDep,
     ManagerUser,
     ReservationServiceDep,
 )
+from app.domain.schemas.etat_des_lieux import EdlDoneData, EdlScheduleData
 from app.domain.schemas.lot import LotResponse
 from app.domain.schemas.reservation import (
     BlockLotData,
@@ -21,6 +23,7 @@ from app.domain.schemas.reservation import (
     FinaliserEngageData,
     FinaliserRefundData,
     OptionCreate,
+    OptionEngageData,
     ReservationAFinaliserData,
     ReservationResponse,
     SetNotaireIntentData,
@@ -43,7 +46,7 @@ async def activate_lot(
     lot_service: LotServiceDep,
 ) -> LotResponse:
     """Activate a lot in creation status, transitioning it to available."""
-    return await lot_service.activate_lot(lot_id)
+    return await lot_service.activate_lot(lot_id, user_id=current_user.id)
 
 
 @router.post(
@@ -83,6 +86,27 @@ async def available_to_engagee(
         lot_id=lot_id,
         data=data,
         user_id=current_user.id,
+    )
+
+
+@router.post(
+    "/{lot_id}/transitions/option-engage",
+    response_model=ReservationResponse,
+    summary="Passer d'une option à une réservation engagée",
+    description="Passage option → réservation engagée, uniquement si « Réservation à finaliser » est désactivé pour le projet.",
+)
+async def option_to_engagee(
+    lot_id: int,
+    data: OptionEngageData,
+    current_user: CurrentUser,
+    reservation_service: ReservationServiceDep,
+) -> ReservationResponse:
+    """Move from option to reservation_engagee."""
+    return await reservation_service.option_to_reservation_engagee(
+        lot_id=lot_id,
+        data=data,
+        user_id=current_user.id,
+        user_role=current_user.role,
     )
 
 
@@ -239,7 +263,8 @@ async def engagee_to_soldee(
     response_model=ReservationResponse,
     summary="Définir l'intention notaire",
     description=(
-        "Marque si le client souhaite passer chez le notaire (reservation_soldee uniquement). "
+        "Marque si le client souhaite passer chez le notaire "
+        "(réservation soldée ou état des lieux programmé / réalisé / finalisé). "
         "Active ou désactive le tag 'wants_notaire' sur la réservation."
     ),
 )
@@ -249,7 +274,7 @@ async def set_notaire_intent(
     current_user: CurrentUser,
     reservation_service: ReservationServiceDep,
 ) -> ReservationResponse:
-    """Set the notaire intent tag on a reservation_soldee lot."""
+    """Set the notaire intent tag on a sold lot (soldée or EDL status)."""
     return await reservation_service.set_notaire_intent(
         lot_id=lot_id,
         data=data,
@@ -261,7 +286,10 @@ async def set_notaire_intent(
     "/{lot_id}/transitions/notaire",
     response_model=LotResponse,
     summary="Passer chez le notaire",
-    description="Réservation soldée → chez le notaire. Enregistre le nom et la date du notaire.",
+    description=(
+        "Réservation soldée (EDL désactivé) ou état des lieux finalisé (EDL activé) "
+        "→ chez le notaire. Enregistre le nom et la date du notaire."
+    ),
 )
 async def soldee_to_notaire(
     lot_id: int,
@@ -269,7 +297,7 @@ async def soldee_to_notaire(
     current_user: CurrentUser,
     reservation_service: ReservationServiceDep,
 ) -> LotResponse:
-    """Move from reservation_soldee to chez_notaire."""
+    """Move from reservation_soldee or edl_finalise to chez_notaire."""
     return await reservation_service.soldee_to_notaire(
         lot_id=lot_id,
         data=data,
@@ -353,3 +381,69 @@ async def unblock_lot(
         data=data,
         user_id=current_user.id,
     )
+
+
+@router.post(
+    "/{lot_id}/transitions/edl-schedule",
+    response_model=LotResponse,
+    summary="Programmer l'état des lieux",
+    description=(
+        "Réservation soldée → état des lieux programmé (si l'état des lieux est "
+        "activé pour le projet). Crée l'état des lieux lié à la réservation courante."
+    ),
+)
+async def edl_schedule(
+    lot_id: int,
+    data: EdlScheduleData,
+    current_user: CurrentUser,
+    edl_service: EtatDesLieuxServiceDep,
+) -> LotResponse:
+    """Programme the état des lieux of a sold lot."""
+    return await edl_service.schedule(lot_id, data, user_id=current_user.id)
+
+
+@router.put(
+    "/{lot_id}/transitions/edl-schedule",
+    response_model=LotResponse,
+    summary="Reprogrammer l'état des lieux",
+    description="Change la date, l'intervenant ou la note (statut inchangé).",
+)
+async def edl_reschedule(
+    lot_id: int,
+    data: EdlScheduleData,
+    current_user: CurrentUser,
+    edl_service: EtatDesLieuxServiceDep,
+) -> LotResponse:
+    """Reprogramme a programmed état des lieux."""
+    return await edl_service.reschedule(lot_id, data, user_id=current_user.id)
+
+
+@router.post(
+    "/{lot_id}/transitions/edl-done",
+    response_model=LotResponse,
+    summary="Marquer l'état des lieux réalisé",
+    description="État des lieux programmé → réalisé, avec les actions relevées.",
+)
+async def edl_done(
+    lot_id: int,
+    data: EdlDoneData,
+    current_user: CurrentUser,
+    edl_service: EtatDesLieuxServiceDep,
+) -> LotResponse:
+    """Record the visit and the actions it raised."""
+    return await edl_service.mark_done(lot_id, data, user_id=current_user.id)
+
+
+@router.post(
+    "/{lot_id}/transitions/edl-finalize",
+    response_model=LotResponse,
+    summary="Finaliser l'état des lieux",
+    description="État des lieux réalisé → finalisé (aucune action ouverte).",
+)
+async def edl_finalize(
+    lot_id: int,
+    current_user: CurrentUser,
+    edl_service: EtatDesLieuxServiceDep,
+) -> LotResponse:
+    """Close the état des lieux once every action is done."""
+    return await edl_service.finalize(lot_id, user_id=current_user.id)

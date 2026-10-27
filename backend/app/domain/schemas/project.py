@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.domain.schemas.common import BaseSchema
 
@@ -47,6 +47,22 @@ class ProjectUpdate(BaseSchema):
     )
 
 
+OptionalStatusKey = Literal["option", "reservation_a_finaliser", "edl"]
+
+
+class ProjectWorkflowUpdate(BaseSchema):
+    """Schema for choosing a project's optional lot statuses."""
+
+    enabled_optional_statuses: list[OptionalStatusKey] = Field(
+        description="Optional status keys enabled for the project",
+    )
+
+    @field_validator("enabled_optional_statuses")
+    @classmethod
+    def _dedupe(cls, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(value))
+
+
 class ProjectResponse(BaseSchema):
     """Schema for project data in responses."""
 
@@ -69,6 +85,14 @@ class ProjectResponse(BaseSchema):
     image_url: str | None = Field(
         default=None,
         description="URL of the project cover image",
+    )
+    enabled_optional_statuses: list[str] = Field(
+        default_factory=lambda: ["option", "reservation_a_finaliser"],
+        description="Optional lot statuses enabled for the project",
+    )
+    enabled_statuses: list[str] = Field(
+        default_factory=list,
+        description="Lot statuses usable by the project, in pipeline order",
     )
     created_by: int
     created_at: datetime

@@ -50,10 +50,10 @@
 
 ## Périmètre
 
-- **E3-T1** `lot_workflow.py` + `lot_status_history` (migration 0018) + branchement dans toutes les transitions existantes ; les tests de caractérisation E0-T3 restent verts.
-- **E3-T2** `enabled_optional_statuses` (migration 0019) + API paramètres projet + gardes + refus de désactivation.
+- **E3-T1** `lot_workflow.py` + `lot_status_history` (migration 0020) + branchement dans toutes les transitions existantes ; les tests de caractérisation E0-T3 restent verts.
+- **E3-T2** `enabled_optional_statuses` (migration 0021) + API paramètres projet + gardes + refus de désactivation.
 - **E3-T3** Transition `option-engage`.
-- **E3-T4** États des lieux backend (migration 0020 : tables + contrainte `valid_lot_status` élargie).
+- **E3-T4** États des lieux backend (migration 0022 : tables + contrainte `valid_lot_status` élargie).
 - **E3-T5** Frontend : cases dans Paramètres projet ; `LotDetailModal` n'affiche que les actions permises ; écrans EDL (programmer, réaliser + actions, finaliser) ; libellés/couleurs dans `utils/constants.js`.
 
 ## Critères d'acceptance

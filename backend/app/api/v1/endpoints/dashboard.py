@@ -59,8 +59,10 @@ async def get_alerts(
     "/notaire-alerts",
     summary="Lots en attente notaire",
     description=(
-        "Lots en statut réservation soldée dont le client souhaite passer chez le notaire "
-        "(wants_notaire=True). Sert à alimenter la section d'alertes notaire du dashboard."
+        "Lots prêts pour le notaire dont le client souhaite y passer "
+        "(wants_notaire=True) : statut reservation_soldee (projets sans état des "
+        "lieux) ou edl_finalise (projets avec état des lieux). Sert à alimenter la "
+        "section d'alertes notaire du dashboard."
     ),
 )
 async def get_notaire_pending_alerts(
@@ -69,7 +71,7 @@ async def get_notaire_pending_alerts(
     project_id: int | None = Query(default=None, description="Filter by project"),
     user_id: int | None = Query(default=None, description="Filter by user"),
 ) -> list[dict]:
-    """Get soldée lots waiting for notaire transition."""
+    """Get soldée / EDL-finalised lots waiting for notaire transition."""
     return await dashboard_service.get_notaire_pending_alerts(
         project_id=project_id,
         user_id=user_id,

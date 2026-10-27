@@ -2,6 +2,7 @@
 
 from sqlalchemy import and_, func, or_, select
 
+from app.domain.lot_workflow import DEFAULT_ENABLED_OPTIONAL, SOLD_STATUSES
 from app.infrastructure.database.models import (
     AssignmentModel,
     LotModel,
@@ -26,14 +27,12 @@ class ProjectRepository(BaseRepository[ProjectModel]):
         Returns:
             Project with accurate sold_lots and total_lots counts
         """
-        # Subquery to count completed lots (chez_proprietaire = fully closed)
+        # Subquery to count sold lots (soldée and every later status)
         sold_lots_subquery = (
             select(func.count(LotModel.id))
             .where(
                 LotModel.project_id == id,
-                LotModel.status.in_(
-                    ("reservation_soldee", "chez_notaire", "chez_proprietaire")
-                ),
+                LotModel.status.in_(SOLD_STATUSES),
             )
             .scalar_subquery()
         )
@@ -64,6 +63,16 @@ class ProjectRepository(BaseRepository[ProjectModel]):
 
         return project
 
+    async def get_enabled_optional(self, project_id: int) -> list[str]:
+        """Optional lot statuses enabled for a project (default if not found)."""
+        result = await self.session.execute(
+            select(ProjectModel.enabled_optional_statuses).where(
+                ProjectModel.id == project_id
+            )
+        )
+        value = result.scalar_one_or_none()
+        return list(value) if value is not None else list(DEFAULT_ENABLED_OPTIONAL)
+
     async def get_all_for_user(
         self,
         user_id: int | None = None,
@@ -84,11 +93,7 @@ class ProjectRepository(BaseRepository[ProjectModel]):
                 LotModel.project_id,
                 func.count(LotModel.id).label("sold_count"),
             )
-            .where(
-                LotModel.status.in_(
-                    ("reservation_soldee", "chez_notaire", "chez_proprietaire")
-                )
-            )
+            .where(LotModel.status.in_(SOLD_STATUSES))
             .group_by(LotModel.project_id)
             .subquery()
         )

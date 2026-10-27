@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -111,6 +112,13 @@ class ProjectModel(Base):
     delivery_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     geojson_file_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Optional lot statuses the project uses ("option", "reservation_a_finaliser", "edl")
+    enabled_optional_statuses: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=lambda: ["option", "reservation_a_finaliser"],
+        server_default=text('\'["option","reservation_a_finaliser"]\''),
+    )
     created_by: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id"),
@@ -274,11 +282,44 @@ class LotModel(Base):
         CheckConstraint(
             "status IN ("
             "'creation', 'available', 'option', 'reservation_a_finaliser', "
-            "'reservation_engagee', 'reservation_soldee', 'chez_notaire', "
+            "'reservation_engagee', 'reservation_soldee', 'edl_programme', "
+            "'edl_realise', 'edl_finalise', 'chez_notaire', "
             "'chez_proprietaire', 'blocked')",
             name="valid_lot_status",
         ),
         Index("ix_lots_project_status", "project_id", "status"),
+    )
+
+
+class LotStatusHistoryModel(Base):
+    """One lot status change, written by ``LotRepository.change_status``."""
+
+    __tablename__ = "lot_status_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lot_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("lots.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    from_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    transition: Mapped[str] = mapped_column(String(30), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Reservation concerned by the change (no FK, like lots.current_reservation_id).
+    reservation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    __table_args__ = (
+        Index("ix_lot_status_history_lot_changed", "lot_id", "changed_at"),
     )
 
 
@@ -859,3 +900,87 @@ class LotDocumentModel(Base):
     lot: Mapped["LotModel"] = relationship("LotModel")
 
     __table_args__ = (Index("ix_lot_documents_lot", "lot_id"),)
+
+
+class EtatDesLieuxModel(Base):
+    """État des lieux of a lot, linked to the reservation it closes."""
+
+    __tablename__ = "etats_des_lieux"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    lot_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("lots.id"),
+        nullable=False,
+    )
+    reservation_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("reservations.id"),
+        nullable=False,
+    )
+    scheduled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    intervenant: Mapped[str] = mapped_column(String(200), nullable=False)
+    schedule_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    done_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    done_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    finalized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    __table_args__ = (
+        Index("ix_etats_des_lieux_lot", "lot_id"),
+        Index("ix_etats_des_lieux_reservation", "reservation_id"),
+    )
+
+
+class EdlActionModel(Base):
+    """Action to carry out after an état des lieux (reserve, repair...)."""
+
+    __tablename__ = "edl_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    etat_des_lieux_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("etats_des_lieux.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    responsable: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="ouverte")
+    done_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ouverte', 'faite')",
+            name="valid_edl_action_status",
+        ),
+        Index("ix_edl_actions_etat_des_lieux", "etat_des_lieux_id"),
+    )

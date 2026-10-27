@@ -1,0 +1,224 @@
+{
+  "all_statuses": [
+    "creation",
+    "available",
+    "option",
+    "reservation_a_finaliser",
+    "reservation_engagee",
+    "reservation_soldee",
+    "edl_programme",
+    "edl_realise",
+    "edl_finalise",
+    "chez_notaire",
+    "chez_proprietaire",
+    "blocked"
+  ],
+  "optional_keys": [
+    "option",
+    "reservation_a_finaliser",
+    "edl"
+  ],
+  "edl_statuses": [
+    "edl_programme",
+    "edl_realise",
+    "edl_finalise"
+  ],
+  "default_enabled_optional": [
+    "option",
+    "reservation_a_finaliser"
+  ],
+  "transitions": {
+    "activate": {
+      "from_statuses": [
+        "creation"
+      ],
+      "to_status": "available",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "start_option": {
+      "from_statuses": [
+        "available"
+      ],
+      "to_status": "option",
+      "requires_enabled": "option",
+      "requires_disabled": null
+    },
+    "cancel_option": {
+      "from_statuses": [
+        "option"
+      ],
+      "to_status": "available",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "extend_option": {
+      "from_statuses": [
+        "option",
+        "reservation_a_finaliser"
+      ],
+      "to_status": null,
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "direct_reservation": {
+      "from_statuses": [
+        "available"
+      ],
+      "to_status": "reservation_a_finaliser",
+      "requires_enabled": "reservation_a_finaliser",
+      "requires_disabled": null
+    },
+    "to_reservation": {
+      "from_statuses": [
+        "option"
+      ],
+      "to_status": "reservation_a_finaliser",
+      "requires_enabled": "reservation_a_finaliser",
+      "requires_disabled": null
+    },
+    "refund": {
+      "from_statuses": [
+        "reservation_a_finaliser"
+      ],
+      "to_status": "available",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "direct_engage": {
+      "from_statuses": [
+        "available"
+      ],
+      "to_status": "reservation_engagee",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "engage": {
+      "from_statuses": [
+        "reservation_a_finaliser"
+      ],
+      "to_status": "reservation_engagee",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "option_engage": {
+      "from_statuses": [
+        "option"
+      ],
+      "to_status": "reservation_engagee",
+      "requires_enabled": null,
+      "requires_disabled": "reservation_a_finaliser"
+    },
+    "solde": {
+      "from_statuses": [
+        "reservation_engagee"
+      ],
+      "to_status": "reservation_soldee",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "set_notaire_intent": {
+      "from_statuses": [
+        "edl_finalise",
+        "edl_programme",
+        "edl_realise",
+        "reservation_soldee"
+      ],
+      "to_status": null,
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "edl_schedule": {
+      "from_statuses": [
+        "reservation_soldee"
+      ],
+      "to_status": "edl_programme",
+      "requires_enabled": "edl",
+      "requires_disabled": null
+    },
+    "edl_reschedule": {
+      "from_statuses": [
+        "edl_programme"
+      ],
+      "to_status": null,
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "edl_done": {
+      "from_statuses": [
+        "edl_programme"
+      ],
+      "to_status": "edl_realise",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "edl_finalize": {
+      "from_statuses": [
+        "edl_realise"
+      ],
+      "to_status": "edl_finalise",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "notaire": {
+      "from_statuses": [
+        "edl_finalise",
+        "reservation_soldee"
+      ],
+      "to_status": "chez_notaire",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "notaire_update": {
+      "from_statuses": [
+        "chez_notaire"
+      ],
+      "to_status": null,
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "proprietaire": {
+      "from_statuses": [
+        "chez_notaire"
+      ],
+      "to_status": "chez_proprietaire",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "block": {
+      "from_statuses": [
+        "available",
+        "chez_notaire",
+        "creation",
+        "edl_finalise",
+        "edl_programme",
+        "edl_realise",
+        "option",
+        "reservation_a_finaliser",
+        "reservation_engagee",
+        "reservation_soldee"
+      ],
+      "to_status": "blocked",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "unblock": {
+      "from_statuses": [
+        "blocked"
+      ],
+      "to_status": "available",
+      "requires_enabled": null,
+      "requires_disabled": null
+    },
+    "direct_update": {
+      "from_statuses": [
+        "available",
+        "blocked",
+        "creation"
+      ],
+      "to_status": null,
+      "requires_enabled": null,
+      "requires_disabled": null
+    }
+  }
+}
