@@ -12,6 +12,8 @@ _Dernière mise à jour : 2026-10-26 (E3-T5 : frontend statuts + EDL)_
 
 ## Vue d'ensemble
 
+Ajustement E2 « téléphone international » (2026-10-26, livré par sa propre PR) : sélecteur d'indicatif avec drapeaux, noms français et recherche (pays, alias ou indicatif) pour Téléphone / WhatsApp, pays usuels en tête (Maroc, France…), sans pays par défaut. Un numéro saisi ou collé avec `00` est converti en `+` avant analyse (le pays bascule sur l'indicatif composé). Longueur contrôlée par `isPossiblePhoneNumber` côté formulaire (l'API garde la regex E.164). Plus de conversion implicite des numéros locaux en `+212` (formulaire et API) ; pas de migration : un ancien numéro sans indicatif affiche une aide et se convertit en choisissant le pays. Composant chargé à la demande (chunk séparé).
+
 | Epic | Statut | Tâches faites | Issue | PR |
 |---|---|---|---|---|
 | E0 Fondations & nettoyage | ✅ | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | [#46](https://github.com/migok/lotispro/pull/46) |

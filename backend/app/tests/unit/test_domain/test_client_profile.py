@@ -38,9 +38,9 @@ class TestNormalizePhone:
     @pytest.mark.parametrize(
         ("raw", "expected"),
         [
-            ("06 12 34 56 78", "+212612345678"),
-            ("0612-345-678", "+212612345678"),
-            ("06.12.34.56.78", "+212612345678"),
+            ("+212 6 12 34 56 78", "+212612345678"),
+            ("+212612-345-678", "+212612345678"),
+            ("+212.6.12.34.56.78", "+212612345678"),
             ("+33 6 12 34 56 78", "+33612345678"),
             ("00212612345678", "+212612345678"),
             ("", None),
@@ -50,7 +50,9 @@ class TestNormalizePhone:
     def test_valid(self, raw: str | None, expected: str | None) -> None:
         assert normalize_phone(raw) == expected
 
-    @pytest.mark.parametrize("raw", ["12345", "abc", "+2١٢612345678", "٠٦١٢٣٤٥٦٧٨"])
+    @pytest.mark.parametrize(
+        "raw", ["0612345678", "12345", "abc", "+2١٢612345678", "٠٦١٢٣٤٥٦٧٨"]
+    )
     def test_invalid(self, raw: str) -> None:
         with pytest.raises(ValueError, match="Numéro invalide"):
             normalize_phone(raw)

@@ -11,15 +11,15 @@ import {
 
 describe('normalizePhone', () => {
   it.each([
-    ['0612345678', '+212612345678'],
+    ['+33 6 12 34 56 78', '+33612345678'],
     ['0033612345678', '+33612345678'],
-    ['06 12.34-56-78', '+212612345678'],
+    ['+212 6 12.34-56-78', '+212612345678'],
     ['+212612345678', '+212612345678'],
   ])('normalises %s', (raw, expected) => {
     expect(normalizePhone(raw)).toEqual({ value: expected, error: null })
   })
 
-  it.each(['12345', '+0612345678', 'abc'])('rejects %s', (raw) => {
+  it.each(['0612345678', '06 12.34-56-78', '12345', '+0612345678', 'abc'])('rejects %s', (raw) => {
     const result = normalizePhone(raw)
     expect(result.value).toBeNull()
     expect(result.error).toBe('Numéro invalide (format international, ex. +212612345678)')
@@ -67,7 +67,7 @@ describe('validateClientForm', () => {
   const base = {
     last_name: 'Benali',
     first_name: 'Fatima',
-    phone: '0612345678',
+    phone: '+212612345678',
     acquisition_channel: 'smap',
     address_morocco: '12 rue X',
     city_morocco: 'Casablanca',
@@ -111,6 +111,25 @@ describe('validateClientForm', () => {
     expect(validateClientForm(both).acte_address).toBeDefined()
     expect(validateClientForm({ ...both, acte_address: 'abroad' })).toEqual({})
     expect(validateClientForm(base)).toEqual({})
+  })
+
+  it('rejects phone numbers of an impossible length for their country', () => {
+    const message = 'Numéro incomplet ou invalide pour ce pays'
+    // « 612345678 » sans pays devient +612345678 : longueur possible pour l'Australie (+61),
+    // donc non détecté par isPossiblePhoneNumber (contrôle de longueur seulement).
+    expect(validateClientForm({ ...base, phone: '+1234567890123' }).phone).toBe(message)
+    expect(validateClientForm({ ...base, phone: '+21261234567' }).phone).toBe(message)
+    expect(validateClientForm({ ...base, phone: '+33612345' }).phone).toBe(message)
+    expect(validateClientForm({ ...base, whatsapp: '+33 6 12 34 5' }).whatsapp).toBe(message)
+    expect(validateClientForm({ ...base, phone: '+33612345678', whatsapp: '+14165550123' })).toEqual({})
+  })
+
+  it('asks for the country dial code when a national number has none', () => {
+    const message = "Choisissez l'indicatif du pays"
+    expect(validateClientForm({ ...base, phone: '0612345678' }).phone).toBe(message)
+    expect(validateClientForm({ ...base, whatsapp: '06 12 34 56 78' }).whatsapp).toBe(message)
+    expect(validateClientForm({ ...base, phone: '00336123' }).phone).toBe('Numéro invalide (format international, ex. +212612345678)')
+    expect(validateClientForm({ ...base, phone: 'abc' }).phone).toBe('Numéro invalide (format international, ex. +212612345678)')
   })
 
   it('requires referrer and date for samsar', () => {
