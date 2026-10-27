@@ -232,6 +232,67 @@ describe('LotDetailModal', () => {
       await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/lots/5/documents'))).toBe(true))
       expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
     })
+
+    it('downloads the latest archived deed from the badge', async () => {
+      const routes = {
+        ...SCHEDULE,
+        '/api/reservations/11': RESERVATION,
+        '/api/lots/5/documents': [
+          { ...ACTE, id: 1, created_at: '2026-10-01T10:00:00' },
+          { ...ACTE, id: 2, created_at: '2026-10-02T10:00:00' },
+        ],
+      }
+      const fetchMock = mockFetch(routes)
+      const base = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/lots/5/documents/2')
+          ? Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(['%PDF'])) })
+          : base(url, opts))
+      URL.createObjectURL = vi.fn(() => 'blob:x')
+      URL.revokeObjectURL = vi.fn()
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: 'Télécharger' }))
+
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/lots/5/documents/2'))).toBe(true))
+    })
+
+    it('shows a neutral message, not the "not generated" alert, when documents fail to load', async () => {
+      const fetchMock = mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION })
+      const base = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/lots/5/documents') ? Promise.reject(new Error('réseau')) : base(url, opts))
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText('Documents indisponibles.')).toBeInTheDocument()
+      expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Régénérer' })).not.toBeInTheDocument()
+    })
+  })
+
+  describe('archived deed at the notary stage', () => {
+    const NOTARY = { id: 6, numero: 'N6', status: 'chez_notaire', price: 500000, reservation_id: 12, client_name: 'Fatima Benali' }
+    const DEED = { id: 1, lot_id: 6, reservation_id: 12, filename: 'acte_reservation_12_lotN6.pdf', category: 'acte_reservation' }
+
+    it('lists the deed without a delete button', async () => {
+      mockFetch({ '/api/lots/6/documents': [DEED] })
+      renderModal(NOTARY)
+
+      expect(await screen.findByText(DEED.filename)).toBeInTheDocument()
+      expect(screen.queryByTitle('Supprimer')).not.toBeInTheDocument()
+    })
+
+    it('still warns "Aucun document joint" when only the deed is attached', async () => {
+      mockFetch({ '/api/lots/6/documents': [DEED] })
+      const user = userEvent.setup()
+      renderModal(NOTARY)
+      await screen.findByText(DEED.filename)
+
+      await user.click(screen.getByRole('button', { name: /Confirmer acte/ }))
+
+      expect(screen.getByText(/Aucun document joint/)).toBeInTheDocument()
+    })
   })
 
   describe('manager-only and owner-only actions', () => {

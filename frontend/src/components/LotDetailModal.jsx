@@ -25,6 +25,7 @@ const DEFAULT_PAYMENT_PLAN = {
 };
 
 // Statuts où l'acte de réservation est archivé (engagement et au-delà)
+const ACTE_CATEGORY = 'acte_reservation';
 const ACTE_STATUSES = ['reservation_engagee', 'reservation_soldee', ...EDL_STATUSES, 'chez_notaire', 'chez_proprietaire'];
 
 const PERIODICITY_OPTIONS = [
@@ -568,6 +569,8 @@ export default function LotDetailModal({
   const [settingNotaireIntent, setSettingNotaireIntent] = useState(false);
   const [documents, setDocuments] = useState([]);
   const [documentsLoaded, setDocumentsLoaded] = useState(false);
+  const [documentsError, setDocumentsError] = useState(false);
+  const documentsLotId = useRef(null);
   const [regeneratingActe, setRegeneratingActe] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const docFileInputRef = useRef(null);
@@ -589,11 +592,19 @@ export default function LotDetailModal({
     } else {
       setReservation(null);
     }
+    if (documentsLotId.current !== lot?.id) {
+      // autre lot : ne jamais montrer l'état des documents du lot précédent
+      documentsLotId.current = lot?.id ?? null;
+      setDocuments([]);
+      setDocumentsLoaded(false);
+      setDocumentsError(false);
+    }
     if (lot?.id && (['chez_notaire', 'chez_proprietaire'].includes(lot.status) || (lot.reservation_id && ACTE_STATUSES.includes(lot.status)))) {
       loadDocuments();
     } else {
       setDocuments([]);
       setDocumentsLoaded(false);
+      setDocumentsError(false);
     }
     if (lot?.project_id) {
       loadProjectFinancingPlan(lot.project_id);
@@ -720,9 +731,20 @@ export default function LotDetailModal({
     try {
       const data = await apiGet(`/api/lots/${lot.id}/documents`);
       setDocuments(data);
-    } catch { setDocuments([]); }
-    setDocumentsLoaded(true);
+      setDocumentsError(false);
+      setDocumentsLoaded(true);
+    } catch {
+      // ne pas conclure "acte absent" sur un échec de chargement
+      setDocuments([]);
+      setDocumentsLoaded(false);
+      setDocumentsError(true);
+    }
   };
+
+  const latestActe = documents
+    .filter(d => d.category === ACTE_CATEGORY)
+    .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')) || b.id - a.id)[0];
+  const notaryDocuments = documents.filter(d => d.category !== ACTE_CATEGORY);
 
   const handleRegenerateActe = async () => {
     setRegeneratingActe(true);
@@ -1503,14 +1525,22 @@ export default function LotDetailModal({
                     </>
                   )}
                   {/* Acte de réservation archivé */}
+                  {ACTE_STATUSES.includes(lot.status) && documentsError && (
+                    <div className="ldm-ri-row">
+                      <span className="ldm-ri-key">Documents indisponibles.</span>
+                    </div>
+                  )}
                   {ACTE_STATUSES.includes(lot.status) && documentsLoaded && (() => {
-                    const acte = documents.find(d => d.category === 'acte_reservation');
+                    const acte = latestActe;
                     if (acte) {
                       return (
                         <div className="ldm-ri-row">
                           <span className="ldm-ri-key">Acte</span>
                           <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Acte de réservation</span>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleDownloadDocument(acte)}>
+                              Télécharger
+                            </button>
                           </span>
                         </div>
                       );
@@ -1612,7 +1642,7 @@ export default function LotDetailModal({
                         >
                           <IcDownload />
                         </button>
-                        {lot.status === 'chez_notaire' && (
+                        {lot.status === 'chez_notaire' && doc.category !== ACTE_CATEGORY && (
                           <button
                             className="ldm-doc-btn ldm-doc-btn--danger"
                             onClick={() => handleDeleteDocument(doc.id)}
@@ -2700,11 +2730,11 @@ export default function LotDetailModal({
                   {lot.client_name && <span style={{ fontWeight: 600 }}>{lot.client_name}</span>}
                   {lot.notary_name && <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Notaire : {lot.notary_name}</span>}
                   {lot.notary_date && <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Acte du : {formatDate(lot.notary_date)}</span>}
-                  {documents.length > 0 ? (
+                  {notaryDocuments.length > 0 ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.82rem' }}>
                       <IcFile style={{ color: 'var(--color-primary)' }} />
                       <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
-                        {documents.length} document{documents.length > 1 ? 's' : ''} joint{documents.length > 1 ? 's' : ''}
+                        {notaryDocuments.length} document{notaryDocuments.length > 1 ? 's' : ''} joint{notaryDocuments.length > 1 ? 's' : ''}
                       </span>
                     </span>
                   ) : (
