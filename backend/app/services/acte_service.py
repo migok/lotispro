@@ -5,6 +5,7 @@ them) and archives the deed as a lot document on every engagement.
 """
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Literal
 
 from fastapi.concurrency import run_in_threadpool
@@ -16,6 +17,7 @@ from app.domain.schemas.payment import PaymentInstallmentResponse
 from app.infrastructure.database.models import LotDocumentModel
 from app.infrastructure.database.repositories import (
     LotDocumentRepository,
+    LotRepository,
     ReservationRepository,
 )
 from app.services.certificate_service import CertificateService
@@ -61,6 +63,10 @@ def _safe_lot(numero: str) -> str:
     return numero.replace("/", "-").replace(" ", "_")
 
 
+def _as_date(value: date | datetime | None) -> date | None:
+    return value.date() if isinstance(value, datetime) else value
+
+
 def _promotion_pending(details: dict) -> bool:
     return (details.get("promotion_amount") or 0) > 0 and not details.get(
         "promotion_received"
@@ -73,6 +79,7 @@ class ActeService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.reservation_repo = ReservationRepository(session)
+        self.lot_repo = LotRepository(session)
         self.doc_repo = LotDocumentRepository(session)
         self.payment_service = PaymentService(session)
         self.document_service = DocumentService(session)
@@ -94,10 +101,11 @@ class ActeService:
     ) -> tuple[bytes, str]:
         """Return the deed PDF and its file name.
 
-        ``require_paid_deposit=False`` skips the "first deposit paid" rule:
-        at engagement the first payment is by definition received
-        (``guarantee_amount``), even if the schedule's first installment is
-        not marked paid yet.
+        ``require_paid_deposit=False`` (engagement / regeneration) skips the
+        "first deposit paid" rule: at engagement the first payment is by
+        definition received. The deed then shows the paid first installment
+        if there is one, otherwise the ``guarantee_amount`` received at
+        engagement (see :meth:`_received_deposit`).
 
         Raises:
             NotFoundError: Reservation not found.
@@ -214,6 +222,33 @@ class ActeService:
         )
         return (deposits[0] if deposits else None), schedule.lot_price
 
+    async def _received_deposit(
+        self, details: dict, first: PaymentInstallmentResponse | None
+    ) -> tuple[float, date | None]:
+        """Amount and date actually received, for the archived deed.
+
+        Amount: the first deposit installment if it is paid, otherwise the
+        ``guarantee_amount`` recorded at engagement (a pending installment is
+        only planned; ``reservations.deposit`` is 0 for direct engagements).
+        Date: the installment's ``paid_date``, else ``deposit_date``, else the
+        engagement date (status history), else the reservation date.
+        """
+        if first is not None and first.status == "paid":
+            amount = first.amount
+            paid_date = _as_date(first.paid_date)
+        else:
+            guarantee = details.get("guarantee_amount")
+            amount = guarantee if guarantee is not None else details["deposit"]
+            paid_date = None
+
+        deposit_date = paid_date or details.get("deposit_date")
+        if deposit_date is None:
+            engaged_at = await self.lot_repo.get_engaged_at(
+                details["lot_id"], details["id"]
+            )
+            deposit_date = _as_date(engaged_at or details["reservation_date"])
+        return amount, deposit_date
+
     async def _render_certificate(
         self, details: dict, require_paid_deposit: bool
     ) -> tuple[bytes, str]:
@@ -221,6 +256,7 @@ class ActeService:
         # The deed's balance is computed against the schedule's lot price
         # (remaining balance after the initial payment) minus the first deposit.
         deposit = details["deposit"]
+        deposit_date = details.get("deposit_date")
         # Prefer sale_price (prix de vente sur l'acte) over catalogue price
         lot_price = details.get("sale_price") or details.get("lot_price")
 
@@ -230,6 +266,8 @@ class ActeService:
                 raise ActeNotReadyError(_DEPOSIT_UNPAID_ACTE, rule=DEPOSIT_UNPAID)
             deposit = first.amount
             lot_price = details.get("sale_price") or schedule_lot_price
+        if not require_paid_deposit:
+            deposit, deposit_date = await self._received_deposit(details, first)
 
         # If the promotion has not been collected yet, only the receipt is
         # available.
@@ -241,7 +279,7 @@ class ActeService:
             reservation_id=reservation_id,
             reservation_date=details["reservation_date"],
             deposit=deposit,
-            deposit_date=details.get("deposit_date"),
+            deposit_date=deposit_date,
             lot_numero=details["lot_numero"],
             lot_surface=details.get("lot_surface"),
             lot_price=lot_price,

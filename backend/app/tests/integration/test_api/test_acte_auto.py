@@ -1,7 +1,7 @@
 """E4-T1: the reservation deed is generated and archived on every engagement."""
 
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -13,6 +13,9 @@ from app.core.config import settings
 from app.infrastructure.database.models import (
     LotDocumentModel,
     LotModel,
+    PaymentInstallmentModel,
+    PaymentScheduleModel,
+    ReservationModel,
     UserModel,
 )
 from app.services.certificate_service import CertificateService
@@ -491,6 +494,153 @@ async def test_acte_endpoints_unknown_reservation(
 
     assert get.status_code == 404
     assert post.status_code == 404
+
+
+@pytest.fixture
+def certificate_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Keyword arguments of every ``generate_reservation_certificate`` call."""
+    calls: list[dict[str, Any]] = []
+
+    def capture(self: CertificateService, **kwargs: Any) -> bytes:
+        calls.append(kwargs)
+        return b"%PDF-fake"
+
+    monkeypatch.setattr(CertificateService, "generate_reservation_certificate", capture)
+    return calls
+
+
+async def _first_installment(
+    db_session: AsyncSession, reservation_id: int
+) -> PaymentInstallmentModel:
+    result = await db_session.execute(
+        select(PaymentInstallmentModel)
+        .join(PaymentScheduleModel)
+        .where(
+            PaymentScheduleModel.reservation_id == reservation_id,
+            PaymentInstallmentModel.payment_type == "deposit",
+        )
+        .order_by(PaymentInstallmentModel.installment_number)
+    )
+    return result.scalars().first()  # type: ignore[return-value]
+
+
+class TestArchivedDeedDeposit:
+    """The archived deed shows what was actually received at engagement."""
+
+    async def test_cash_engagement_shows_guarantee_and_engagement_date(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+        certificate_calls: list[dict[str, Any]],
+    ) -> None:
+        headers = auth_headers(commercial)
+        _, reservation_id = await _engage(
+            "direct-engage", client, db_session, manager, headers
+        )
+
+        archived = certificate_calls[-1]
+        assert archived["deposit"] == 50000
+        assert archived["deposit_date"] == datetime.now(UTC).date()
+        assert archived["lot_price"] == 500000
+
+        # Manual download keeps today's figures (reservations.deposit, no date).
+        response = await client.get(
+            f"/api/reservations/{reservation_id}/certificate", headers=headers
+        )
+        assert response.status_code == 200
+        manual = certificate_calls[-1]
+        assert (manual["deposit"], manual["deposit_date"]) == (0, None)
+
+    async def test_pending_first_installment_shows_guarantee(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+        certificate_calls: list[dict[str, Any]],
+    ) -> None:
+        _, reservation_id = await _engage(
+            "direct-engage",
+            client,
+            db_session,
+            manager,
+            auth_headers(commercial),
+            payment_plan={"deposit_count": 1, "balance_count": 1},
+        )
+
+        first = await _first_installment(db_session, reservation_id)
+        assert first.status == "pending"
+        assert first.amount != 50000
+        archived = certificate_calls[-1]
+        assert archived["deposit"] == 50000
+        assert archived["deposit_date"] == datetime.now(UTC).date()
+
+    async def test_paid_first_installment_shows_installment_and_paid_date(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+        certificate_calls: list[dict[str, Any]],
+    ) -> None:
+        headers = auth_headers(commercial)
+        _, reservation_id = await _engage(
+            "direct-engage",
+            client,
+            db_session,
+            manager,
+            headers,
+            payment_plan={"deposit_count": 1, "balance_count": 1},
+        )
+        first = await _first_installment(db_session, reservation_id)
+        paid = await client.patch(
+            f"/api/payments/installments/{first.id}",
+            headers=headers,
+            json={"status": "paid", "paid_date": "2026-10-20T10:00:00+00:00"},
+        )
+        assert paid.status_code == 200, paid.text
+
+        regenerated = await client.post(
+            f"/api/reservations/{reservation_id}/acte", headers=headers
+        )
+
+        assert regenerated.status_code == 201, regenerated.text
+        archived = certificate_calls[-1]
+        assert archived["deposit"] == first.amount
+        assert archived["deposit_date"] == date(2026, 10, 20)
+
+        # Manual path unchanged: installment amount, reservation deposit_date.
+        response = await client.get(
+            f"/api/reservations/{reservation_id}/certificate", headers=headers
+        )
+        assert response.status_code == 200
+        manual = certificate_calls[-1]
+        assert (manual["deposit"], manual["deposit_date"]) == (first.amount, None)
+
+    async def test_engage_from_reservation_a_finaliser_shows_stored_guarantee(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+        certificate_calls: list[dict[str, Any]],
+    ) -> None:
+        _, reservation_id = await _engage(
+            "engage", client, db_session, manager, auth_headers(commercial)
+        )
+
+        reservation = await db_session.get(ReservationModel, reservation_id)
+        assert reservation is not None
+        assert reservation.guarantee_amount == 10000
+        archived = certificate_calls[-1]
+        assert archived["deposit"] == 10000
+        assert archived["deposit_date"] == datetime.now(UTC).date()
 
 
 class TestCertificateEndpointsUnchanged:
