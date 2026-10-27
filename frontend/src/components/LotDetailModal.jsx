@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { apiGet, apiPost, apiPatch, apiPut, apiFetch, apiUploadFile } from '../utils/api';
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
@@ -9,6 +9,8 @@ import { shouldToastClientError } from '../utils/clientProfile';
 import { DEFAULT_ENABLED_OPTIONAL, EDL_STATUSES, allowedTransitions, openEdlActionsLabel } from '../utils/lotWorkflow';
 import EdlPanel from './lots/EdlPanel';
 import EdlTransitionForm from './lots/EdlTransitionForm';
+import DepositDecisionFields from './lots/DepositDecisionFields';
+import { buildEngagePayload, refundFields } from '../utils/engagePayload';
 
 /* ── Default payment plan ─────────────────────────────────── */
 const DEFAULT_PAYMENT_PLAN = {
@@ -520,7 +522,8 @@ export default function LotDetailModal({
   initialMode = null,
   enabledOptionalStatuses = DEFAULT_ENABLED_OPTIONAL,
 }) {
-  const { user, isManager } = useAuth();
+  const { user, isManager: hasManagerRole } = useAuth();
+  const isManager = hasManagerRole();
   const toast = useToast();
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -562,8 +565,14 @@ export default function LotDetailModal({
   const [documents, setDocuments] = useState([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const docFileInputRef = useRef(null);
-  // Open EDL actions: from the lot summary, then from the EDL panel once loaded.
-  const [edlOpenCount, setEdlOpenCount] = useState(lot?.edl_open_actions_count ?? 0);
+  // Open EDL actions of the displayed lot, reported by the EDL panel once
+  // loaded; unknown (null) until then, so « Finaliser » stays disabled.
+  const [edlCount, setEdlCount] = useState({ lotId: null, count: null });
+  const edlOpenCount = edlCount.lotId === lot?.id ? edlCount.count : null;
+  const reportEdlOpenCount = useCallback(
+    (count) => setEdlCount({ lotId: lot?.id, count }),
+    [lot?.id]
+  );
 
   useEffect(() => {
     loadClients();
@@ -974,20 +983,14 @@ export default function LotDetailModal({
     if (!selectedClient) { toast.warning('Veuillez sélectionner un client'); return; }
     if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
     if (!guaranteeAmount || parseFloat(guaranteeAmount) <= 0) { toast.warning('Le montant du premier acompte (ND) est requis'); return; }
-    const salePrice = parseFloat(salePriceEngaged);
-    const promoAmt = lot?.price != null ? Math.max(0, lot.price - salePrice) : 0;
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/direct-engage`, {
+      await apiPost(`/api/lots/${lot.id}/transitions/direct-engage`, engageBody({
         client_id: selectedClient.id,
         guarantee_amount: parseFloat(guaranteeAmount),
         payment_type: paymentType,
-        sale_price: salePrice,
-        promotion_paid_timing: promoAmt > 0 ? promotionTiming : undefined,
-        promotion_received: promoAmt > 0 ? promotionTiming === 'debut' : false,
-        payment_plan: _buildPaymentPlanPayload(),
         notes: notes || undefined,
-      });
+      }));
       toast.success('Réservation engagée créée');
       onClose(); if (onRefresh) onRefresh();
     } catch (error) { toast.error(error.message || 'Erreur'); }
@@ -1002,33 +1005,21 @@ export default function LotDetailModal({
     let depositFields = {};
     if (optionDeposit > 0) {
       if (!validationChoice) { toast.warning("Indiquez si l'acompte de l'option est déduit ou remboursé"); return; }
-      depositFields = { deposit_action: validationChoice };
-      if (validationChoice === 'refund') {
-        const amount = releaseData.deposit_refund_amount !== '' ? parseFloat(releaseData.deposit_refund_amount) : null;
-        if (amount === null || amount < 0) { toast.warning('Le montant remboursé est requis'); return; }
-        if (!releaseData.deposit_refund_date) { toast.warning('La date de remboursement est requise'); return; }
-        depositFields = {
-          ...depositFields,
-          refund_amount: amount,
-          refund_date: releaseData.deposit_refund_date,
-          refund_payment_type: releaseData.refund_payment_type || undefined,
-        };
-      }
+      const refundError = validationChoice === 'refund' ? refundFormError() : null;
+      if (refundError) { toast.warning(refundError); return; }
+      depositFields = {
+        deposit_action: validationChoice,
+        ...(validationChoice === 'refund' ? refundFields(releaseData) : {}),
+      };
     }
-    const salePrice = parseFloat(salePriceEngaged);
-    const promoAmt = lot?.price != null ? Math.max(0, lot.price - salePrice) : 0;
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/option-engage`, {
+      await apiPost(`/api/lots/${lot.id}/transitions/option-engage`, engageBody({
         guarantee_amount: parseFloat(guaranteeAmount),
         payment_type: paymentType,
-        sale_price: salePrice,
-        promotion_paid_timing: promoAmt > 0 ? promotionTiming : undefined,
-        promotion_received: promoAmt > 0 ? promotionTiming === 'debut' : false,
-        payment_plan: _buildPaymentPlanPayload(),
         notes: notes || undefined,
         ...depositFields,
-      });
+      }));
       toast.success('Réservation engagée');
       onClose(); if (onRefresh) onRefresh();
     } catch (error) { toast.error(error.message || 'Erreur'); }
@@ -1105,24 +1096,30 @@ export default function LotDetailModal({
     };
   };
 
-  const _buildEngagePayload = (guaranteeAction, extra = {}) => {
-    const salePrice = salePriceEngaged ? parseFloat(salePriceEngaged) : undefined;
-    const promoAmt = (salePrice != null && lot?.price != null) ? Math.max(0, lot.price - salePrice) : 0;
-    return {
-      guarantee_action: guaranteeAction,
-      sale_price: salePrice,
-      promotion_paid_timing: promoAmt > 0 ? promotionTiming : undefined,
-      promotion_received: promoAmt > 0 ? promotionTiming === 'debut' : false,
-      payment_plan: _buildPaymentPlanPayload(),
-      ...extra,
-    };
-  };
+  // Body of an engagement: `fields` + sale price, promotion and payment plan from the form
+  function engageBody(fields) {
+    return buildEngagePayload({
+      lotPrice: lot?.price,
+      salePrice: salePriceEngaged ? parseFloat(salePriceEngaged) : undefined,
+      promotionTiming,
+      paymentPlan: _buildPaymentPlanPayload(),
+      ...fields,
+    });
+  }
+
+  // Warning for an incomplete refund form (guarantee or option deposit), else null
+  function refundFormError() {
+    const amount = releaseData.deposit_refund_amount !== '' ? parseFloat(releaseData.deposit_refund_amount) : null;
+    if (amount === null || amount < 0) return 'Le montant remboursé est requis';
+    if (!releaseData.deposit_refund_date) return 'La date de remboursement est requise';
+    return null;
+  }
 
   const handleFinaliserEngage = async () => {
     if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/engage`, _buildEngagePayload('deduct'));
+      await apiPost(`/api/lots/${lot.id}/transitions/engage`, engageBody({ guarantee_action: 'deduct' }));
       toast.success('Réservation engagée — garantie déduite');
       onClose(); if (onRefresh) onRefresh();
     } catch (error) { toast.error(error.message || 'Erreur'); }
@@ -1130,16 +1127,14 @@ export default function LotDetailModal({
   };
 
   const handleFinaliserEngageWithRefund = async () => {
-    const amount = releaseData.deposit_refund_amount !== '' ? parseFloat(releaseData.deposit_refund_amount) : null;
-    if (amount === null || amount < 0) { toast.warning('Le montant remboursé est requis'); return; }
-    if (!releaseData.deposit_refund_date) { toast.warning('La date de remboursement est requise'); return; }
+    const refundError = refundFormError();
+    if (refundError) { toast.warning(refundError); return; }
     if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/engage`, _buildEngagePayload('refund', {
-        refund_amount: amount,
-        refund_date: releaseData.deposit_refund_date,
-        refund_payment_type: releaseData.refund_payment_type || undefined,
+      await apiPost(`/api/lots/${lot.id}/transitions/engage`, engageBody({
+        guarantee_action: 'refund',
+        ...refundFields(releaseData),
       }));
       toast.success('Garantie rendue au client — réservation engagée');
       onClose(); if (onRefresh) onRefresh();
@@ -1305,6 +1300,7 @@ export default function LotDetailModal({
   const activeGuarantee = reservation?.guarantee_amount ?? lot?.guarantee_amount ?? 0;
   // Acompte versé pendant l'option (déduit ou remboursé à l'engagement)
   const optionDeposit = reservation?.deposit ?? lot?.deposit ?? 0;
+  const decisionIcons = { refund: <IcUnlock />, deduct: <IcCheck />, money: <IcMoney />, calendar: <IcCalendar />, payments: <IcPayments /> };
   const activePaymentType = reservation?.payment_type ?? lot?.payment_type ?? null;
 
   // Remaining balance after initial deposit — used as base for payment plan
@@ -1591,7 +1587,7 @@ export default function LotDetailModal({
           )}
 
           {EDL_STATUSES.includes(lot.status) && (
-            <EdlPanel lot={lot} onOpenCountChange={setEdlOpenCount} />
+            <EdlPanel key={lot.id} lot={lot} onOpenCountChange={reportEdlOpenCount} />
           )}
 
           <div className="modal-footer ldm-footer">
@@ -1779,9 +1775,11 @@ export default function LotDetailModal({
                       </span>
                     )}
                     <button className="btn btn-success"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, ...(edlOpenCount > 0 ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
-                      onClick={handleEdlFinalize} disabled={loading || edlOpenCount > 0}
-                      title={edlOpenCount > 0 ? 'Toutes les actions doivent être faites avant de finaliser' : "Finaliser l'état des lieux"}>
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, ...(edlOpenCount !== 0 ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
+                      onClick={handleEdlFinalize} disabled={loading || edlOpenCount !== 0}
+                      title={edlOpenCount === null
+                        ? 'Chargement des actions…'
+                        : edlOpenCount > 0 ? 'Toutes les actions doivent être faites avant de finaliser' : "Finaliser l'état des lieux"}>
                       <IcCheck /> Finaliser l'EDL
                     </button>
                   </>
@@ -2275,55 +2273,19 @@ export default function LotDetailModal({
 
                   {/* Acompte de l'option — déduit ou remboursé (option_engage) */}
                   {mode === 'option_engage' && optionDeposit > 0 && (
-                    <>
-                      <div className="msr-field-group">
-                        <label className="msr-label">Acompte de l'option : {formatPrice(optionDeposit)} <span className="msr-required">*</span></label>
-                        <div className="msr-validation-choice">
-                          <button type="button"
-                            className={`msr-vc-btn${validationChoice === 'refund' ? ' msr-vc-btn--refund-active' : ''}`}
-                            onClick={() => setValidationChoice('refund')}>
-                            <IcUnlock />
-                            <span className="msr-vc-label">Rembourser l'acompte</span>
-                            <span className="msr-vc-desc">Acompte rendu au client</span>
-                          </button>
-                          <button type="button"
-                            className={`msr-vc-btn${validationChoice === 'deduct' ? ' msr-vc-btn--deduct-active' : ''}`}
-                            onClick={() => setValidationChoice('deduct')}>
-                            <IcCheck />
-                            <span className="msr-vc-label">Déduire l'acompte</span>
-                            <span className="msr-vc-desc">Acompte conservé — déduit du prix</span>
-                          </button>
-                        </div>
-                      </div>
-                      {validationChoice === 'refund' && (
-                        <>
-                          <div className="msr-field-group">
-                            <label className="msr-label"><IcMoney /> Montant remboursé <span className="msr-required">*</span></label>
-                            <div className="msr-deposit-row">
-                              <input type="number" className="msr-input" min="0" step="1000"
-                                placeholder={optionDeposit.toString()}
-                                value={releaseData.deposit_refund_amount}
-                                onChange={e => setReleaseData(d => ({ ...d, deposit_refund_amount: e.target.value }))} />
-                              <span className="msr-currency">MAD</span>
-                            </div>
-                          </div>
-                          <div className="msr-field-group">
-                            <label className="msr-label"><IcCalendar /> Date de remboursement <span className="msr-required">*</span></label>
-                            <input type="date" className="msr-input"
-                              value={releaseData.deposit_refund_date}
-                              onChange={e => setReleaseData(d => ({ ...d, deposit_refund_date: e.target.value }))} />
-                          </div>
-                          <div className="msr-field-group">
-                            <label className="msr-label"><IcPayments /> Mode de remboursement <span className="msr-required">*</span></label>
-                            <select className="msr-select"
-                              value={releaseData.refund_payment_type || 'cash'}
-                              onChange={e => setReleaseData(d => ({ ...d, refund_payment_type: e.target.value }))}>
-                              {PAYMENT_TYPES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                            </select>
-                          </div>
-                        </>
-                      )}
-                    </>
+                    <DepositDecisionFields
+                      label={`Acompte de l'option : ${formatPrice(optionDeposit)}`}
+                      amount={optionDeposit}
+                      refundLabel="Rembourser l'acompte"
+                      refundDesc="Acompte rendu au client"
+                      deductLabel="Déduire l'acompte"
+                      deductDesc="Acompte conservé — déduit du prix"
+                      choice={validationChoice}
+                      onChoiceChange={setValidationChoice}
+                      releaseData={releaseData}
+                      onReleaseChange={setReleaseData}
+                      icons={decisionIcons}
+                    />
                   )}
 
                   {/* Notes */}
@@ -2590,54 +2552,19 @@ export default function LotDetailModal({
                     </button>
                   </div>
 
-                  <div className="msr-field-group">
-                    <label className="msr-label">Décision garantie <span className="msr-required">*</span></label>
-                    <div className="msr-validation-choice">
-                      <button type="button"
-                        className={`msr-vc-btn${validationChoice === 'refund' ? ' msr-vc-btn--refund-active' : ''}`}
-                        onClick={() => setValidationChoice('refund')}>
-                        <IcUnlock />
-                        <span className="msr-vc-label">Rembourser la garantie</span>
-                        <span className="msr-vc-desc">Garantie rendue — Passe en Résa. engagée</span>
-                      </button>
-                      <button type="button"
-                        className={`msr-vc-btn${validationChoice === 'deduct' ? ' msr-vc-btn--deduct-active' : ''}`}
-                        onClick={() => setValidationChoice('deduct')}>
-                        <IcCheck />
-                        <span className="msr-vc-label">Déduire la garantie</span>
-                        <span className="msr-vc-desc">Garantie conservée — Passe en Résa. engagée</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {validationChoice === 'refund' && (
-                    <>
-                      <div className="msr-field-group">
-                        <label className="msr-label"><IcMoney /> Montant remboursé <span className="msr-required">*</span></label>
-                        <div className="msr-deposit-row">
-                          <input type="number" className="msr-input" min="0" step="1000"
-                            placeholder={activeGuarantee > 0 ? activeGuarantee.toString() : '0'}
-                            value={releaseData.deposit_refund_amount}
-                            onChange={e => setReleaseData(d => ({ ...d, deposit_refund_amount: e.target.value }))} />
-                          <span className="msr-currency">MAD</span>
-                        </div>
-                      </div>
-                      <div className="msr-field-group">
-                        <label className="msr-label"><IcCalendar /> Date de remboursement <span className="msr-required">*</span></label>
-                        <input type="date" className="msr-input"
-                          value={releaseData.deposit_refund_date}
-                          onChange={e => setReleaseData(d => ({ ...d, deposit_refund_date: e.target.value }))} />
-                      </div>
-                      <div className="msr-field-group">
-                        <label className="msr-label"><IcPayments /> Mode de remboursement <span className="msr-required">*</span></label>
-                        <select className="msr-select"
-                          value={releaseData.refund_payment_type || 'cash'}
-                          onChange={e => setReleaseData(d => ({ ...d, refund_payment_type: e.target.value }))}>
-                          {PAYMENT_TYPES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                        </select>
-                      </div>
-                    </>
-                  )}
+                  <DepositDecisionFields
+                    label="Décision garantie"
+                    amount={activeGuarantee}
+                    refundLabel="Rembourser la garantie"
+                    refundDesc="Garantie rendue — Passe en Résa. engagée"
+                    deductLabel="Déduire la garantie"
+                    deductDesc="Garantie conservée — Passe en Résa. engagée"
+                    choice={validationChoice}
+                    onChoiceChange={setValidationChoice}
+                    releaseData={releaseData}
+                    onReleaseChange={setReleaseData}
+                    icons={decisionIcons}
+                  />
 
                   {validationChoice === 'deduct' && (
                     <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>

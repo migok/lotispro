@@ -4,22 +4,25 @@ import { renderWithProviders } from '../../test/renderWithProviders'
 import LotDetailModal from '../LotDetailModal'
 
 const MANAGER = { id: 1, role: 'manager' }
+const COMMERCIAL = { id: 2, role: 'commercial' }
+const PENDING = Symbol('pending')
 
 /**
- * Stubs fetch: `routes` maps a path (without query string) to a JSON body;
- * unknown paths answer `[]`.
+ * Stubs fetch: `routes` maps a path (without query string) to a JSON body
+ * (`PENDING`: the request never answers); unknown paths answer `[]`.
  */
 function mockFetch(routes = {}) {
   const fetchMock = vi.fn((url) => {
     const path = String(url).replace(/^https?:\/\/[^/]+/, '').split('?')[0]
     const body = Object.hasOwn(routes, path) ? routes[path] : []
+    if (body === PENDING) return new Promise(() => {})
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
 }
 
-function renderModal(lot, enabledOptionalStatuses) {
+function renderModal(lot, enabledOptionalStatuses, user = MANAGER) {
   return renderWithProviders(
     <LotDetailModal
       lot={lot}
@@ -27,7 +30,7 @@ function renderModal(lot, enabledOptionalStatuses) {
       onRefresh={() => {}}
       enabledOptionalStatuses={enabledOptionalStatuses}
     />,
-    { user: MANAGER }
+    { user }
   )
 }
 
@@ -122,7 +125,102 @@ describe('LotDetailModal', () => {
     )
 
     expect(await screen.findByText('Volet cassé')).toBeInTheDocument()
+    expect(await screen.findByText('1 action ouverte')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Finaliser/ })).toBeDisabled()
-    expect(screen.getByText('1 action ouverte')).toBeInTheDocument()
+  })
+
+  it('enables "Finaliser" once every EDL action is done', async () => {
+    mockFetch({
+      '/api/lots/7/edl': {
+        id: 10, scheduled_at: '2026-10-20T10:00:00Z', intervenant: 'M. Expert',
+        actions: [{ id: 3, description: 'Robinet', responsable: null, status: 'faite' }],
+      },
+    })
+    renderModal({ id: 7, numero: 'G7', status: 'edl_realise', price: 500000 }, ['option', 'edl'])
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Finaliser/ })).toBeEnabled())
+  })
+
+  it('keeps "Finaliser" disabled until the EDL actions are known', () => {
+    mockFetch({ '/api/lots/6/edl': PENDING })
+    renderModal({ id: 6, numero: 'E6', status: 'edl_realise', price: 500000 }, ['option', 'edl'])
+
+    expect(screen.getByRole('button', { name: /Finaliser/ })).toBeDisabled()
+  })
+
+  it('sends the first payment and its payment type on a direct engagement', async () => {
+    const fetchMock = mockFetch({ '/api/clients': [{ id: 7, name: 'Fatima Benali' }] })
+    const user = userEvent.setup()
+    renderModal({ id: 8, numero: 'H8', status: 'available', price: 500000 })
+
+    await user.click(screen.getByRole('button', { name: /Résa\. engagée/ }))
+    await screen.findByRole('option', { name: /Fatima Benali/ })
+    await user.selectOptions(screen.getByDisplayValue('Sélectionner un client'), '7')
+    await user.type(screen.getByPlaceholderText('Montant reçu'), '30000')
+    await user.selectOptions(screen.getByDisplayValue('Espèces'), 'transfer')
+    await user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+    await waitFor(() => expect(postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')).toBeDefined())
+    expect(postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')).toMatchObject({
+      client_id: 7,
+      guarantee_amount: 30000,
+      payment_type: 'transfer',
+      sale_price: 500000,
+    })
+  })
+
+  describe('manager-only and owner-only actions', () => {
+    it('hides "Libérer" on a blocked lot from a commercial', () => {
+      mockFetch()
+      renderModal({ id: 9, numero: 'I9', status: 'blocked' }, undefined, COMMERCIAL)
+
+      expect(screen.queryByRole('button', { name: /Libérer/ })).not.toBeInTheDocument()
+    })
+
+    it('shows "Libérer" on a blocked lot to a manager', () => {
+      mockFetch()
+      renderModal({ id: 9, numero: 'I9', status: 'blocked' })
+
+      expect(screen.getByRole('button', { name: /Libérer/ })).toBeInTheDocument()
+    })
+
+    it('hides "Confirmer acte" from a commercial', () => {
+      mockFetch()
+      renderModal({ id: 10, numero: 'J10', status: 'chez_notaire' }, undefined, COMMERCIAL)
+
+      expect(screen.queryByRole('button', { name: /Confirmer acte/ })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Modifier notaire/ })).toBeInTheDocument()
+    })
+
+    it('shows "Confirmer acte" to a manager', () => {
+      mockFetch()
+      renderModal({ id: 10, numero: 'J10', status: 'chez_notaire' })
+
+      expect(screen.getByRole('button', { name: /Confirmer acte/ })).toBeInTheDocument()
+    })
+
+    const othersOption = { id: 11, numero: 'K11', status: 'option', price: 500000, reserved_by_user_id: 99 }
+
+    it("disables \"Engager\" on another commercial's option", () => {
+      mockFetch()
+      renderModal(othersOption, ['option'], COMMERCIAL)
+
+      expect(screen.getByRole('button', { name: /Engager/ })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Annuler option/ })).toBeDisabled()
+    })
+
+    it('lets the owner commercial engage the option', () => {
+      mockFetch()
+      renderModal({ ...othersOption, reserved_by_user_id: COMMERCIAL.id }, ['option'], COMMERCIAL)
+
+      expect(screen.getByRole('button', { name: /Engager/ })).toBeEnabled()
+    })
+
+    it("lets a manager engage another commercial's option", () => {
+      mockFetch()
+      renderModal(othersOption, ['option'])
+
+      expect(screen.getByRole('button', { name: /Engager/ })).toBeEnabled()
+    })
   })
 })

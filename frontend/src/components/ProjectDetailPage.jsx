@@ -10,7 +10,7 @@ import { useAuth } from '../contexts/authHooks';
 import { getCarteMapContainerStyle } from './carteMapContainerStyle';
 import useLeafletAutoResize from './useLeafletAutoResize';
 import WorkflowSettings from './project/WorkflowSettings';
-import { ACTIVE_LOT_STATUSES, STATUS_HEX_COLORS } from '../utils/constants';
+import { ACTIVE_LOT_STATUSES, STATUS_HEX_COLORS, STATUS_LABELS } from '../utils/constants';
 import { ALL_STATUSES, DEFAULT_ENABLED_OPTIONAL, allowedTransitions, enabledStatuses } from '../utils/lotWorkflow';
 
 const STATUS_COLORS = STATUS_HEX_COLORS;
@@ -311,16 +311,7 @@ export default function ProjectDetailPage() {
             return price.toLocaleString('fr-FR') + ' MAD';
           };
 
-          const getStatusLabel = (s) => {
-            const labels = {
-              creation: 'En création', available: 'Disponible', option: 'Option',
-              reservation_a_finaliser: 'Résa. à finaliser', reservation_engagee: 'Résa. engagée',
-              reservation_soldee: 'Résa. soldée', edl_programme: 'EDL programmé',
-              edl_realise: 'EDL réalisé', edl_finalise: 'EDL finalisé', chez_notaire: 'Chez notaire',
-              chez_proprietaire: 'Chez propriétaire', blocked: 'Bloqué',
-            };
-            return labels[s] || s;
-          };
+          const getStatusLabel = (s) => STATUS_LABELS[s] || s;
 
           let tooltipContent = `
             <div class="lot-tooltip">
@@ -934,20 +925,10 @@ function CarteTab({
         {showFilters && (
           <>
             <div className="filters-status-row">
-              {[
-                { key: 'creation',               label: 'En création' },
-                { key: 'available',              label: 'Disponible' },
-                { key: 'option',                 label: 'Option' },
-                { key: 'reservation_a_finaliser',label: 'Résa. à finaliser' },
-                { key: 'reservation_engagee',    label: 'Résa. engagée' },
-                { key: 'reservation_soldee',     label: 'Résa. soldée' },
-                { key: 'edl_programme',          label: 'EDL programmé' },
-                { key: 'edl_realise',            label: 'EDL réalisé' },
-                { key: 'edl_finalise',           label: 'EDL finalisé' },
-                { key: 'chez_notaire',           label: 'Chez notaire' },
-                { key: 'chez_proprietaire',      label: 'Chez propriétaire' },
-                { key: 'blocked',                label: 'Bloqué' },
-              ].filter(({ key }) => projectStatuses.includes(key) || stats[key] > 0).map(({ key, label }) => (
+              {ALL_STATUSES
+                .filter((key) => projectStatuses.includes(key) || stats[key] > 0)
+                .map((key) => ({ key, label: STATUS_LABELS[key] }))
+                .map(({ key, label }) => (
                 <button
                   key={key}
                   className={`btn-status-filter ${filterStatus === key ? 'active' : ''} ${key}`}
@@ -1151,22 +1132,10 @@ function CarteTab({
 // Lot Map Popup — compact card overlay on map click
 // ============================================================
 function LotMapPopup({ lot, onClose, onViewDetails, isManager, enabledOptional }) {
-  const STATUS_CONFIG = {
-    creation:               { label: 'En création',        color: '#6b7280', bg: 'rgba(107,114,128,0.12)' },
-    available:              { label: 'Disponible',         color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
-    option:                 { label: 'Option',             color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
-    reservation_a_finaliser:{ label: 'Résa. à finaliser',  color: '#ef6c00', bg: 'rgba(239,108,0,0.12)' },
-    reservation_engagee:    { label: 'Résa. engagée',      color: '#7c3aed', bg: 'rgba(124,58,237,0.12)' },
-    reservation_soldee:     { label: 'Résa. soldée',       color: '#2563eb', bg: 'rgba(37,99,235,0.12)' },
-    edl_programme:          { label: 'EDL programmé',      color: '#38bdf8', bg: 'rgba(56,189,248,0.12)' },
-    edl_realise:            { label: 'EDL réalisé',        color: '#0ea5e9', bg: 'rgba(14,165,233,0.12)' },
-    edl_finalise:           { label: 'EDL finalisé',       color: '#0284c7', bg: 'rgba(2,132,199,0.12)' },
-    chez_notaire:           { label: 'Chez le notaire',    color: '#0891b2', bg: 'rgba(8,145,178,0.12)' },
-    chez_proprietaire:      { label: 'Chez le propriétaire',color: '#16a34a', bg: 'rgba(22,163,74,0.12)' },
-    blocked:                { label: 'Bloqué',             color: '#e05555', bg: 'rgba(224,85,85,0.12)' },
-  };
-  const displayStatus = lot.status;
-  const conf = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.available;
+  const displayStatus = STATUS_LABELS[lot.status] ? lot.status : 'available';
+  const statusColor = STATUS_HEX_COLORS[displayStatus];
+  // 12 % tint of the status colour for the pill background
+  const conf = { label: STATUS_LABELS[displayStatus], color: statusColor, bg: `${statusColor}1f` };
   const priceM2 = lot.price && lot.surface && lot.surface > 0
     ? Math.round(lot.price / lot.surface)
     : null;
@@ -2436,7 +2405,7 @@ function HistoriqueTab({ projectId, userId, isCommercial }) {
 }
 
 // Parametres Tab Component
-function ParametresTab({ project, onUpdate }) {
+export function ParametresTab({ project, onUpdate }) {
   const { isManager } = useAuth();
   const [formData, setFormData] = useState({
     name: project.name || '',
