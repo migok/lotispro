@@ -1,7 +1,9 @@
 .client-phone { align-items: stretch; min-width: 0; gap: 6px; }
 .client-phone .PhoneInputInput { min-width: 0; width: 100%; }
 .client-phone-country { position: relative; display: flex; flex: 0 0 auto; }
-.client-phone-trigger { display: flex; align-items: center; gap: 6px; padding: 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font: inherit; font-size: 0.85rem; }
+/* Même apparence que .field-input (fond, bordure, anneau de focus). */
+.client-phone-trigger { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-tertiary); color: var(--text-primary); cursor: pointer; font-family: var(--font-body); font-size: 0.875rem; outline: none; transition: border-color 0.15s; }
+.client-phone-trigger:focus-visible, .client-phone-trigger[aria-expanded="true"] { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-subtle); }
 .client-phone-trigger:disabled { opacity: 0.5; cursor: default; }
 .client-phone-flag { width: 24px; height: 16px; flex: 0 0 24px; }
 .client-phone-picker { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: min(320px, 75vw); padding: 8px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); box-shadow: 0 8px 24px #0003; }
@@ -9,4 +11,5 @@
 .client-phone-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 6px; text-align: left; border: 0; background: transparent; color: var(--text-primary); cursor: pointer; font: inherit; font-size: 0.85rem; }
 .client-phone-option span:nth-child(2) { flex: 1; }
 .client-phone-option:hover, .client-phone-option:focus-visible, .client-phone-option[aria-pressed="true"] { background: var(--bg-surface); }
-.client-phone-trigger:focus-visible, .client-phone-option:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 1px; }
+.client-phone-option:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.client-phone-divider { margin: 4px 0; border: 0; border-top: 1px solid var(--border-subtle); }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import InternationalPhoneInput from '../InternationalPhoneInput';
 
@@ -11,6 +11,8 @@ function Harness({ initial = '' }) {
     <output data-testid="value">{value}</output>
   </>;
 }
+
+const trigger = () => screen.getByRole('button', { name: 'Indicatif téléphone' });
 
 async function chooseCountry(user, search, name) {
   await user.click(screen.getByRole('button', { name: 'Indicatif téléphone' }));
@@ -67,5 +69,106 @@ describe('InternationalPhoneInput', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it.each([
+    ['Maroc', /Maroc \+212/, '0033 6 12 34 56 78', '+33612345678', '+33', 'France'],
+    ['France', /France \+33/, '00212 6 12 34 56 78', '+212612345678', '+212', 'Maroc'],
+  ])('pasting a "00" number with %s selected switches to the dialled country', async (search, name, pasted, expected, code, country) => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await chooseCountry(user, search, name);
+    await user.click(screen.getByLabelText('Téléphone'));
+    await user.paste(pasted);
+    expect(screen.getByTestId('value')).toHaveTextContent(expected);
+    expect(trigger()).toHaveTextContent(code);
+    expect(trigger()).toHaveAttribute('title', country);
+    expect(trigger().querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('typing a "00" number with Maroc selected switches to France', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await chooseCountry(user, 'Maroc', /Maroc \+212/);
+    await user.type(screen.getByLabelText('Téléphone'), '0033612345678');
+    expect(screen.getByTestId('value')).toHaveTextContent('+33612345678');
+    expect(trigger()).toHaveTextContent('+33');
+  });
+
+  it('accepts a "00" number without selecting a country', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(screen.getByLabelText('Téléphone'));
+    await user.paste('0033 6 12 34 56 78');
+    expect(screen.getByTestId('value')).toHaveTextContent('+33612345678');
+    expect(trigger()).toHaveTextContent('+33');
+  });
+
+  it('selects the first match on Enter in the search box without submitting the form', async () => {
+    const user = userEvent.setup();
+    const submit = vi.fn((event) => event.preventDefault());
+    render(<form onSubmit={submit}><Harness /><button type="submit">Enregistrer</button></form>);
+    await user.click(trigger());
+    await user.type(screen.getByRole('searchbox'), 'maroc{Enter}');
+    expect(submit).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger()).toHaveTextContent('+212');
+  });
+
+  it('selects a clicked option even when the browser blurs without a related target (Safari)', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(trigger());
+    await user.type(screen.getByRole('searchbox'), 'france');
+    const option = screen.getByRole('button', { name: /France \+33/ });
+    // Safari ne donne pas le focus aux boutons : sans preventDefault sur
+    // mousedown, le champ de recherche perd le focus vers <body>.
+    if (fireEvent.mouseDown(option)) {
+      fireEvent.focusOut(screen.getByRole('searchbox'), { relatedTarget: null });
+    }
+    fireEvent.click(option);
+    expect(trigger()).toHaveTextContent('+33');
+  });
+
+  it('lists the usual countries first, then a separator, with French names and aliases', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(trigger());
+    const dialog = screen.getByRole('dialog');
+    const names = [...dialog.querySelectorAll('.client-phone-option')].slice(0, 14)
+      .map((option) => option.querySelector('.client-phone-option-label').textContent);
+    expect(names).toEqual([
+      'Maroc', 'France', 'Espagne', 'Belgique', 'Italie', 'Allemagne', 'Pays-Bas', 'Suisse',
+      'Royaume-Uni', 'Canada', 'États-Unis', 'Émirats arabes unis', 'Arabie saoudite', 'Qatar',
+    ]);
+    const separator = screen.getByRole('separator');
+    expect(dialog.querySelectorAll('.client-phone-option')[13].nextElementSibling).toBe(separator);
+
+    await user.type(screen.getByRole('searchbox'), 'angleterre');
+    expect(screen.getByRole('button', { name: 'Royaume-Uni +44' })).toBeInTheDocument();
+    await user.clear(screen.getByRole('searchbox'));
+    await user.type(screen.getByRole('searchbox'), 'usa');
+    expect(screen.getByRole('button', { name: 'États-Unis +1' })).toBeInTheDocument();
+  });
+
+  it('hints how to convert a legacy number stored without a dial code', async () => {
+    const user = userEvent.setup();
+    render(<Harness initial="0612345678" />);
+    const hint = 'Ancien numéro sans indicatif : choisissez le pays (ex. Maroc) pour le convertir.';
+    expect(screen.getByText(hint)).toBeInTheDocument();
+    expect(screen.getByLabelText('Téléphone')).toHaveAccessibleDescription(hint);
+    await chooseCountry(user, 'Maroc', /Maroc \+212/);
+    expect(screen.getByTestId('value')).toHaveTextContent('+212612345678');
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+  });
+
+  it('links the number input to the given description', () => {
+    render(<>
+      <InternationalPhoneInput id="p" label="téléphone" value="" onChange={() => {}} error="Erreur" describedBy="p-error" />
+      <span id="p-error">Erreur</span>
+    </>);
+    const input = screen.getByPlaceholderText('Numéro de téléphone');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAccessibleDescription('Erreur');
   });
 });
