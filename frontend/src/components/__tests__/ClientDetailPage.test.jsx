@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { renderWithProviders } from '../../test/renderWithProviders'
 import ClientDetailPage from '../ClientDetailPage'
@@ -79,5 +80,70 @@ describe('ClientDetailPage - fiche client', () => {
 
     const line = await screen.findByText(/12 rue des Orangers/)
     expect(line).toHaveTextContent('Actes')
+  })
+
+  describe('acte de réservation', () => {
+    const WITH_RESERVATION = {
+      ...CLIENT,
+      reservations_history: [
+        { id: 5, status: 'reservation_engagee', lot_numero: 'A1', project_id: 1, project_name: 'Projet', promotion_amount: 0 },
+      ],
+    }
+
+    function mockDownloads(acteStatus) {
+      const fetchMock = vi.fn((url) => {
+        const path = String(url).replace(/^https?:\/\/[^/]+/, '')
+        const json = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
+        if (path.endsWith('/details')) return json(WITH_RESERVATION)
+        if (path.includes('/api/payments/schedules/client/')) {
+          return json([{ reservation_id: 5, installments: [{ payment_type: 'deposit', installment_number: 1, status: 'paid' }] }])
+        }
+        if (path.endsWith('/api/reservations/5/acte')) {
+          return Promise.resolve({ ok: acteStatus === 200, status: acteStatus, blob: () => Promise.resolve(new Blob(['%PDF'])), json: () => Promise.resolve({}) })
+        }
+        if (path.endsWith('/api/reservations/5/certificate')) {
+          return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(['%PDF'])) })
+        }
+        return json([])
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      return fetchMock
+    }
+
+    const calledPaths = (fetchMock) => fetchMock.mock.calls.map(([url]) => String(url).replace(/^https?:\/\/[^/]+/, ''))
+
+    beforeEach(() => {
+      URL.createObjectURL = vi.fn(() => 'blob:acte')
+      URL.revokeObjectURL = vi.fn()
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    async function clickDownload() {
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(await screen.findByRole('button', { name: /Réservations \(1\)/ }))
+      await user.click(await screen.findByRole('button', { name: /Télécharger/ }))
+    }
+
+    it('downloads the archived acte first', async () => {
+      const fetchMock = mockDownloads(200)
+      await clickDownload()
+
+      await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled())
+      expect(calledPaths(fetchMock)).toContain('/api/reservations/5/acte')
+      expect(calledPaths(fetchMock)).not.toContain('/api/reservations/5/certificate')
+    })
+
+    it('falls back to on-the-fly generation when no acte is archived (404)', async () => {
+      const fetchMock = mockDownloads(404)
+      await clickDownload()
+
+      await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled())
+      expect(calledPaths(fetchMock)).toEqual(expect.arrayContaining(['/api/reservations/5/acte', '/api/reservations/5/certificate']))
+    })
   })
 })

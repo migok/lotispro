@@ -154,8 +154,8 @@ describe('LotDetailModal', () => {
     renderModal({ id: 8, numero: 'H8', status: 'available', price: 500000 })
 
     await user.click(screen.getByRole('button', { name: /Résa\. engagée/ }))
-    await screen.findByRole('option', { name: /Fatima Benali/ })
-    await user.selectOptions(screen.getByDisplayValue('Sélectionner un client'), '7')
+    await user.type(await screen.findByPlaceholderText(/Rechercher par nom, CIN/), 'fatima')
+    await user.click(await screen.findByRole('option', { name: /Fatima Benali/ }))
     await user.type(screen.getByPlaceholderText('Montant reçu'), '30000')
     await user.selectOptions(screen.getByDisplayValue('Espèces'), 'transfer')
     await user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
@@ -166,6 +166,71 @@ describe('LotDetailModal', () => {
       guarantee_amount: 30000,
       payment_type: 'transfer',
       sale_price: 500000,
+    })
+  })
+
+  describe('client selection in the reservation flows', () => {
+    const FLOWS = [
+      ['option', /^Option$/, /Confirmer l'option/],
+      ['résa à finaliser', /Résa\. à finaliser/, /Créer la réservation/],
+      ['résa engagée', /Résa\. engagée/, /Engager la réservation/],
+    ]
+
+    it.each(FLOWS)('disables the submit button of the %s flow until a client is chosen', async (_name, open, submit) => {
+      mockFetch({ '/api/clients': [{ id: 7, name: 'Fatima Benali', cin: 'AB123456', phone: '+212612345678' }] })
+      const user = userEvent.setup()
+      renderModal({ id: 8, numero: 'H8', status: 'available', price: 500000 })
+
+      await user.click(screen.getByRole('button', { name: open }))
+      const button = screen.getByRole('button', { name: submit })
+      expect(button).toBeDisabled()
+
+      await user.type(await screen.findByPlaceholderText(/Rechercher par nom, CIN/), '0612345678')
+      await user.click(await screen.findByRole('option', { name: /Fatima Benali/ }))
+
+      expect(screen.getByRole('button', { name: submit })).toBeEnabled()
+    })
+  })
+
+  describe('archived reservation deed', () => {
+    const ENGAGED = { id: 5, numero: 'E5', status: 'reservation_engagee', price: 500000, reservation_id: 11, client_name: 'Fatima Benali' }
+    const ACTE = { id: 1, lot_id: 5, reservation_id: 11, filename: 'acte_reservation_11_lotE5.pdf', category: 'acte_reservation' }
+    const SCHEDULE = { '/api/payments/schedules/reservation/11': { installments: [] } }
+    const RESERVATION = { id: 11, sale_price: 500000, promotion_amount: 0, promotion_received: false }
+
+    it('shows the "Acte de réservation" badge when a deed is archived', async () => {
+      mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [ACTE] })
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText('Acte de réservation')).toBeInTheDocument()
+      expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
+    })
+
+    it('alerts when no deed is archived and regenerates it on demand', async () => {
+      const fetchMock = mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText("L'acte n'a pas été généré.")).toBeInTheDocument()
+      const documentLoads = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/lots/5/documents')).length
+      const before = documentLoads()
+      await user.click(screen.getByRole('button', { name: 'Régénérer' }))
+
+      await waitFor(() => expect(postedBody(fetchMock, '/api/reservations/11/acte')).toBeDefined())
+      await waitFor(() => expect(documentLoads()).toBeGreaterThan(before))
+    })
+
+    it('does not alert while the promotion is pending (no deed is expected yet)', async () => {
+      const fetchMock = mockFetch({
+        ...SCHEDULE,
+        '/api/reservations/11': { ...RESERVATION, sale_price: 450000, promotion_amount: 50000 },
+        '/api/lots/5/documents': [],
+      })
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText('Non reçue')).toBeInTheDocument()
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/lots/5/documents'))).toBe(true))
+      expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
     })
   })
 

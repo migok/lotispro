@@ -48,7 +48,7 @@ _Dernière mise à jour : 2026-10-27 (E4-T0 en revue ; E4-T1 en cours : backend 
 | E3-T4 | États des lieux backend | ✅ | [#27](https://github.com/migok/lotispro/issues/27) | | 2026-10-26 |
 | E3-T5 | Frontend statuts + EDL | ✅ | [#28](https://github.com/migok/lotispro/issues/28) | | 2026-10-26 |
 | E4-T0 | Correctif PDF : police Unicode (’, arabe) | 🟨 | [#49](https://github.com/migok/lotispro/issues/49) | | |
-| E4-T1 | Acte auto à l'engagement | 🟦 | [#30](https://github.com/migok/lotispro/issues/30) | | |
+| E4-T1 | Acte auto à l'engagement | 🟨 | [#30](https://github.com/migok/lotispro/issues/30) | | |
 | E4-T2 | Service de notifications | ⬜ | [#31](https://github.com/migok/lotispro/issues/31) | | |
 | E4-T3 | UI notifications + historique | ⬜ | [#32](https://github.com/migok/lotispro/issues/32) | | |
 | E4-T4 | Rappels d'expiration | ⬜ | [#33](https://github.com/migok/lotispro/issues/33) | | |

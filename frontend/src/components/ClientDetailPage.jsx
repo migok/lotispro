@@ -509,7 +509,11 @@ export default function ClientDetailPage() {
 
   const handleDownloadCertificate = async (reservationId, lotNumero) => {
     try {
-      const response = await apiFetch(`/api/reservations/${reservationId}/certificate`);
+      // Acte archivé à l'engagement d'abord ; repli sur la génération à la volée
+      let response = await apiFetch(`/api/reservations/${reservationId}/acte`);
+      if (response.status === 404) {
+        response = await apiFetch(`/api/reservations/${reservationId}/certificate`);
+      }
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         throw new Error(err.detail || `Erreur ${response.status}`);

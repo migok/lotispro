@@ -5,6 +5,7 @@ import { useToast } from '../contexts/toastHooks';
 import { formatPrice, formatDate } from '../utils/formatters';
 import { ACTIVE_LOT_STATUSES, STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
 import ClientForm from './clients/ClientForm';
+import ClientPicker from './clients/ClientPicker';
 import { shouldToastClientError } from '../utils/clientProfile';
 import { DEFAULT_ENABLED_OPTIONAL, EDL_STATUSES, allowedTransitions, openEdlActionsLabel } from '../utils/lotWorkflow';
 import EdlPanel from './lots/EdlPanel';
@@ -22,6 +23,9 @@ const DEFAULT_PAYMENT_PLAN = {
   balance_count: 1,
   balance_periodicity: 1,
 };
+
+// Statuts où l'acte de réservation est archivé (engagement et au-delà)
+const ACTE_STATUSES = ['reservation_engagee', 'reservation_soldee', ...EDL_STATUSES, 'chez_notaire', 'chez_proprietaire'];
 
 const PERIODICITY_OPTIONS = [
   { value: 1, label: 'Mensuel' },
@@ -563,6 +567,8 @@ export default function LotDetailModal({
   const [downloadingDoc, setDownloadingDoc] = useState(false);
   const [settingNotaireIntent, setSettingNotaireIntent] = useState(false);
   const [documents, setDocuments] = useState([]);
+  const [documentsLoaded, setDocumentsLoaded] = useState(false);
+  const [regeneratingActe, setRegeneratingActe] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const docFileInputRef = useRef(null);
   // Open EDL actions of the displayed lot, reported by the EDL panel once
@@ -583,10 +589,11 @@ export default function LotDetailModal({
     } else {
       setReservation(null);
     }
-    if (lot?.id && ['chez_notaire', 'chez_proprietaire'].includes(lot.status)) {
+    if (lot?.id && (['chez_notaire', 'chez_proprietaire'].includes(lot.status) || (lot.reservation_id && ACTE_STATUSES.includes(lot.status)))) {
       loadDocuments();
     } else {
       setDocuments([]);
+      setDocumentsLoaded(false);
     }
     if (lot?.project_id) {
       loadProjectFinancingPlan(lot.project_id);
@@ -714,6 +721,18 @@ export default function LotDetailModal({
       const data = await apiGet(`/api/lots/${lot.id}/documents`);
       setDocuments(data);
     } catch { setDocuments([]); }
+    setDocumentsLoaded(true);
+  };
+
+  const handleRegenerateActe = async () => {
+    setRegeneratingActe(true);
+    try {
+      await apiPost(`/api/reservations/${lot.reservation_id}/acte`, {});
+      toast.success('Acte régénéré');
+      await loadDocuments();
+    } catch (err) {
+      toast.error(err.message || "Erreur lors de la génération de l'acte");
+    } finally { setRegeneratingActe(false); }
   };
 
   const handleUploadDocument = async (e) => {
@@ -1483,6 +1502,30 @@ export default function LotDetailModal({
                       )}
                     </>
                   )}
+                  {/* Acte de réservation archivé */}
+                  {ACTE_STATUSES.includes(lot.status) && documentsLoaded && (() => {
+                    const acte = documents.find(d => d.category === 'acte_reservation');
+                    if (acte) {
+                      return (
+                        <div className="ldm-ri-row">
+                          <span className="ldm-ri-key">Acte</span>
+                          <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Acte de réservation</span>
+                          </span>
+                        </div>
+                      );
+                    }
+                    const promotionPending = (reservation?.promotion_amount ?? 0) > 0 && !reservation?.promotion_received;
+                    if (!reservation || promotionPending) return null;
+                    return (
+                      <div className="ldm-ri-row">
+                        <span className="ldm-ri-key" style={{ color: 'var(--color-warning)' }}>L'acte n'a pas été généré.</span>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={handleRegenerateActe} disabled={regeneratingActe}>
+                          {regeneratingActe ? 'Génération...' : 'Régénérer'}
+                        </button>
+                      </div>
+                    );
+                  })()}
                   {/* Montant restant à payer */}
                   {lot.status === 'reservation_engagee' && paymentSchedule && (() => {
                     const unpaidTotal = paymentSchedule.installments
@@ -2037,12 +2080,7 @@ export default function LotDetailModal({
                 <div className="msr-field-group">
                   <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
                   <div className="msr-client-row">
-                    <select className="msr-select"
-                      value={selectedClient?.id || ''}
-                      onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
-                      <option value="">Sélectionner un client</option>
-                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
-                    </select>
+                    <ClientPicker clients={clients} value={selectedClient} onChange={setSelectedClient} />
                     <button type="button" className="msr-btn-add-client"
                       onClick={() => setShowAddClient(!showAddClient)}>
                       {showAddClient ? <IcClose /> : <IcPlus />}
@@ -2082,12 +2120,7 @@ export default function LotDetailModal({
                 <div className="msr-field-group">
                   <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
                   <div className="msr-client-row">
-                    <select className="msr-select"
-                      value={selectedClient?.id || ''}
-                      onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
-                      <option value="">Sélectionner un client</option>
-                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
-                    </select>
+                    <ClientPicker clients={clients} value={selectedClient} onChange={setSelectedClient} />
                     <button type="button" className="msr-btn-add-client"
                       onClick={() => setShowAddClient(!showAddClient)}>
                       {showAddClient ? <IcClose /> : <IcPlus />}
@@ -2135,12 +2168,7 @@ export default function LotDetailModal({
                     <div className="msr-field-group">
                       <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
                       <div className="msr-client-row">
-                        <select className="msr-select"
-                          value={selectedClient?.id || ''}
-                          onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
-                          <option value="">Sélectionner un client</option>
-                          {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
-                        </select>
+                        <ClientPicker clients={clients} value={selectedClient} onChange={setSelectedClient} />
                         <button type="button" className="msr-btn-add-client"
                           onClick={() => setShowAddClient(!showAddClient)}>
                           {showAddClient ? <IcClose /> : <IcPlus />}
@@ -2723,19 +2751,19 @@ export default function LotDetailModal({
             )}
             {mode === 'start_option' && (
               <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
-                onClick={handleStartOption} disabled={loading}>
+                onClick={handleStartOption} disabled={loading || !selectedClient}>
                 <IcCheck />{loading ? 'En cours...' : 'Confirmer l\'option'}
               </button>
             )}
             {mode === 'direct_reservation' && (
               <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
-                onClick={handleDirectReservation} disabled={loading}>
+                onClick={handleDirectReservation} disabled={loading || !selectedClient}>
                 <IcCheck />{loading ? 'En cours...' : 'Créer la réservation'}
               </button>
             )}
             {mode === 'direct_engage' && (
               <button type="button" className="msr-btn-confirm msr-btn-confirm--sell"
-                onClick={handleDirectEngage} disabled={loading}>
+                onClick={handleDirectEngage} disabled={loading || !selectedClient}>
                 <IcCheck />{loading ? 'En cours...' : 'Engager la réservation'}
               </button>
             )}
