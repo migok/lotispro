@@ -19,7 +19,7 @@
 | E4-T2 Service de notifications | #31 | T1 (pièce jointe de l'acte) | après T1 |
 | E4-T3 UI notifications | #32 | T2 | après T2 |
 | E4-T4 Rappels d'expiration | #33 | T2 | après T2 (parallélisable avec T3) |
-| E4-T5 Modifier une réservation engagée | #52 | T1, réponses aux questions Q4-Q6 | après T1 et réponses |
+| E4-T5 Modifier une réservation engagée | #52 | T1 (Q4, Q5 répondus) | après T1 |
 
 **Après le rebase sur `dev` (E3 fusionné)**, relire les références de fichiers/lignes des tâches T1-T5 : elles ont été écrites contre `origin/feature/e3-statuts-edl` (`0b4a036`).
 
@@ -41,7 +41,9 @@ Valeur par défaut appliquée si pas de réponse ; à poser au plus tard au dém
 - **Q1 (T1) Promotion non reçue à l'engagement.** Le téléchargement manuel de l'acte est refusé tant que la promotion (`promotion_amount > 0`, `promotion_received = false`) n'est pas reçue. *Défaut :* à l'engagement, l'acte n'est pas généré dans ce cas ; il est généré automatiquement quand la promotion est marquée reçue (`mark-promotion-received`). Le reçu reste téléchargeable.
 - **Q2 (T2) Téléphone du commercial.** `users` n'a pas de colonne téléphone. *Défaut :* migration 0024 ajoute `users.phone` (nullable), éditable dans la gestion des commerciaux ; la ligne téléphone est omise du message si vide.
 - **Q3 (T2) « Lien vers l'acte ».** *Défaut :* l'acte stocké est joint en PDF à l'email `reservation_engagee` (pas de lien public signé, qui expirerait et exposerait le document).
-- **Q4-Q6 (T5)** : les trois « points restant à cadrer » de #52 — rôles autorisés à modifier ; reprise des anciennes réservations avec une « promotion » déjà encaissée ; validation notaire/comptable du traitement de l'écart. **Pas de défaut : T5 ne démarre pas sans réponse.**
+- **Q4 (T5) Rôles — répondu le 2026-10-27 :** commercial et manager peuvent modifier une réservation engagée. *Application :* même règle de propriété que les transitions existantes (`engage`, `solde`…) : le commercial modifie les réservations qu'il a faites, le manager toutes.
+- **Q5 (T5) Anciennes réservations avec « promotion » encaissée — répondu le 2026-10-27 :** rien n'est en production, aucune reprise de données à prévoir ; la migration peut ignorer les valeurs existantes de `promotion_amount` / `promotion_received` / `promotion_paid_timing` (pas de conversion, pas d'audit préalable).
+- **Q6 (T5) Validation notaire/comptable de l'écart.** *Défaut :* ne bloque pas l'implémentation ; l'application trace les montants sans valider leur traitement juridique ou fiscal (mention de #52), la validation reste hors application.
 
 ## Review Focus
 
@@ -269,7 +271,7 @@ git commit -m "fix: embed DejaVu Unicode font in reservation PDFs"
 Hors spec à ce jour ; périmètre et critères dans l'issue #52 (montants : prix catalogue, prix total convenu, prix figurant sur l'acte, écart à régulariser, premier acompte reçu ; échéance de l'écart au début / à la fin / à date précise ; reste à payer = prix total convenu − paiements reçus ; refus de solder tant qu'une somme reste due ; historique avant/après ; nouvelle version d'acte si les données de l'acte changent).
 
 Prérequis avant d'écrire les étapes :
-1. Réponses de l'utilisateur à Q4 (rôles), Q5 (reprise des anciennes réservations `promotion_amount` / `promotion_received` / `promotion_paid_timing` : audit des données existantes en lecture seule d'abord), Q6 (validation notaire/comptable).
+1. Q4 et Q5 répondus (voir « Décisions à confirmer ») ; Q6 avec défaut non bloquant.
 2. T1 livré (versions d'actes via `ActeService.generate_and_store`).
 3. Ajout d'une section E4-T5 dans la spec E4 (validée par l'utilisateur), puis plan détaillé en sous-tâches (probablement : T5a modèle financier + migration `0025` ; T5b API de modification + historique ; T5c écrans engagement/modification/échéancier ; T5d règle de solde).
 
