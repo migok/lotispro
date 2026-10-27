@@ -3,6 +3,9 @@
 from app.infrastructure.database.repositories.audit_repository import AuditLogRepository
 from app.infrastructure.database.repositories.base import BaseRepository
 from app.infrastructure.database.repositories.client_repository import ClientRepository
+from app.infrastructure.database.repositories.etat_des_lieux_repository import (
+    EtatDesLieuxRepository,
+)
 from app.infrastructure.database.repositories.lot_document_repository import (
     LotDocumentRepository,
 )
@@ -29,6 +32,7 @@ __all__ = [
     "AuditLogRepository",
     "BaseRepository",
     "ClientRepository",
+    "EtatDesLieuxRepository",
     "LotDocumentRepository",
     "LotPricingConfigRepository",
     "LotRepository",

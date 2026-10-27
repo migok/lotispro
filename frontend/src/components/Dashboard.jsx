@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost } from '../utils/api';
 import { formatPrice, formatDate, formatNumber } from '../utils/formatters';
-import { STATUS_LABELS, PIPELINE_LABELS } from '../utils/constants';
+import { ACTIVE_LOT_STATUSES, STATUS_LABELS, PIPELINE_LABELS } from '../utils/constants';
 
 // Calculate days remaining until expiration
 const getDaysRemaining = (expirationDate) => {
@@ -37,7 +37,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [users, setUsers] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedUserId, setSelectedUserId] = useState(null);
-  const [selectedStatuses, setSelectedStatuses] = useState(['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire','chez_proprietaire','blocked']);
+  const [selectedStatuses, setSelectedStatuses] = useState([...ACTIVE_LOT_STATUSES, 'blocked']);
 
   // Onglet principal
   const [activeMainTab, setActiveMainTab] = useState('overview'); // 'overview' | 'options'
@@ -700,7 +700,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           }
           const price = parseFloat(lot.price) || 0;
           groups[key].amount_total += price;
-          const ACTIVE = ['option','reservation_a_finaliser','reservation_engagee','reservation_soldee','chez_notaire'];
+          const ACTIVE = ACTIVE_LOT_STATUSES.filter(st => st !== 'chez_proprietaire');
 
           if (hasUserFilter) {
             const isMine = myLotIds.has(lot.id);
@@ -1430,15 +1430,9 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
               </h3>
               <div className="section-actions">
                 <div className="lots-status-filters">
-                  {[
-                    { key: 'option',                  cls: 'filter-option',                  label: 'Option' },
-                    { key: 'reservation_a_finaliser', cls: 'filter-reservation_a_finaliser', label: 'Résa. à finaliser' },
-                    { key: 'reservation_engagee',     cls: 'filter-reservation_engagee',     label: 'Résa. engagée' },
-                    { key: 'reservation_soldee',      cls: 'filter-reservation_soldee',      label: 'Résa. soldée' },
-                    { key: 'chez_notaire',            cls: 'filter-chez_notaire',            label: 'Notaire' },
-                    { key: 'chez_proprietaire',       cls: 'filter-chez_proprietaire',       label: 'Propriétaire' },
-                    { key: 'blocked',                 cls: 'filter-blocked',                 label: 'Bloqué' },
-                  ].map(({ key, label, cls }) => (
+                  {[...ACTIVE_LOT_STATUSES, 'blocked']
+                    .map((key) => ({ key, cls: `filter-${key}`, label: STATUS_LABELS[key] }))
+                    .map(({ key, label, cls }) => (
                     <button
                       key={key}
                       className={`lots-filter-pill ${cls} ${selectedStatuses.includes(key) ? 'active' : ''}`}

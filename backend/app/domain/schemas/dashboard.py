@@ -8,7 +8,7 @@ from app.domain.schemas.common import BaseSchema
 
 
 class DashboardCounts(BaseSchema):
-    """Schema for lot count statistics (9-status workflow)."""
+    """Schema for lot count statistics (one field per lot status)."""
 
     total: int
     # Individual statuses
@@ -18,13 +18,16 @@ class DashboardCounts(BaseSchema):
     reservation_a_finaliser: int = 0
     reservation_engagee: int = 0
     reservation_soldee: int = 0
+    edl_programme: int = 0
+    edl_realise: int = 0
+    edl_finalise: int = 0
     chez_notaire: int = 0
     chez_proprietaire: int = 0
     blocked: int = 0
     # Aggregated for backward compatibility
     en_cours: int = Field(
         default=0,
-        description="Active lots in workflow (option + raf + engagee + soldee + notaire + proprietaire)",
+        description="Active lots in workflow (option to chez_proprietaire, EDL included)",
     )
     # Legacy fields kept for backward compatibility
     reserved: int = Field(

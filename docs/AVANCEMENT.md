@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-25 (E1 et E2 fusionnés ; E4-T0 ajouté)_
+_Dernière mise à jour : 2026-10-26 (E3-T5 : frontend statuts + EDL)_
 
 ## Vue d'ensemble
 
@@ -17,7 +17,7 @@ _Dernière mise à jour : 2026-10-25 (E1 et E2 fusionnés ; E4-T0 ajouté)_
 | E0 Fondations & nettoyage | ✅ | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | [#46](https://github.com/migok/lotispro/pull/46) |
 | E1 🐛 #5 Plein écran | ✅ | 2 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | [#47](https://github.com/migok/lotispro/pull/47) |
 | E2 👤 #7 Fiche client | ✅ | 6 / 6 | [#18](https://github.com/migok/lotispro/issues/18) | [#48](https://github.com/migok/lotispro/pull/48) |
-| E3 Statuts par projet + états des lieux | ⬜ | 0 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
+| E3 Statuts par projet + états des lieux | 🟨 | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
 | E4 🔄 #8 Réservation | ⬜ | 0 / 5 | [#29](https://github.com/migok/lotispro/issues/29) | |
 | E5 📊 #3 Vue projet | ⬜ | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | |
 | E6 📅 #4 Dashboard par période | ⬜ | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | |
@@ -41,11 +41,12 @@ _Dernière mise à jour : 2026-10-25 (E1 et E2 fusionnés ; E4-T0 ajouté)_
 | E2-T4 | Fiche / listes / PDF | ✅ | [#22](https://github.com/migok/lotispro/issues/22) | [#48](https://github.com/migok/lotispro/pull/48) | 2026-10-24 |
 | E2-T5 | Villes, adresse obligatoire, notice acte | ✅ | — | [#48](https://github.com/migok/lotispro/pull/48) | 2026-10-25 |
 | E2-T6 | Pays de l'adresse à l'étranger | ✅ | — | [#48](https://github.com/migok/lotispro/pull/48) | 2026-10-25 |
-| E3-T1 | `lot_workflow` + `lot_status_history` | ⬜ | [#24](https://github.com/migok/lotispro/issues/24) | | |
-| E3-T2 | Statuts optionnels par projet | ⬜ | [#25](https://github.com/migok/lotispro/issues/25) | | |
-| E3-T3 | Transition option → engagée | ⬜ | [#26](https://github.com/migok/lotispro/issues/26) | | |
-| E3-T4 | États des lieux backend | ⬜ | [#27](https://github.com/migok/lotispro/issues/27) | | |
-| E3-T5 | Frontend statuts + EDL | ⬜ | [#28](https://github.com/migok/lotispro/issues/28) | | |
+| E3-T1 | `lot_workflow` + `lot_status_history` | ✅ | [#24](https://github.com/migok/lotispro/issues/24) | | 2026-10-25 |
+| E3-FIX | Dernière échéance payée → 500 (#50) | ✅ | [#50](https://github.com/migok/lotispro/issues/50) | | 2026-10-25 |
+| E3-T2 | Statuts optionnels par projet | ✅ | [#25](https://github.com/migok/lotispro/issues/25) | | 2026-10-25 |
+| E3-T3 | Transition option → engagée | ✅ | [#26](https://github.com/migok/lotispro/issues/26) | | 2026-10-25 |
+| E3-T4 | États des lieux backend | ✅ | [#27](https://github.com/migok/lotispro/issues/27) | | 2026-10-26 |
+| E3-T5 | Frontend statuts + EDL | ✅ | [#28](https://github.com/migok/lotispro/issues/28) | | 2026-10-26 |
 | E4-T0 | Correctif PDF : police Unicode (’, arabe) | ⬜ | [#49](https://github.com/migok/lotispro/issues/49) | | |
 | E4-T1 | Acte auto à l'engagement | ⬜ | [#30](https://github.com/migok/lotispro/issues/30) | | |
 | E4-T2 | Service de notifications | ⬜ | [#31](https://github.com/migok/lotispro/issues/31) | | |
@@ -106,6 +107,19 @@ Autre dette relevée en fin d'E0 (revue finale, 2026-10-24) :
 - **Tests manquants avant les refactors E3 / E4** : aucun test n'exerce `payment_plan` / les échéances ; l'effet de `engage` avec `guarantee_action=deduct` et les notes d'audit de `extend-option` ne sont pas assertés. À couvrir avant de toucher ces flux.
 - **`PLC0415` (imports différés)**, 44 occurrences, issues de `ruff check . --isolated --select PLC0415 --output-format concise` (depuis `backend/`) : `services/project_service.py` 14, `services/dashboard_service.py` 11, `repositories/lot_repository.py` 5, et 1 chacun dans `domain/schemas/lot.py`, `repositories/base.py`, `client_repository.py`, `project_repository.py`, `sale_repository.py`, `user_repository.py`, `database/session.py`, `services/email_service.py`, `lot_pricing_service.py`, `payment_service.py`, `reservation_service.py`, `user_service.py`, `tests/unit/test_domain/test_security.py`, `tests/unit/test_imports.py`.
 - **`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.
+
+Dette relevée en fin d'E3 (revue finale, statuts optionnels et état des lieux) :
+
+- `extend_option` n'appelle pas `assert_transition_allowed` (sans effet de comportement aujourd'hui).
+- `POST /api/lots` accepte n'importe quel statut, y compris les statuts EDL ; restreindre `LotCreate.status` à `DIRECT_UPDATE_STATUSES`.
+- Un acompte d'option remboursé reste compté comme encaissé dans `ca_realise`, `total_deposits` et les totaux client.
+- Pas de verrou de ligne entre la vérification « statut en cours d'utilisation » du workflow projet et la mise à jour.
+- Les numéros de lots du message `status_in_use` sont triés comme des chaînes (`10` avant `2`).
+- Un remboursement sans montant est accepté par le backend.
+- `LotRepository` construit un `EtatDesLieuxRepository` (couplage entre repositories).
+- Le bouton « Finaliser » reste désactivé si le chargement de l'EDL échoue.
+- `LotDetailModal` fait environ 2850 lignes ; à découper.
+- Endpoint mort `POST /api/sales` (répond toujours 400) et schéma `SaleCreate` à supprimer.
 - **Dépendances backend : 3 sources divergentes** (relevé lors de la CI de la PR #46) : `backend/requirements.txt` (épingle `fastapi==0.115.0`, `pydantic==2.8.2`…, utilisé en local), `backend/pyproject.toml` (plages non épinglées, utilisé par la CI via `pip install -e ".[dev]"`) et `backend/Dockerfile` (liste explicite non épinglée, utilisée en production). Conséquence constatée : la CI et la production résolvent fastapi 0.162.0 / starlette 1.9.0 alors que le local est en 0.115.0 (ex. `HTTPBearer` renvoie 401 au lieu de 403 sans jeton ; le test `test_get_current_user_unauthorized` attend désormais 401). À faire dans une tâche dédiée : introduire un lockfile unique (uv ou pip-tools) utilisé par le local, la CI et Docker. D'ici là, mettre à jour les environnements locaux avec `pip install -e ".[dev]" --upgrade`.
 - **`LotDetailModal.jsx`** : la formule du solde restant est dupliquée (imposée par l'ordre des hooks) ; à factoriser lors d'un refactor du composant.
 - **E2, erreurs 422 non traduites** : le toast de repli anglais « Request validation failed » et les erreurs de parsing de date en anglais restent affichés sur les chemins 422 non couverts par `error_handlers.py`.
@@ -136,9 +150,15 @@ Relevés lors de E0-T3 (`test_lot_transitions.py`) ; le code applicatif n'a pas 
 - **Arguments inutilisés masqués par `ARG002`** (règle ignorée dans `pyproject.toml`, 10 occurrences via `ruff check . --isolated --select ARG002 --output-format concise` depuis `backend/`) :
   - `certificate_service.py:48` `reservation_id`
   - `document_service.py:181` `user_role` (voir anomalie ci-dessus)
-  - `reservation_service.py:1001`, `1058`, `1099`, `1137` `user_id`
-  - `reservation_service.py:1166` `data` et `1167` `user_id`
-  - `project_service.py:1256`, `1714` `user_id`
+  - `reservation_service.py:1117` `user_id` (`update_notaire_info`)
+  - `reservation_service.py:1240` `data` (`unblock_lot`)
+  - `project_service.py:1257` `user_id`
+  - (mis à jour en E3-T1 : 5 occurrences restantes, les autres `user_id` sont désormais enregistrés dans `lot_status_history`)
+
+Relevés lors de E3-T1 (`lot_workflow` + `lot_status_history`) :
+
+- ✅ **Corrigé ([#50](https://github.com/migok/lotispro/issues/50)) — statut `sold` écrit par deux chemins hérités** : payer la dernière échéance (`PATCH /api/payments/installments/{id}` → `_auto_convert_to_sale` → `release_lot(lot.id, "sold")`) renvoyait une 500 (contrainte `valid_lot_status`), de même que `POST /api/sales`. Décision utilisateur : plus de conversion automatique — l'échéance est enregistrée, le lot reste `reservation_engagee`, le commercial utilise « Marquer soldé ». `POST /api/sales` (inutilisé par l'UI) est refusé en 400 (`use_transition_endpoint`). `release_lot` supprimé.
+- **`PUT /api/lots/{id}` avec `status` depuis un statut du workflow** : auparavant seul le statut cible était contrôlé (`creation` / `available` / `blocked`), si bien qu'un lot en `option` (ou plus loin) pouvait être remis `available` ou `blocked` directement. La table `lot_workflow` (`direct_update` : depuis `creation`, `available`, `blocked` uniquement) refuse désormais ce cas (400, `invalid_lot_status`). Aucun test de caractérisation ne couvrait ce chemin.
 
 ## Recette E1 (plein écran)
 

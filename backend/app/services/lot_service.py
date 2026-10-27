@@ -11,8 +11,11 @@ from app.core.exceptions import (
     NotFoundError,
 )
 from app.core.logging import get_logger
-from app.domain.schemas.lot import (
+from app.domain.lot_workflow import (
     DIRECT_UPDATE_STATUSES,
+    assert_transition_allowed,
+)
+from app.domain.schemas.lot import (
     NON_DELETABLE_STATUSES,
     LotBulkMetadataUpdate,
     LotCreate,
@@ -20,6 +23,8 @@ from app.domain.schemas.lot import (
     LotResponse,
     LotUpdate,
 )
+from app.domain.schemas.lot_status_history import LotStatusHistoryResponse
+from app.infrastructure.database.models import LotModel
 from app.infrastructure.database.repositories import (
     LotPricingConfigRepository,
     LotRepository,
@@ -71,7 +76,9 @@ class LotService:
 
         Looks up the matching pricing config for the lot's categorical combination.
         For creation/available lots, overrides price_per_sqm, price_per_sqm_acte,
-        and price from the config. Auto-activates creation lots that have a surface.
+        and price from the config. Auto-activates creation lots that have a surface:
+        the returned ``status`` key must be applied with ``_activate``, never
+        written with the other fields.
         Returns empty dict if no matching config exists.
         """
         config = await self.pricing_repo.get_for_combination(
@@ -96,6 +103,21 @@ class LotService:
             )
 
         return overrides
+
+    async def _activate(
+        self,
+        lot_id: int,
+        from_status: str,
+        user_id: int | None,
+        enabled_optional: list[str],
+    ) -> LotModel:
+        """Activate a lot (creation → available) through ``change_status``."""
+        new_status = assert_transition_allowed(
+            enabled_optional, "activate", from_status
+        )
+        return await self.lot_repo.change_status(
+            lot_id, new_status, transition="activate", user_id=user_id
+        )
 
     async def get_lots(
         self,
@@ -173,11 +195,38 @@ class LotService:
             updated_at=lot.updated_at,
         )
 
-    async def create_lot(self, data: LotCreate) -> LotResponse:
+    async def get_status_history(self, lot_id: int) -> list[LotStatusHistoryResponse]:
+        """Status changes of a lot, newest first.
+
+        Raises:
+            NotFoundError: If lot not found
+        """
+        if not await self.lot_repo.exists(lot_id):
+            raise NotFoundError("Lot", lot_id)
+
+        return [
+            LotStatusHistoryResponse(
+                id=row.id,
+                lot_id=row.lot_id,
+                from_status=row.from_status,
+                to_status=row.to_status,
+                transition=row.transition,
+                user_id=row.user_id,
+                user_name=user_name,
+                reservation_id=row.reservation_id,
+                changed_at=row.changed_at,
+            )
+            for row, user_name in await self.lot_repo.get_status_history(lot_id)
+        ]
+
+    async def create_lot(
+        self, data: LotCreate, user_id: int | None = None
+    ) -> LotResponse:
         """Create a new lot.
 
         Args:
             data: Lot creation data
+            user_id: User creating the lot (recorded if it is auto-activated)
 
         Returns:
             Created lot response
@@ -237,7 +286,12 @@ class LotService:
                 data.status,
             )
             if pricing_overrides:
+                activate = pricing_overrides.pop("status", None) is not None
                 lot = await self.lot_repo.update(lot.id, **pricing_overrides)
+                if activate:
+                    lot = await self._activate(
+                        lot.id, lot.status, user_id, project.enabled_optional_statuses
+                    )
 
         # Update project lot count
         await self.project_repo.update_lot_counts(
@@ -275,12 +329,17 @@ class LotService:
         self,
         lot_id: int,
         data: LotUpdate,
+        user_id: int | None = None,
     ) -> LotResponse:
         """Update a lot.
+
+        A status change (direct update or auto-activation by the pricing grid)
+        goes through ``LotRepository.change_status``.
 
         Args:
             lot_id: Lot ID
             data: Update data
+            user_id: User performing the update
 
         Returns:
             Updated lot response
@@ -334,6 +393,7 @@ class LotService:
         # Apply pricing config from the project grid (overrides user-provided prices)
         price_per_sqm_acte = data.price_per_sqm_acte
         status_override = data.status
+        activated_by_pricing = False
 
         final_status = data.status if data.status is not None else lot.status
         if final_status in ("creation", "available"):
@@ -365,7 +425,22 @@ class LotService:
                 price_per_sqm_acte = pricing_overrides.get(
                     "price_per_sqm_acte", price_per_sqm_acte
                 )
-                status_override = pricing_overrides.get("status", status_override)
+                if "status" in pricing_overrides:
+                    status_override = pricing_overrides["status"]
+                    activated_by_pricing = True
+
+        from_status = lot.status
+        transition: str | None = None
+        if status_override is not None and status_override != from_status:
+            transition = (
+                "activate"
+                if activated_by_pricing and from_status == "creation"
+                else "direct_update"
+            )
+            enabled_optional = await self.project_repo.get_enabled_optional(
+                lot.project_id
+            )
+            assert_transition_allowed(enabled_optional, transition, from_status)
 
         updated = await self.lot_repo.update(
             lot_id,
@@ -375,11 +450,14 @@ class LotService:
             price=price,
             price_per_sqm=price_per_sqm,
             price_per_sqm_acte=price_per_sqm_acte,
-            status=status_override,
             type_lot=data.type_lot,
             emplacement=data.emplacement,
             type_maison=data.type_maison,
         )
+        if transition is not None:
+            updated = await self.lot_repo.change_status(
+                lot_id, status_override, transition=transition, user_id=user_id
+            )
 
         logger.info("Lot updated", lot_id=lot_id)
 
@@ -406,12 +484,14 @@ class LotService:
         self,
         project_id: int,
         data: LotBulkMetadataUpdate,
+        user_id: int | None = None,
     ) -> int:
         """Bulk update metadata on multiple lots (manager only).
 
         Args:
             project_id: Project ID — lots must belong to this project
             data: Bulk update payload with lot_ids and optional metadata fields
+            user_id: User performing the update (recorded on auto-activations)
 
         Returns:
             Number of lots updated
@@ -466,7 +546,12 @@ class LotService:
                 lot.status,
             )
             if pricing_overrides:
+                activate = pricing_overrides.pop("status", None) is not None
                 await self.lot_repo.update(lot.id, **pricing_overrides)
+                if activate:
+                    await self._activate(
+                        lot.id, lot.status, user_id, project.enabled_optional_statuses
+                    )
 
         logger.info(
             "Bulk lot metadata updated",
@@ -478,13 +563,16 @@ class LotService:
 
         return count
 
-    async def activate_lot(self, lot_id: int) -> LotResponse:
+    async def activate_lot(
+        self, lot_id: int, user_id: int | None = None
+    ) -> LotResponse:
         """Transition lot from creation to available.
 
         Validates that required fields (price, surface) are set before activating.
 
         Args:
             lot_id: Lot ID
+            user_id: User activating the lot
 
         Returns:
             Updated lot response
@@ -518,7 +606,8 @@ class LotService:
                 rule="lot_missing_required_fields",
             )
 
-        updated = await self.lot_repo.update(lot_id, status="available")
+        enabled_optional = await self.project_repo.get_enabled_optional(lot.project_id)
+        updated = await self._activate(lot_id, lot.status, user_id, enabled_optional)
 
         logger.info("Lot activated", lot_id=lot_id)
 

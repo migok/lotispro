@@ -1,12 +1,23 @@
 """Lot repository implementation."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import and_, func, select, update
 
+from app.core.exceptions import NotFoundError
+from app.domain.lot_workflow import ALL_STATUSES, EDL_VISIBLE_STATUSES
 from app.domain.schemas.lot import LotFilter
-from app.infrastructure.database.models import LotModel
+from app.infrastructure.database.models import (
+    LotModel,
+    LotStatusHistoryModel,
+    UserModel,
+    utc_now,
+)
 from app.infrastructure.database.repositories.base import BaseRepository
+from app.infrastructure.database.repositories.etat_des_lieux_repository import (
+    EtatDesLieuxRepository,
+)
 
 
 class LotRepository(BaseRepository[LotModel]):
@@ -111,17 +122,7 @@ class LotRepository(BaseRepository[LotModel]):
             .group_by(LotModel.status)
         )
 
-        counts = {
-            "creation": 0,
-            "available": 0,
-            "option": 0,
-            "reservation_a_finaliser": 0,
-            "reservation_engagee": 0,
-            "reservation_soldee": 0,
-            "chez_notaire": 0,
-            "chez_proprietaire": 0,
-            "blocked": 0,
-        }
+        counts = dict.fromkeys(ALL_STATUSES, 0)
 
         for status, count in result.all():
             counts[status] = count
@@ -268,6 +269,19 @@ class LotRepository(BaseRepository[LotModel]):
                 )
 
             lots_data.append(lot_dict)
+
+        edl_lots = [
+            lot
+            for lot in lots_data
+            if lot.get("reservation_id") and lot["status"] in EDL_VISIBLE_STATUSES
+        ]
+        edl_summaries = await EtatDesLieuxRepository(
+            self.session
+        ).summaries_by_reservation([lot["reservation_id"] for lot in edl_lots])
+        for lot_dict in edl_lots:
+            summary = edl_summaries.get(lot_dict["reservation_id"])
+            if summary:
+                lot_dict.update(summary)
 
         return lots_data
 
@@ -532,16 +546,82 @@ class LotRepository(BaseRepository[LotModel]):
         rows.sort(key=lambda r: r["days_remaining"])
         return rows
 
-    async def release_lot(self, lot_id: int, status: str) -> None:
-        """Update lot status and explicitly clear current_reservation_id to NULL.
+    async def change_status(
+        self,
+        lot_id: int,
+        new_status: str,
+        *,
+        transition: str,
+        user_id: int | None,
+        reservation_id: int | None = None,
+        clear_reservation: bool = False,
+        **fields: Any,
+    ) -> LotModel:
+        """Change the lot status and record it in ``lot_status_history``.
 
-        Used when a reservation is released, expired, or converted to sale.
-        The base update() method filters None values, so this method handles
-        the explicit NULL assignment directly.
+        The single entry point for lot status changes. ``fields`` are written
+        as given (``None`` included, unlike ``update``).
+
+        Args:
+            lot_id: Lot ID
+            new_status: Arrival status
+            transition: Workflow transition name (see ``lot_workflow``)
+            user_id: User performing the change (None for system changes)
+            reservation_id: Reservation the change is about; when given it
+                becomes the lot's current reservation. Defaults to the lot's
+                current reservation before the change.
+            clear_reservation: Set ``current_reservation_id`` to NULL
+            **fields: Other lot columns to update in the same statement
+
+        Returns:
+            The updated lot
+
+        Raises:
+            NotFoundError: If the lot does not exist
         """
-        await self.session.execute(
-            update(LotModel)
-            .where(LotModel.id == lot_id)
-            .values(status=status, current_reservation_id=None)
+        lot = await self.get_by_id(lot_id)
+        if lot is None:
+            raise NotFoundError("Lot", lot_id)
+        from_status = lot.status
+        history_reservation_id = (
+            reservation_id if reservation_id is not None else lot.current_reservation_id
         )
+
+        values: dict[str, Any] = {**fields, "status": new_status}
+        if reservation_id is not None:
+            values["current_reservation_id"] = reservation_id
+        if clear_reservation:
+            values["current_reservation_id"] = None
+        await self.session.execute(
+            update(LotModel).where(LotModel.id == lot_id).values(**values)
+        )
+
+        if new_status != from_status:
+            self.session.add(
+                LotStatusHistoryModel(
+                    lot_id=lot_id,
+                    from_status=from_status,
+                    to_status=new_status,
+                    transition=transition,
+                    user_id=user_id,
+                    reservation_id=history_reservation_id,
+                    changed_at=utc_now(),
+                )
+            )
         await self.session.flush()
+        return await self.get_by_id(lot_id)  # type: ignore[return-value]
+
+    async def get_status_history(
+        self, lot_id: int
+    ) -> list[tuple[LotStatusHistoryModel, str | None]]:
+        """Status changes of a lot with the user name, newest first."""
+        result = await self.session.execute(
+            select(LotStatusHistoryModel, UserModel.name)
+            .outerjoin(UserModel, UserModel.id == LotStatusHistoryModel.user_id)
+            .where(LotStatusHistoryModel.lot_id == lot_id)
+            .order_by(
+                LotStatusHistoryModel.changed_at.desc(),
+                LotStatusHistoryModel.id.desc(),
+            )
+        )
+        return [(row, name) for row, name in result.all()]
