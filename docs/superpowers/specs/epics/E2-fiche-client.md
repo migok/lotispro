@@ -33,7 +33,7 @@
 - **Au moins une adresse** (Maroc ou étranger) est obligatoire ; chaque adresse remplie exige sa **ville** (et l'adresse à l'étranger son **pays**) (décision utilisateur, recette du 2026-10-25).
 - Une notice indique que l'adresse d'acte (adresse + ville [+ pays]) figurera sur l'acte de réservation et l'acte final.
 - CIN marocain : `^[A-Z]{1,2}\d{1,6}$` après passage en majuscules et suppression des espaces (*choix de Claude*).
-- Téléphone : format E.164 après normalisation (`+212…`) ; un numéro local `0XXXXXXXXX` est converti en `+212XXXXXXXXX`.
+- Téléphone et WhatsApp : sélecteur d'indicatif avec drapeaux SVG intégrés, noms français et recherche par pays ou indicatif (`react-phone-number-input`, données `libphonenumber-js`). Aucun pays présélectionné. Le numéro national est converti en E.164 selon le pays choisi ; un numéro international peut être saisi ou collé directement. L'API exige un indicatif explicite et ne suppose plus `+212` (demande utilisateur du 2026-10-26). WhatsApp conserve son choix indépendant lorsque « Même numéro que le téléphone » est décoché. Aucun changement de schéma en base.
 - Email : `EmailStr`.
 - Doublons : `GET /api/v1/clients/duplicates?cin=&email=&exclude_id=` renvoie les clients correspondants ; l'UI affiche une **alerte non bloquante** avec lien vers la fiche existante.
 - Erreurs renvoyées par champ (422 Pydantic) et affichées sous chaque champ ; toast de succès à l'enregistrement.

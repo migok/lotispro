@@ -30,7 +30,7 @@
 | Adresse d'acte | `morocco` \| `abroad` |
 | Canaux de notification | `email`, `sms`, `whatsapp` |
 | Regex CIN (après majuscules, sans espaces) | `^[A-Z]{1,2}\d{1,6}$` |
-| Téléphone normalisé (E.164) | `^\+[1-9]\d{7,14}$` ; `0XXXXXXXXX` (10 chiffres) → `+212XXXXXXXXX` ; préfixe `00` → `+` ; espaces, points, tirets retirés |
+| Téléphone normalisé (E.164) | `^\+[1-9]\d{7,14}$` ; depuis le 2026-10-26 : indicatif choisi dans le formulaire (drapeaux et recherche), sans pays par défaut ; API sans conversion implicite en `+212` ; préfixe `00` → `+` ; espaces, points, tirets retirés |
 | Message CIN | `Format CIN invalide (ex. AB123456)` |
 | Message téléphone | `Numéro invalide (format international, ex. +212612345678)` |
 

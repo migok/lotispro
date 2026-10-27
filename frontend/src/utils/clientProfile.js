@@ -33,12 +33,11 @@ export function normalizeCin(v) {
   return { value: cin, error: null };
 }
 
-/** E.164 : 0XXXXXXXXX -> +212XXXXXXXXX, 00 -> +, séparateurs retirés. */
+/** E.164 : indicatif explicite requis, 00 -> +, séparateurs retirés. */
 export function normalizePhone(v) {
   let phone = String(v ?? '').replace(/[\s.-]/g, '');
   if (!phone) return { value: null, error: null };
   if (phone.startsWith('00')) phone = `+${phone.slice(2)}`;
-  else if (/^0[0-9]{9}$/.test(phone)) phone = `+212${phone.slice(1)}`;
   if (!PHONE_PATTERN.test(phone)) return { value: null, error: PHONE_ERROR };
   return { value: phone, error: null };
 }

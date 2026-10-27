@@ -47,8 +47,6 @@ def normalize_phone(value: str | None) -> str | None:
         return None
     if phone.startswith("00"):
         phone = "+" + phone[2:]
-    elif re.fullmatch(r"0[0-9]{9}", phone):
-        phone = "+212" + phone[1:]
     if not PHONE_PATTERN.match(phone):
         raise ValueError(PHONE_ERROR)
     return phone

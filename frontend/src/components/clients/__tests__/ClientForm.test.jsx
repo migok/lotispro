@@ -14,13 +14,27 @@ const fill = async (user, label, value) => {
 const fillRequired = async (user) => {
   await fill(user, 'Nom *', 'Benali')
   await fill(user, 'Prénom *', 'Fatima')
-  await fill(user, 'Téléphone *', '0612345678')
+  await fill(user, 'Téléphone *', '+212612345678')
   await fill(user, 'Adresse Maroc', '12 rue X')
   await fill(user, 'Ville (Maroc) *', 'Casablanca')
   await user.selectOptions(screen.getByLabelText("Canal d'acquisition *"), 'smap')
 }
 
 describe('ClientForm', () => {
+  it('saves a French phone and an independent Moroccan WhatsApp number', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValue({})
+    renderWithProviders(<ClientForm onSubmit={onSubmit} />)
+    await fillRequired(user)
+    await fill(user, 'Téléphone *', '+33612345678')
+    await user.click(screen.getByLabelText('Même numéro que le téléphone'))
+    const whatsapp = screen.getAllByLabelText('WhatsApp')[0]
+    await user.type(whatsapp, '+212612345678')
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ phone: '+33612345678', whatsapp: '+212612345678' })
+  })
+
   beforeEach(() => {
     apiGet.mockReset()
     apiGet.mockResolvedValue([])
@@ -75,11 +89,11 @@ describe('ClientForm', () => {
     const same = screen.getByLabelText('Même numéro que le téléphone')
     expect(same).toBeChecked()
     await fillRequired(user)
-    expect(screen.getAllByLabelText('WhatsApp')[0]).toHaveValue('0612345678')
+    expect(screen.getAllByLabelText('WhatsApp')[0].value.replace(/\s/g, '')).toBe('+212612345678')
 
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
-    expect(onSubmit.mock.calls[0][0].whatsapp).toBe('0612345678')
+    expect(onSubmit.mock.calls[0][0].whatsapp).toBe('+212612345678')
   })
 
   it('blocks submit and shows required errors', async () => {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { apiGet } from '../../utils/api';
 import { CLIENT_TYPES } from '../../utils/constants';
+import InternationalPhoneInput from './InternationalPhoneInput';
 import {
   ACQUISITION_CHANNEL_LABELS,
   acteAddressOf,
@@ -181,6 +182,13 @@ export default function ClientForm({
     />
   );
 
+  const phoneInput = (id, label) => (
+    <InternationalPhoneInput id={`client-${id}`} label={label}
+      value={id === 'whatsapp' && whatsappSame ? values.phone : values[id]}
+      disabled={id === 'whatsapp' && whatsappSame} error={errors[id]}
+      onChange={(value) => set(id)({ target: { value } })} />
+  );
+
   return (
     <form className={`client-form${compact ? ' client-form--compact' : ''}`} onSubmit={handleSubmit} noValidate>
       <section className="client-form-section">
@@ -205,15 +213,11 @@ export default function ClientForm({
       <section className="client-form-section">
         <h4 className="client-form-section-title">Coordonnées</h4>
         <div className="form-2col">
-          {field('phone', 'Téléphone *', text('phone', { type: 'tel', placeholder: '0612345678' }))}
+          {field('phone', 'Téléphone *', phoneInput('phone', 'téléphone'))}
           {field(
             'whatsapp',
             'WhatsApp',
-            text('whatsapp', {
-              type: 'tel',
-              disabled: whatsappSame,
-              value: whatsappSame ? values.phone : values.whatsapp,
-            }),
+            phoneInput('whatsapp', 'WhatsApp'),
             <label className="client-form-hint">
               <input
                 type="checkbox"

@@ -12,6 +12,8 @@ _Dernière mise à jour : 2026-10-25 (E1 et E2 fusionnés ; E4-T0 ajouté)_
 
 ## Vue d'ensemble
 
+Ajustement E2 du 2026-10-26 (développé localement, non fusionné) : sélecteur d'indicatif avec drapeaux et recherche pour Téléphone / WhatsApp, sans pays par défaut. Suppression de la conversion implicite des numéros locaux en `+212` côté formulaire et API ; stockage international inchangé.
+
 | Epic | Statut | Tâches faites | Issue | PR |
 |---|---|---|---|---|
 | E0 Fondations & nettoyage | ✅ | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | [#46](https://github.com/migok/lotispro/pull/46) |
