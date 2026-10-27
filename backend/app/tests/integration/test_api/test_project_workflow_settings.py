@@ -221,6 +221,26 @@ class TestPutWorkflow:
         )
         assert "status_in_use" in str(body)
 
+    async def test_unknown_stored_key_can_be_dropped(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        project = await make_project(
+            db_session,
+            manager,
+            enabled_optional_statuses=["option", "legacy_unknown"],
+        )
+
+        response = await _put_workflow(
+            client, auth_headers(manager), project.id, ["option"]
+        )
+
+        assert response.status_code == 200
+        assert response.json()["enabled_optional_statuses"] == ["option"]
+
     async def test_disable_edl_allowed_when_no_lot_in_edl_status(
         self,
         client: AsyncClient,

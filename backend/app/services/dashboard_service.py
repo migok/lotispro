@@ -25,6 +25,7 @@ from app.infrastructure.database.models import (
     LotModel,
     PaymentInstallmentModel,
     PaymentScheduleModel,
+    ProjectModel,
     ReservationModel,
     SaleModel,
 )
@@ -46,9 +47,6 @@ _ACTIVE_LOT_STATUSES = (
     "reservation_engagee",
     *SOLD_STATUSES,
 )
-
-# Statuses from which a client who wants the notary can go there.
-_NOTAIRE_READY_STATUSES = ("reservation_soldee", "edl_finalise")
 
 
 class DashboardService:
@@ -541,13 +539,19 @@ class DashboardService:
         """
 
         query = (
-            select(LotModel, ReservationModel, ClientModel)
+            select(
+                LotModel,
+                ReservationModel,
+                ClientModel,
+                ProjectModel.enabled_optional_statuses,
+            )
             .join(
                 ReservationModel, LotModel.current_reservation_id == ReservationModel.id
             )
             .join(ClientModel, ReservationModel.client_id == ClientModel.id)
+            .join(ProjectModel, LotModel.project_id == ProjectModel.id)
             .where(
-                LotModel.status.in_(_NOTAIRE_READY_STATUSES),
+                LotModel.status.in_(("reservation_soldee", "edl_finalise")),
                 ReservationModel.wants_notaire.is_(True),
             )
         )
@@ -561,7 +565,12 @@ class DashboardService:
         rows = result.all()
 
         alerts = []
-        for lot, reservation, client in rows:
+        for lot, reservation, client, enabled in rows:
+            # A project with an état des lieux never sends a soldée lot to the
+            # notary directly (edl_required); one without never reaches edl_finalise.
+            ready_status = "edl_finalise" if "edl" in enabled else "reservation_soldee"
+            if lot.status != ready_status:
+                continue
             alerts.append(
                 {
                     "lot_id": lot.id,

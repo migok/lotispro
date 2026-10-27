@@ -107,6 +107,19 @@ Autre dette relevée en fin d'E0 (revue finale, 2026-10-24) :
 - **Tests manquants avant les refactors E3 / E4** : aucun test n'exerce `payment_plan` / les échéances ; l'effet de `engage` avec `guarantee_action=deduct` et les notes d'audit de `extend-option` ne sont pas assertés. À couvrir avant de toucher ces flux.
 - **`PLC0415` (imports différés)**, 44 occurrences, issues de `ruff check . --isolated --select PLC0415 --output-format concise` (depuis `backend/`) : `services/project_service.py` 14, `services/dashboard_service.py` 11, `repositories/lot_repository.py` 5, et 1 chacun dans `domain/schemas/lot.py`, `repositories/base.py`, `client_repository.py`, `project_repository.py`, `sale_repository.py`, `user_repository.py`, `database/session.py`, `services/email_service.py`, `lot_pricing_service.py`, `payment_service.py`, `reservation_service.py`, `user_service.py`, `tests/unit/test_domain/test_security.py`, `tests/unit/test_imports.py`.
 - **`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.
+
+Dette relevée en fin d'E3 (revue finale, statuts optionnels et état des lieux) :
+
+- `extend_option` n'appelle pas `assert_transition_allowed` (sans effet de comportement aujourd'hui).
+- `POST /api/lots` accepte n'importe quel statut, y compris les statuts EDL ; restreindre `LotCreate.status` à `DIRECT_UPDATE_STATUSES`.
+- Un acompte d'option remboursé reste compté comme encaissé dans `ca_realise`, `total_deposits` et les totaux client.
+- Pas de verrou de ligne entre la vérification « statut en cours d'utilisation » du workflow projet et la mise à jour.
+- Les numéros de lots du message `status_in_use` sont triés comme des chaînes (`10` avant `2`).
+- Un remboursement sans montant est accepté par le backend.
+- `LotRepository` construit un `EtatDesLieuxRepository` (couplage entre repositories).
+- Le bouton « Finaliser » reste désactivé si le chargement de l'EDL échoue.
+- `LotDetailModal` fait environ 2850 lignes ; à découper.
+- Endpoint mort `POST /api/sales` (répond toujours 400) et schéma `SaleCreate` à supprimer.
 - **Dépendances backend : 3 sources divergentes** (relevé lors de la CI de la PR #46) : `backend/requirements.txt` (épingle `fastapi==0.115.0`, `pydantic==2.8.2`…, utilisé en local), `backend/pyproject.toml` (plages non épinglées, utilisé par la CI via `pip install -e ".[dev]"`) et `backend/Dockerfile` (liste explicite non épinglée, utilisée en production). Conséquence constatée : la CI et la production résolvent fastapi 0.162.0 / starlette 1.9.0 alors que le local est en 0.115.0 (ex. `HTTPBearer` renvoie 401 au lieu de 403 sans jeton ; le test `test_get_current_user_unauthorized` attend désormais 401). À faire dans une tâche dédiée : introduire un lockfile unique (uv ou pip-tools) utilisé par le local, la CI et Docker. D'ici là, mettre à jour les environnements locaux avec `pip install -e ".[dev]" --upgrade`.
 - **`LotDetailModal.jsx`** : la formule du solde restant est dupliquée (imposée par l'ordre des hooks) ; à factoriser lors d'un refactor du composant.
 - **E2, erreurs 422 non traduites** : le toast de repli anglais « Request validation failed » et les erreurs de parsing de date en anglais restent affichés sur les chemins 422 non couverts par `error_handlers.py`.

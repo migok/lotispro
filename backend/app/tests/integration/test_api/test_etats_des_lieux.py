@@ -635,6 +635,54 @@ class TestReadAndCounts:
         assert response.status_code == 200
         assert [a["lot_id"] for a in response.json()] == [lot.id]
 
+    async def test_notaire_alerts_exclude_soldee_on_edl_project(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        headers = auth_headers(commercial)
+        _, lot = await _sold_lot(client, db_session, manager, headers)
+        await _post(
+            client, headers, lot.id, "set-notaire-intent", {"wants_notaire": True}
+        )
+
+        response = await client.get(
+            "/api/dashboard/notaire-alerts", headers=auth_headers(manager)
+        )
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    async def test_notaire_alerts_include_soldee_on_default_project(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        headers = auth_headers(commercial)
+        _, lot = await _sold_lot(
+            client,
+            db_session,
+            manager,
+            headers,
+            enabled=["option", "reservation_a_finaliser"],
+        )
+        await _post(
+            client, headers, lot.id, "set-notaire-intent", {"wants_notaire": True}
+        )
+
+        response = await client.get(
+            "/api/dashboard/notaire-alerts", headers=auth_headers(manager)
+        )
+
+        assert response.status_code == 200
+        assert [a["lot_id"] for a in response.json()] == [lot.id]
+
     async def test_geojson_carries_edl_summary(
         self,
         client: AsyncClient,

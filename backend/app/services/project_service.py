@@ -321,7 +321,7 @@ class ProjectService:
         new_enabled = list(data.enabled_optional_statuses)
         for key in set(project.enabled_optional_statuses) - set(new_enabled):
             numeros = await self._lot_numeros_in_statuses(
-                project_id, OPTIONAL_KEY_STATUSES[key]
+                project_id, OPTIONAL_KEY_STATUSES.get(key, ())
             )
             if numeros:
                 raise BusinessRuleError(
