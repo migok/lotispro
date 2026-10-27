@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-26 (E3-T5 : frontend statuts + EDL)_
+_Dernière mise à jour : 2026-10-27 (E4-T0 en revue ; E4-T5 ajoutée)_
 
 ## Vue d'ensemble
 
@@ -18,7 +18,7 @@ _Dernière mise à jour : 2026-10-26 (E3-T5 : frontend statuts + EDL)_
 | E1 🐛 #5 Plein écran | ✅ | 2 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | [#47](https://github.com/migok/lotispro/pull/47) |
 | E2 👤 #7 Fiche client | ✅ | 6 / 6 | [#18](https://github.com/migok/lotispro/issues/18) | [#48](https://github.com/migok/lotispro/pull/48) |
 | E3 Statuts par projet + états des lieux | 🟨 | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
-| E4 🔄 #8 Réservation | ⬜ | 0 / 5 | [#29](https://github.com/migok/lotispro/issues/29) | |
+| E4 🔄 #8 Réservation | 🟦 | 0 / 6 | [#29](https://github.com/migok/lotispro/issues/29) | |
 | E5 📊 #3 Vue projet | ⬜ | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | |
 | E6 📅 #4 Dashboard par période | ⬜ | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | |
 | E7 SMS / WhatsApp | ⛔ fournisseur à choisir | 0 / 3 | [#42](https://github.com/migok/lotispro/issues/42) | |
@@ -47,11 +47,12 @@ _Dernière mise à jour : 2026-10-26 (E3-T5 : frontend statuts + EDL)_
 | E3-T3 | Transition option → engagée | ✅ | [#26](https://github.com/migok/lotispro/issues/26) | | 2026-10-25 |
 | E3-T4 | États des lieux backend | ✅ | [#27](https://github.com/migok/lotispro/issues/27) | | 2026-10-26 |
 | E3-T5 | Frontend statuts + EDL | ✅ | [#28](https://github.com/migok/lotispro/issues/28) | | 2026-10-26 |
-| E4-T0 | Correctif PDF : police Unicode (’, arabe) | ⬜ | [#49](https://github.com/migok/lotispro/issues/49) | | |
+| E4-T0 | Correctif PDF : police Unicode (’, arabe) | 🟨 | [#49](https://github.com/migok/lotispro/issues/49) | | |
 | E4-T1 | Acte auto à l'engagement | ⬜ | [#30](https://github.com/migok/lotispro/issues/30) | | |
 | E4-T2 | Service de notifications | ⬜ | [#31](https://github.com/migok/lotispro/issues/31) | | |
 | E4-T3 | UI notifications + historique | ⬜ | [#32](https://github.com/migok/lotispro/issues/32) | | |
 | E4-T4 | Rappels d'expiration | ⬜ | [#33](https://github.com/migok/lotispro/issues/33) | | |
+| E4-T5 | Modifier une réservation engagée | ⬜ | [#52](https://github.com/migok/lotispro/issues/52) | | |
 | E5-T1 | Endpoint `lots-matrix` | ⬜ | [#35](https://github.com/migok/lotispro/issues/35) | | |
 | E5-T2 | Onglet Lots (grille + navigation) | ⬜ | [#36](https://github.com/migok/lotispro/issues/36) | | |
 | E5-T3 | Filtres persistés | ⬜ | [#37](https://github.com/migok/lotispro/issues/37) | | |
@@ -127,7 +128,7 @@ Dette relevée en fin d'E3 (revue finale, statuts optionnels et état des lieux)
 - **E2, ordre de déploiement** : déployer Railway (backend) puis Vercel (frontend) immédiatement après, car l'ancienne interface envoie `POST {name}`, qui reçoit un 422 sur le nouveau backend.
 
 Dette relevée en fin d'E2 (revue finale, 2026-10-25) :
-- **PDF d'acte / reçu en erreur 500** si une adresse, une ville, un pays ou un nom contient un caractère hors latin-1 (apostrophe typographique ’ insérée par les claviers de téléphone, écriture arabe). Préexistant, plus probable avec les nouveaux champs. Correctif : police Unicode (DejaVuSans via `pdf.add_font`) dans `certificate_service.py`, ou au minimum remplacer ’‘“” avant impression. → planifié en **E4-T0** ([#49](https://github.com/migok/lotispro/issues/49)), première tâche d'E4.
+- ~~**PDF d'acte / reçu en erreur 500** si une adresse, une ville, un pays ou un nom contient un caractère hors latin-1 (apostrophe typographique ’ insérée par les claviers de téléphone, écriture arabe). Préexistant, plus probable avec les nouveaux champs. Correctif : police Unicode (DejaVuSans via `pdf.add_font`) dans `certificate_service.py`, ou au minimum remplacer ’‘“” avant impression. → planifié en **E4-T0** ([#49](https://github.com/migok/lotispro/issues/49)), première tâche d'E4.~~ **Résolu par E4-T0** : DejaVu Sans embarquée (`app/assets/fonts/`) + mise en forme du texte arabe via `uharfbuzz`.
 - Badge « Actes » de la fiche client choisi par comparaison de chaînes (`ClientDetailPage.jsx`) : comparer la clé (`morocco`/`abroad`) serait plus robuste.
 - Adresses héritées contenant déjà la ville : la ville apparaîtra deux fois après saisie de la ville (pas de migration de découpage, décision utilisateur).
 - `pydantic_validation_handler` renvoie encore « Data validation failed » (anglais).
