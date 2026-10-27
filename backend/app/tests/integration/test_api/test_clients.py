@@ -350,6 +350,26 @@ class TestClientValidation:
         )
 
     @pytest.mark.integration
+    async def test_create_rejects_local_number_without_dial_code(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "phone": "0612345678"},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        detail = response.json()["details"][0]
+        assert detail["field"].endswith("phone")
+        assert detail["message"] == (
+            "Numéro invalide (format international, ex. +212612345678)"
+        )
+
+    @pytest.mark.integration
     async def test_create_samsar_requires_date(
         self,
         client: AsyncClient,

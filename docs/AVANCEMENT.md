@@ -12,7 +12,7 @@ _Dernière mise à jour : 2026-10-25 (E1 et E2 fusionnés ; E4-T0 ajouté)_
 
 ## Vue d'ensemble
 
-Ajustement E2 du 2026-10-26 (développé localement, non fusionné) : sélecteur d'indicatif avec drapeaux et recherche pour Téléphone / WhatsApp, sans pays par défaut. Suppression de la conversion implicite des numéros locaux en `+212` côté formulaire et API ; stockage international inchangé.
+Ajustement E2 « téléphone international » (2026-10-26, livré par sa propre PR) : sélecteur d'indicatif avec drapeaux, noms français et recherche (pays, alias ou indicatif) pour Téléphone / WhatsApp, pays usuels en tête (Maroc, France…), sans pays par défaut. Un numéro saisi ou collé avec `00` est converti en `+` avant analyse (le pays bascule sur l'indicatif composé). Longueur contrôlée par `isPossiblePhoneNumber` côté formulaire (l'API garde la regex E.164). Plus de conversion implicite des numéros locaux en `+212` (formulaire et API) ; pas de migration : un ancien numéro sans indicatif affiche une aide et se convertit en choisissant le pays. Composant chargé à la demande (chunk séparé).
 
 | Epic | Statut | Tâches faites | Issue | PR |
 |---|---|---|---|---|
