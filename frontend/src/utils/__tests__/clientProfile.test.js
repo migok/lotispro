@@ -113,6 +113,25 @@ describe('validateClientForm', () => {
     expect(validateClientForm(base)).toEqual({})
   })
 
+  it('rejects phone numbers of an impossible length for their country', () => {
+    const message = 'Numéro incomplet ou invalide pour ce pays'
+    // « 612345678 » sans pays devient +612345678 : longueur possible pour l'Australie (+61),
+    // donc non détecté par isPossiblePhoneNumber (contrôle de longueur seulement).
+    expect(validateClientForm({ ...base, phone: '+1234567890123' }).phone).toBe(message)
+    expect(validateClientForm({ ...base, phone: '+21261234567' }).phone).toBe(message)
+    expect(validateClientForm({ ...base, phone: '+33612345' }).phone).toBe(message)
+    expect(validateClientForm({ ...base, whatsapp: '+33 6 12 34 5' }).whatsapp).toBe(message)
+    expect(validateClientForm({ ...base, phone: '+33612345678', whatsapp: '+14165550123' })).toEqual({})
+  })
+
+  it('asks for the country dial code when a national number has none', () => {
+    const message = "Choisissez l'indicatif du pays"
+    expect(validateClientForm({ ...base, phone: '0612345678' }).phone).toBe(message)
+    expect(validateClientForm({ ...base, whatsapp: '06 12 34 56 78' }).whatsapp).toBe(message)
+    expect(validateClientForm({ ...base, phone: '00336123' }).phone).toBe('Numéro invalide (format international, ex. +212612345678)')
+    expect(validateClientForm({ ...base, phone: 'abc' }).phone).toBe('Numéro invalide (format international, ex. +212612345678)')
+  })
+
   it('requires referrer and date for samsar', () => {
     const errors = validateClientForm({ ...base, acquisition_channel: 'samsar' })
     expect(errors.acquisition_referrer).toBe('Indiquez qui')
