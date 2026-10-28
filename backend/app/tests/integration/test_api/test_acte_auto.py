@@ -685,6 +685,89 @@ class TestArchivedDeedDeposit:
         assert archived["deposit"] == 10000
         assert archived["deposit_date"] == datetime.now(UTC).date()
 
+    async def test_refunded_guarantee_is_not_printed_as_paid(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+        certificate_calls: list[dict[str, Any]],
+    ) -> None:
+        headers = auth_headers(commercial)
+        project = await make_project(db_session, manager)
+        lot = await make_lot(db_session, project, status="available")
+        buyer = await make_client(db_session, manager)
+        prep = await _transition(
+            client,
+            headers,
+            lot.id,
+            "direct-reservation",
+            {
+                "client_id": buyer.id,
+                "guarantee_amount": 10000,
+                "payment_type": "cash",
+                "finalization_date": _in_days(15),
+            },
+        )
+        assert prep.status_code == 200, prep.text
+
+        response = await _transition(
+            client,
+            headers,
+            lot.id,
+            "engage",
+            {
+                "guarantee_action": "refund",
+                "refund_amount": 10000,
+                "refund_date": datetime.now(UTC).date().isoformat(),
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        archived = certificate_calls[-1]
+        assert archived["deposit"] != 10000
+        assert archived["deposit"] == 0
+
+    async def test_option_deposit_kept_is_printed_with_the_first_payment(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+        certificate_calls: list[dict[str, Any]],
+    ) -> None:
+        headers = auth_headers(commercial)
+        project = await make_project(
+            db_session, manager, enabled_optional_statuses=["option"]
+        )
+        lot = await make_lot(db_session, project, status="available")
+        buyer = await make_client(db_session, manager)
+        option = await _transition(
+            client,
+            headers,
+            lot.id,
+            "start-option",
+            {"client_id": buyer.id, "expiration_date": _in_days(7), "deposit": 20000},
+        )
+        assert option.status_code == 200, option.text
+
+        response = await _transition(
+            client,
+            headers,
+            lot.id,
+            "option-engage",
+            {
+                "guarantee_amount": 100000,
+                "payment_type": "cash",
+                "deposit_action": "deduct",
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert certificate_calls[-1]["deposit"] == 120000
+
 
 class TestCertificateEndpointsUnchanged:
     """Messages of the legacy PDF endpoints stay byte-identical after delegation."""

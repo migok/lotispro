@@ -60,6 +60,34 @@ class ReservationPaymentRepository(BaseRepository[ReservationPaymentModel]):
         result = await self.session.execute(query)
         return _sum(list(result.scalars().all()))
 
+    async def first_payment_total(self, reservation_id: int) -> float:
+        """« Premier acompte reçu »: sum of the payments without installment.
+
+        Single source of truth (spec E4-T5): 0 when the guarantee was
+        refunded; includes the option deposit kept at engagement.
+        """
+        totals = await self.first_payment_totals([reservation_id])
+        return totals.get(reservation_id, 0.0)
+
+    async def first_payment_totals(
+        self, reservation_ids: list[int]
+    ) -> dict[int, float]:
+        """:meth:`first_payment_total` of several reservations in one query."""
+        if not reservation_ids:
+            return {}
+        result = await self.session.execute(
+            select(
+                ReservationPaymentModel.reservation_id, ReservationPaymentModel.amount
+            ).where(
+                ReservationPaymentModel.reservation_id.in_(reservation_ids),
+                ReservationPaymentModel.installment_id.is_(None),
+            )
+        )
+        cents: dict[int, int] = {}
+        for reservation_id, amount in result.all():
+            cents[reservation_id] = cents.get(reservation_id, 0) + to_cents(amount)
+        return {rid: total / 100 for rid, total in cents.items()}
+
     async def total_for_installment(self, installment_id: int) -> float:
         """Total received for one installment."""
         result = await self.session.execute(

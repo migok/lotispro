@@ -363,6 +363,8 @@ class ReservationResponse(BaseSchema):
     gap_amount: float | None = None  # calculé : convenu − acte
     gap_due_timing: str | None = None
     gap_due_date: date | None = None
+    # Premier acompte reçu = somme des encaissements sans échéance (calculé)
+    first_payment: float = 0.0
     # Dépréciés (E4-T5) : plus écrits par l'engagement
     promotion_amount: float | None = None
     promotion_paid_timing: str | None = None

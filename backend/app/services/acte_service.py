@@ -228,8 +228,9 @@ class ActeService:
         """Amount and date actually received, for the archived deed.
 
         Amount: the first deposit installment if it is paid, otherwise the
-        ``guarantee_amount`` recorded at engagement (a pending installment is
-        only planned; ``reservations.deposit`` is 0 for direct engagements).
+        first payment received at engagement (``first_payment``: payments
+        without installment, 0 when the guarantee was refunded; a pending
+        installment is only planned).
         Date: the installment's ``paid_date``, else ``deposit_date``, else the
         engagement date (status history), else the reservation date.
         """
@@ -237,8 +238,7 @@ class ActeService:
             amount = first.amount
             paid_date = _as_date(first.paid_date)
         else:
-            guarantee = details.get("guarantee_amount")
-            amount = guarantee if guarantee is not None else details["deposit"]
+            amount = details["first_payment"]
             paid_date = None
 
         deposit_date = paid_date or details.get("deposit_date")

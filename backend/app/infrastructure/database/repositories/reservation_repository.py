@@ -14,6 +14,9 @@ from app.infrastructure.database.models import (
     UserModel,
 )
 from app.infrastructure.database.repositories.base import BaseRepository
+from app.infrastructure.database.repositories.reservation_payment_repository import (
+    ReservationPaymentRepository,
+)
 
 
 class ReservationRepository(BaseRepository[ReservationModel]):
@@ -105,6 +108,9 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             return None
 
         reservation, lot, client, reserver, project = row
+        first_payment = await ReservationPaymentRepository(
+            self.session
+        ).first_payment_total(reservation.id)
 
         return {
             "id": reservation.id,
@@ -121,6 +127,8 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             # New workflow fields
             "payment_type": reservation.payment_type,
             "guarantee_amount": reservation.guarantee_amount,
+            # Premier acompte reçu (payments without installment, E4-T5)
+            "first_payment": first_payment,
             "notaire_id": reservation.notaire_id,
             "notary_name": reservation.notary_name,
             "notary_date": reservation.notary_date,

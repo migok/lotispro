@@ -709,3 +709,159 @@ class TestProjectActeThreshold:
         assert negative.status_code == 422
         await db_session.refresh(project)
         assert project.acte_min_paid_pct == 25
+
+
+async def _engage_through(
+    path: str,
+    client: AsyncClient,
+    db_session: AsyncSession,
+    manager: UserModel,
+    headers: dict[str, str],
+) -> int:
+    """Engage a 500 000 lot (deed 450 000) through ``path``; return the id."""
+    in_days = (datetime.now(UTC) + timedelta(days=7)).isoformat()
+    amounts = {
+        "agreed_total_price": 500000,
+        "sale_price": 450000,
+        "payment_plan": REFERENCE["payment_plan"],
+    }
+    statuses = {"enabled_optional_statuses": ["option"]} if path == "option" else {}
+    lot, buyer_id = await _available_lot(db_session, manager, **statuses)
+    if path == "direct":
+        response = await _transition(
+            client,
+            headers,
+            lot.id,
+            "direct-engage",
+            {"client_id": buyer_id, **REFERENCE},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["id"]
+    if path == "option":
+        option = await _transition(
+            client,
+            headers,
+            lot.id,
+            "start-option",
+            {"client_id": buyer_id, "expiration_date": in_days, "deposit": 20000},
+        )
+        response = await _transition(
+            client,
+            headers,
+            lot.id,
+            "option-engage",
+            {**REFERENCE, "deposit_action": "deduct"},
+        )
+        assert response.status_code == 200, response.text
+        return option.json()["id"]
+    prep = await _transition(
+        client,
+        headers,
+        lot.id,
+        "direct-reservation",
+        {
+            "client_id": buyer_id,
+            "guarantee_amount": 100000,
+            "payment_type": "check",
+            "finalization_date": in_days,
+        },
+    )
+    action = (
+        {"guarantee_action": "deduct"}
+        if path == "engage-deduct"
+        else {
+            "guarantee_action": "refund",
+            "refund_amount": 100000,
+            "refund_date": _today().isoformat(),
+        }
+    )
+    response = await _transition(
+        client, headers, lot.id, "engage", {**action, **amounts}
+    )
+    assert response.status_code == 200, response.text
+    return prep.json()["id"]
+
+
+class TestFirstPaymentSingleSource:
+    """« Premier acompte reçu » = sum of the payments without installment."""
+
+    @pytest.mark.parametrize(
+        ("path", "expected"),
+        [
+            ("direct", 100000),
+            ("option", 120000),
+            ("engage-deduct", 100000),
+            ("engage-refund", 0),
+        ],
+    )
+    async def test_first_payment_matches_payments_and_schedule(
+        self,
+        path: str,
+        expected: float,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        headers = auth_headers(commercial)
+        reservation_id = await _engage_through(
+            path, client, db_session, manager, headers
+        )
+
+        response = await client.get(
+            f"/api/reservations/{reservation_id}", headers=headers
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        without_installment = [
+            p.amount
+            for p in await _payments(db_session, reservation_id)
+            if p.installment_id is None
+        ]
+        assert body["first_payment"] == expected
+        assert body["first_payment"] == sum(without_installment)
+        installments = await _installments(db_session, reservation_id)
+        assert _total(installments) == body["agreed_total_price"] - expected
+
+    async def test_refunded_guarantee_keeps_its_meaning(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        headers = auth_headers(commercial)
+        reservation_id = await _engage_through(
+            "engage-refund", client, db_session, manager, headers
+        )
+
+        body = (
+            await client.get(f"/api/reservations/{reservation_id}", headers=headers)
+        ).json()
+
+        assert body["guarantee_amount"] == 100000
+        assert body["first_payment"] == 0
+
+    async def test_direct_engage_response_exposes_first_payment(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        lot, buyer_id = await _available_lot(db_session, manager)
+
+        response = await _transition(
+            client,
+            auth_headers(commercial),
+            lot.id,
+            "direct-engage",
+            {"client_id": buyer_id, **REFERENCE},
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["first_payment"] == 100000

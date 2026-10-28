@@ -56,8 +56,14 @@ from app.infrastructure.database.repositories import (
 logger = get_logger(__name__)
 
 
-def _reservation_to_response(r: ReservationModel) -> ReservationResponse:
-    """Convert a ReservationModel to ReservationResponse."""
+def _reservation_to_response(
+    r: ReservationModel, first_payment: float
+) -> ReservationResponse:
+    """Convert a ReservationModel to ReservationResponse.
+
+    ``first_payment``: « premier acompte reçu », from
+    ``ReservationPaymentRepository.first_payment_total``.
+    """
     return ReservationResponse(
         id=r.id,
         project_id=r.project_id,
@@ -88,6 +94,7 @@ def _reservation_to_response(r: ReservationModel) -> ReservationResponse:
         ),
         gap_due_timing=r.gap_due_timing,
         gap_due_date=r.gap_due_date,
+        first_payment=first_payment,
         promotion_amount=r.promotion_amount,
         promotion_paid_timing=r.promotion_paid_timing,
         promotion_received=r.promotion_received,
@@ -113,6 +120,12 @@ class ReservationService:
         self.pricing_repo = LotPricingConfigRepository(session)
         self.received_repo = ReservationPaymentRepository(session)
 
+    async def _to_response(self, r: ReservationModel) -> ReservationResponse:
+        """ReservationResponse with its « premier acompte reçu »."""
+        return _reservation_to_response(
+            r, await self.received_repo.first_payment_total(r.id)
+        )
+
     async def _enabled_optional(self, lot: LotModel) -> list[str]:
         """Optional statuses enabled for the lot's project."""
         return await self.project_repo.get_enabled_optional(lot.project_id)
@@ -129,7 +142,13 @@ class ReservationService:
     ) -> list[ReservationResponse]:
         """Get reservations with filtering."""
         reservations = await self.reservation_repo.get_filtered(filters, offset, limit)
-        return [_reservation_to_response(r) for r in reservations]
+        first_payments = await self.received_repo.first_payment_totals(
+            [r.id for r in reservations]
+        )
+        return [
+            _reservation_to_response(r, first_payments.get(r.id, 0.0))
+            for r in reservations
+        ]
 
     async def get_reservation(self, reservation_id: int) -> ReservationResponse:
         """Get reservation by ID.
@@ -140,7 +159,7 @@ class ReservationService:
         reservation = await self.reservation_repo.get_by_id(reservation_id)
         if not reservation:
             raise NotFoundError("Reservation", reservation_id)
-        return _reservation_to_response(reservation)
+        return await self._to_response(reservation)
 
     async def get_reservation_details(self, reservation_id: int) -> dict | None:
         """Get reservation with all details needed for certificate generation."""
@@ -231,7 +250,7 @@ class ReservationService:
             reservation_id=reservation.id,
             user_id=user_id,
         )
-        return _reservation_to_response(reservation)
+        return await self._to_response(reservation)
 
     # ------------------------------------------------------------------
     # Transition: option → available (cancel)
@@ -361,7 +380,7 @@ class ReservationService:
             guarantee_amount=data.guarantee_amount,
         )
         updated = await self.reservation_repo.get_by_id(reservation.id)
-        return _reservation_to_response(updated)  # type: ignore[arg-type]
+        return await self._to_response(updated)  # type: ignore[arg-type]
 
     # ------------------------------------------------------------------
     # Private helpers: amounts, first payment and schedule at engagement
@@ -432,7 +451,7 @@ class ReservationService:
                 recorded_by_user_id=user_id,
                 **payment,
             )
-        first_payment = sum(to_cents(p["amount"]) for p in received) / 100
+        first_payment = await self.received_repo.first_payment_total(reservation_id)
         await self._create_engagement_schedule(
             reservation_id,
             agreed=agreed,
@@ -609,7 +628,7 @@ class ReservationService:
         )
 
         updated = await self.reservation_repo.get_by_id(reservation.id)
-        return _reservation_to_response(updated)  # type: ignore[arg-type]
+        return await self._to_response(updated)  # type: ignore[arg-type]
 
     async def _apply_engagement(
         self,
@@ -776,7 +795,7 @@ class ReservationService:
         )
 
         updated = await self.reservation_repo.get_by_id(reservation.id)
-        return _reservation_to_response(updated)  # type: ignore[arg-type]
+        return await self._to_response(updated)  # type: ignore[arg-type]
 
     # ------------------------------------------------------------------
     # Transition: option → reservation_a_finaliser
@@ -841,7 +860,7 @@ class ReservationService:
             lot_id=lot_id,
             guarantee_amount=data.guarantee_amount,
         )
-        return _reservation_to_response(updated)
+        return await self._to_response(updated)
 
     # ------------------------------------------------------------------
     # Transition: reservation_a_finaliser → available (refund)
@@ -1070,7 +1089,7 @@ class ReservationService:
             promotion_amount=reservation.promotion_amount,
             user_id=user_id,
         )
-        return _reservation_to_response(updated)
+        return await self._to_response(updated)
 
     # ------------------------------------------------------------------
     # Set notaire intent on a sold lot (soldée or EDL status)
@@ -1136,7 +1155,7 @@ class ReservationService:
             wants_notaire=data.wants_notaire,
             user_id=user_id,
         )
-        return _reservation_to_response(updated)
+        return await self._to_response(updated)
 
     # ------------------------------------------------------------------
     # Transition: reservation_engagee → reservation_soldee
@@ -1555,7 +1574,7 @@ class ReservationService:
             additional_days=additional_days,
             new_expiration=str(new_expiration),
         )
-        return _reservation_to_response(updated)
+        return await self._to_response(updated)
 
     # ------------------------------------------------------------------
     # Legacy compatibility — kept for existing endpoints / tests
@@ -1602,7 +1621,7 @@ class ReservationService:
         await self.cancel_option(reservation.lot_id, user_id, user_role, reason)
 
         updated = await self.reservation_repo.get_by_id(reservation_id)
-        return _reservation_to_response(updated)
+        return await self._to_response(updated)
 
     async def extend_reservation(
         self,
