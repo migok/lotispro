@@ -15,6 +15,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.core.middlewares import setup_middlewares
+from app.core.scheduler import start_scheduler, stop_scheduler
 from app.infrastructure.database import close_db, init_db
 
 logger = get_logger(__name__)
@@ -25,8 +26,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager.
 
     Handles startup and shutdown events:
-    - Startup: Initialize logging, database
-    - Shutdown: Close database connections
+    - Startup: Initialize logging, database, scheduler (if enabled)
+    - Shutdown: Stop the scheduler, close database connections
+
+    Runs in each Gunicorn worker, so each worker has its own scheduler.
 
     Args:
         app: FastAPI application instance
@@ -45,12 +48,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Ensure data directory exists
     settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Daily jobs (expiration reminders). A scheduler failure must not take
+    # the API down: it is logged and the application starts without it.
+    scheduler = None
+    if settings.SCHEDULER_ENABLED:
+        try:
+            scheduler = start_scheduler()
+        except Exception:
+            logger.exception("Scheduler failed to start — daily jobs disabled")
+
     logger.info("Application started successfully")
 
     yield
 
     # Shutdown
     logger.info("Shutting down application")
+    if scheduler is not None:
+        stop_scheduler(scheduler)
     await close_db()
     logger.info("Application shutdown complete")
 

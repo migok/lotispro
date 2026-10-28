@@ -57,6 +57,9 @@ dependencies = [
 
     # Email
     "resend>=2.0.0",
+
+    # Scheduled jobs (expiration reminders)
+    "apscheduler>=3.10,<4",
 ]
 
 [project.optional-dependencies]
@@ -154,6 +157,8 @@ known-first-party = ["app"]
 # E402 : sys.path / configuration a poser avant certains imports
 "alembic/env.py" = ["E402", "ARG001"]
 "app/infrastructure/database/session.py" = ["E402", "ARG001"]
+# E402 : SCHEDULER_ENABLED=false pose avant que les imports `app` lisent la config
+"app/tests/conftest.py" = ["E402"]
 # ARG001 : signatures imposees par un framework (FastAPI Depends et handlers
 # d'exception, processeurs structlog, lifespan)
 "app/api/**/*.py" = ["ARG001"]

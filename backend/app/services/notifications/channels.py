@@ -3,7 +3,11 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
-from app.domain.schemas.notification import Channel, NotificationStatus
+from app.domain.schemas.notification import (
+    Channel,
+    NotificationRecipient,
+    NotificationStatus,
+)
 
 if TYPE_CHECKING:
     from app.services.email_service import EmailService
@@ -20,7 +24,10 @@ __all__ = [
     "WhatsAppChannel",
 ]
 
-NO_EMAIL_ERROR = "Le client n'a pas d'adresse email."
+NO_EMAIL_ERRORS: dict[NotificationRecipient, str] = {
+    "client": "Le client n'a pas d'adresse email.",
+    "commercial": "Le commercial n'a pas d'adresse email.",
+}
 
 
 @dataclass(frozen=True)
@@ -30,6 +37,7 @@ class Recipient:
     name: str
     email: str | None
     phone: str | None
+    role: NotificationRecipient = "client"
 
 
 @dataclass(frozen=True)
@@ -74,7 +82,9 @@ class EmailChannel:
         attachments: list[Attachment],
     ) -> DeliveryResult:
         if not recipient.email:
-            return DeliveryResult(status="failed", error=NO_EMAIL_ERROR)
+            return DeliveryResult(
+                status="failed", error=NO_EMAIL_ERRORS[recipient.role]
+            )
         return await self.email_service.send_email(
             recipient.email, subject, body_html, attachments or None
         )

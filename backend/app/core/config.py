@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     )
     INVITATION_EXPIRE_HOURS: int = 48
 
+    # Scheduled jobs (APScheduler, one scheduler per worker)
+    SCHEDULER_ENABLED: bool = True
+    REMINDER_DAYS_BEFORE: int = 2  # Remind deadlines due within this many days
+    REMINDER_TIMEZONE: str = "Africa/Casablanca"
+
     # Logging
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     LOG_FORMAT: Literal["json", "console"] = "json"

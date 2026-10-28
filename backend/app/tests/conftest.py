@@ -4,7 +4,12 @@ Each test gets its own in-memory SQLite database, so no state can leak
 between tests (or between runs, in any order).
 """
 
+import os
 from collections.abc import AsyncGenerator, Callable
+
+# Before any ``app`` import builds the settings: the scheduler never starts in
+# tests (``backend/.env`` may point at a real database). Env vars win over .env.
+os.environ["SCHEDULER_ENABLED"] = "false"
 
 import pytest
 from fastapi import FastAPI

@@ -12,6 +12,10 @@ from app.services.notifications.channels import Attachment, DeliveryResult
 
 logger = get_logger(__name__)
 
+# User-facing message stored in the notification history; the provider error
+# itself is logged only (it can be technical or leak account details).
+SEND_FAILED_ERROR = "Échec de l'envoi de l'email."
+
 
 def _build_invitation_html(
     first_name: str, last_name: str, role: str, set_password_url: str
@@ -452,8 +456,9 @@ class EmailService:
     ) -> DeliveryResult:
         """Send a generic email; never raises.
 
-        Returns ``not_configured`` without ``RESEND_API_KEY``, ``failed`` (with
-        the provider error) if Resend refuses it, ``sent`` otherwise.
+        Returns ``not_configured`` without ``RESEND_API_KEY``, ``failed`` if
+        Resend refuses it (the provider error is logged, not returned),
+        ``sent`` otherwise.
         """
         if not self._enabled:
             logger.warning("Email skipped — RESEND_API_KEY not configured", to=to)
@@ -479,11 +484,9 @@ class EmailService:
 
         try:
             await asyncio.to_thread(resend.Emails.send, params)
-        except Exception as exc:
+        except Exception:
             logger.exception("Failed to send email", to=to, subject=subject)
-            return DeliveryResult(
-                status="failed", error=f"Échec de l'envoi de l'email : {exc}"
-            )
+            return DeliveryResult(status="failed", error=SEND_FAILED_ERROR)
         logger.info("Email sent", to=to, subject=subject)
         return DeliveryResult(status="sent")
 

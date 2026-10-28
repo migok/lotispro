@@ -133,9 +133,11 @@ class NotificationService:
                 details["client_name"], details["client_email"], details["client_phone"]
             )
         elif commercial is not None:
-            to = Recipient(commercial.name, commercial.email, commercial.phone)
+            to = Recipient(
+                commercial.name, commercial.email, commercial.phone, role="commercial"
+            )
         else:
-            to = Recipient(_FALLBACK_COMMERCIAL, None, None)
+            to = Recipient(_FALLBACK_COMMERCIAL, None, None, role="commercial")
 
         rows = []
         for name in channels:
