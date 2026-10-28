@@ -27,6 +27,8 @@ from app.services import (
     SaleService,
     UserService,
 )
+from app.services.email_service import EmailService
+from app.services.notifications.service import NotificationService
 
 logger = get_logger(__name__)
 
@@ -197,6 +199,11 @@ def get_lot_pricing_service(session: DBSession) -> LotPricingService:
     return LotPricingService(session)
 
 
+def get_notification_service(session: DBSession) -> NotificationService:
+    """Get notification service instance."""
+    return NotificationService(session, EmailService())
+
+
 # Typed service dependencies
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
@@ -215,3 +222,6 @@ DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
 ActeServiceDep = Annotated[ActeService, Depends(get_acte_service)]
 NotaireServiceDep = Annotated[NotaireService, Depends(get_notaire_service)]
 LotPricingServiceDep = Annotated[LotPricingService, Depends(get_lot_pricing_service)]
+NotificationServiceDep = Annotated[
+    NotificationService, Depends(get_notification_service)
+]

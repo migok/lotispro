@@ -3,12 +3,22 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import EmailStr, Field
+from pydantic import EmailStr, Field, field_validator
 
+from app.domain.client_profile import normalize_phone
 from app.domain.schemas.common import BaseSchema
 
 
-class UserInvite(BaseSchema):
+class _PhoneMixin(BaseSchema):
+    """Normalise ``phone`` to E.164 (Moroccan ``06…`` accepted)."""
+
+    @field_validator("phone", check_fields=False)
+    @classmethod
+    def _normalize_phone(cls, value: str | None) -> str | None:
+        return normalize_phone(value)
+
+
+class UserInvite(_PhoneMixin):
     """Schema for inviting a new user (manager or commercial) via email."""
 
     email: EmailStr = Field(description="User email address")
@@ -16,7 +26,16 @@ class UserInvite(BaseSchema):
     last_name: str = Field(min_length=1, max_length=100, description="Last name")
     address: str | None = Field(default=None, max_length=255, description="Address")
     company: str | None = Field(default=None, max_length=150, description="Company")
+    phone: str | None = Field(default=None, description="Téléphone (optionnel)")
     role: Literal["manager", "commercial"] = Field(description="User role")
+
+
+class UserUpdate(_PhoneMixin):
+    """Fields a manager can edit on an existing user."""
+
+    phone: str | None = Field(
+        default=None, description="Téléphone ; null ou vide pour l'effacer"
+    )
 
 
 class SetPasswordRequest(BaseSchema):
@@ -71,6 +90,7 @@ class UserResponse(BaseSchema):
     last_name: str | None = None
     address: str | None = None
     company: str | None = None
+    phone: str | None = None
     role: str
     is_pending: bool = False
     invitation_token: str | None = None

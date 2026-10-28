@@ -48,6 +48,8 @@ class UserModel(Base):
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     company: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    # Commercial's phone, shown in client notifications (E.164).
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     role: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -988,4 +990,64 @@ class EdlActionModel(Base):
             name="valid_edl_action_status",
         ),
         Index("ix_edl_actions_etat_des_lieux", "etat_des_lieux_id"),
+    )
+
+
+class NotificationModel(Base):
+    """One delivery attempt of a reservation notification on one channel."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    client_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("clients.id", ondelete="CASCADE"), nullable=False
+    )
+    lot_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("lots.id", ondelete="CASCADE"), nullable=False
+    )
+    reservation_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("reservations.id", ondelete="CASCADE"), nullable=False
+    )
+    recipient: Mapped[str] = mapped_column(String(20), nullable=False)
+    channel: Mapped[str] = mapped_column(String(20), nullable=False)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Deadline mentioned in the message (reminders: idempotence key).
+    deadline_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    sent_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "recipient IN ('client', 'commercial')",
+            name="valid_notification_recipient",
+        ),
+        CheckConstraint(
+            "channel IN ('email', 'sms', 'whatsapp')",
+            name="valid_notification_channel",
+        ),
+        CheckConstraint(
+            "kind IN ('option_confirmee', 'reservation_a_finaliser', "
+            "'reservation_engagee', 'rappel_expiration')",
+            name="valid_notification_kind",
+        ),
+        CheckConstraint(
+            "status IN ('sent', 'failed', 'not_configured')",
+            name="valid_notification_status",
+        ),
+        Index("ix_notifications_client", "client_id"),
+        Index("ix_notifications_lot", "lot_id"),
+        Index(
+            "ix_notifications_reservation_kind_deadline",
+            "reservation_id",
+            "kind",
+            "deadline_at",
+        ),
     )

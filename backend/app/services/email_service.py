@@ -1,12 +1,14 @@
-"""Email service — invitations and payment confirmations via Resend."""
+"""Email service — invitations, confirmations and notifications via Resend."""
 
 import asyncio
+import base64
 from datetime import datetime
 
 import resend
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.services.notifications.channels import Attachment, DeliveryResult
 
 logger = get_logger(__name__)
 
@@ -440,6 +442,50 @@ class EmailService:
     @property
     def _enabled(self) -> bool:
         return bool(settings.RESEND_API_KEY)
+
+    async def send_email(
+        self,
+        to: str,
+        subject: str,
+        html: str,
+        attachments: list[Attachment] | None = None,
+    ) -> DeliveryResult:
+        """Send a generic email; never raises.
+
+        Returns ``not_configured`` without ``RESEND_API_KEY``, ``failed`` (with
+        the provider error) if Resend refuses it, ``sent`` otherwise.
+        """
+        if not self._enabled:
+            logger.warning("Email skipped — RESEND_API_KEY not configured", to=to)
+            return DeliveryResult(
+                status="not_configured",
+                error="L'envoi d'emails n'est pas configuré (RESEND_API_KEY absente).",
+            )
+
+        params: resend.Emails.SendParams = {
+            "from": settings.EMAIL_FROM,
+            "to": [to],
+            "subject": subject,
+            "html": html,
+        }
+        if attachments:
+            params["attachments"] = [
+                {
+                    "filename": a.filename,
+                    "content": base64.b64encode(a.content).decode("ascii"),
+                }
+                for a in attachments
+            ]
+
+        try:
+            await asyncio.to_thread(resend.Emails.send, params)
+        except Exception as exc:
+            logger.exception("Failed to send email", to=to, subject=subject)
+            return DeliveryResult(
+                status="failed", error=f"Échec de l'envoi de l'email : {exc}"
+            )
+        logger.info("Email sent", to=to, subject=subject)
+        return DeliveryResult(status="sent")
 
     async def send_invitation_email(
         self,

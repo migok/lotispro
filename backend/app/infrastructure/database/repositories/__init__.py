@@ -16,6 +16,9 @@ from app.infrastructure.database.repositories.lot_repository import LotRepositor
 from app.infrastructure.database.repositories.notaire_repository import (
     NotaireRepository,
 )
+from app.infrastructure.database.repositories.notification_repository import (
+    NotificationRepository,
+)
 from app.infrastructure.database.repositories.payment_repository import (
     PaymentRepository,
 )
@@ -37,6 +40,7 @@ __all__ = [
     "LotPricingConfigRepository",
     "LotRepository",
     "NotaireRepository",
+    "NotificationRepository",
     "PaymentRepository",
     "ProjectRepository",
     "ReservationRepository",

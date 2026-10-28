@@ -7,12 +7,15 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.api.dependencies import (
     ActeServiceDep,
+    CommercialOrManager,
     CurrentUser,
     DocumentServiceDep,
+    NotificationServiceDep,
     ReservationServiceDep,
 )
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.domain.schemas.document import LotDocumentResponse
+from app.domain.schemas.notification import NotificationResponse, NotifyRequest
 from app.domain.schemas.reservation import (
     MarkPromotionReceivedData,
     ReservationCreate,
@@ -385,3 +388,26 @@ async def mark_promotion_received(
     if await acte_service.latest_acte(reservation_id) is None:
         await acte_service.generate_and_store(reservation_id, current_user.id)
     return reservation
+
+
+@router.post(
+    "/{reservation_id}/notify",
+    response_model=list[NotificationResponse],
+    summary="Notifier le client",
+    description=(
+        "Envoie la notification de l'étape (option, à finaliser, engagée) au client "
+        "sur les canaux choisis. Renvoie le résultat par canal : un canal en échec "
+        "ou non configuré est enregistré dans l'historique, sans erreur HTTP."
+    ),
+)
+async def notify_reservation(
+    reservation_id: int,
+    data: NotifyRequest,
+    current_user: CommercialOrManager,
+    notification_service: NotificationServiceDep,
+) -> list[NotificationResponse]:
+    """Notify the reservation's client on the chosen channels."""
+    rows = await notification_service.notify(
+        reservation_id, data.channels, data.kind, current_user.id
+    )
+    return [NotificationResponse.model_validate(row) for row in rows]
