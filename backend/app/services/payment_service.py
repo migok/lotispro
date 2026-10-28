@@ -28,6 +28,21 @@ logger = get_logger(__name__)
 
 _email_service = EmailService()
 
+# Payment order (deposit installments, then balance), rule
+# ``installment_order_violation``.
+PREVIOUS_DEPOSIT_UNPAID = (
+    "Les versements précédents de l'échéancier acompte doivent être validés "
+    "avant celui-ci."
+)
+DEPOSIT_BEFORE_BALANCE = (
+    "Tous les versements de l'échéancier acompte doivent être validés avant "
+    "de commencer l'échéancier solde."
+)
+PREVIOUS_BALANCE_UNPAID = (
+    "Les versements précédents de l'échéancier solde doivent être validés "
+    "avant celui-ci."
+)
+
 
 def _add_months(dt: datetime, months: int) -> datetime:
     """Add a number of months to a datetime, handling month-end edge cases."""
@@ -232,88 +247,38 @@ class PaymentService:
         installment_id: int,
         data: PaymentInstallmentUpdate,
     ) -> PaymentInstallmentResponse:
-        """Update an installment status (mark paid / pending)."""
-        if data.status not in ("pending", "paid"):
+        """Update an installment's notes.
+
+        The status is computed from the payments recorded for the installment
+        (E4-T5, R6): marking it paid here is refused.
+
+        Raises:
+            BusinessRuleError: ``status="paid"`` (``use_payment_record``) or an
+                unknown status.
+            NotFoundError: Unknown installment.
+        """
+        if data.status == "paid":
+            raise BusinessRuleError(
+                message="Enregistrez un encaissement pour cette échéance.",
+                rule="use_payment_record",
+            )
+        if data.status not in (None, "pending"):
             raise BusinessRuleError(
                 message=f"Invalid installment status: {data.status}",
                 rule="invalid_installment_status",
             )
 
-        # Enforce strict payment order when marking as paid
-        if data.status == "paid":
-            inst_check = await self.payment_repo.get_installment_with_schedule(
-                installment_id
-            )
-            if inst_check:
-                all_insts = inst_check.schedule.installments
-
-                if inst_check.payment_type == "deposit":
-                    # All previous deposit installments must be paid
-                    prev_deposit = [
-                        i
-                        for i in all_insts
-                        if i.payment_type == "deposit"
-                        and i.installment_number < inst_check.installment_number
-                    ]
-                    if any(i.status != "paid" for i in prev_deposit):
-                        raise BusinessRuleError(
-                            message="Les versements précédents de l'échéancier acompte doivent être validés avant celui-ci.",
-                            rule="installment_order_violation",
-                        )
-
-                elif inst_check.payment_type == "balance":
-                    # All deposit installments must be paid first
-                    deposit_insts = [
-                        i for i in all_insts if i.payment_type == "deposit"
-                    ]
-                    if any(i.status != "paid" for i in deposit_insts):
-                        raise BusinessRuleError(
-                            message="Tous les versements de l'échéancier acompte doivent être validés avant de commencer l'échéancier solde.",
-                            rule="installment_order_violation",
-                        )
-                    # Previous balance installments must be paid
-                    prev_balance = [
-                        i
-                        for i in all_insts
-                        if i.payment_type == "balance"
-                        and i.installment_number < inst_check.installment_number
-                    ]
-                    if any(i.status != "paid" for i in prev_balance):
-                        raise BusinessRuleError(
-                            message="Les versements précédents de l'échéancier solde doivent être validés avant celui-ci.",
-                            rule="installment_order_violation",
-                        )
-
+        current = await self.payment_repo.get_installment_with_schedule(installment_id)
+        if not current:
+            raise NotFoundError("PaymentInstallment", installment_id)
         inst = await self.payment_repo.update_installment(
             installment_id=installment_id,
-            status=data.status,
-            paid_date=data.paid_date,
+            status=current.status,
             notes=data.notes,
         )
-        if not inst:
-            raise NotFoundError("PaymentInstallment", installment_id)
 
-        logger.info(
-            "Installment updated",
-            installment_id=installment_id,
-            status=data.status,
-        )
-
-        # When first deposit installment is confirmed → validate the reservation
-        if (
-            data.status == "paid"
-            and inst.payment_type == "deposit"
-            and inst.installment_number == 1
-        ):
-            await self._validate_reservation_for_installment(inst.id)
-
-        # Send email confirmation for every paid installment
-        if data.status == "paid":
-            await self._send_payment_confirmation(
-                inst.id, inst.amount, inst.paid_date, inst.payment_type
-            )
-
-        return self._installment_to_response(inst)
+        logger.info("Installment notes updated", installment_id=installment_id)
+        return self._installment_to_response(inst)  # type: ignore[arg-type]
 
     async def _validate_reservation_for_installment(self, installment_id: int) -> None:
         """Set the reservation status to 'validated' after first deposit is confirmed."""

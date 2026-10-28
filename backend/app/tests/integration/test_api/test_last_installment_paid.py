@@ -1,12 +1,15 @@
 """Paying the last installment no longer converts the lot (issue #50).
 
 Before the fix, ``PATCH /api/payments/installments/{id}`` on the last unpaid
-installment wrote the obsolete ``sold`` lot status (500). Decision: the
-installment is saved, the lot stays ``reservation_engagee``; the commercial
-then uses « Marquer soldé ». The legacy ``POST /api/sales`` is refused (400).
+installment wrote the obsolete ``sold`` lot status (500). Decision: the lot
+stays ``reservation_engagee``; the commercial then uses « Marquer soldé ».
+Since E4-T5 (R6) the PATCH no longer marks an installment paid at all: money
+is recorded as payments (encaissements). The legacy ``POST /api/sales`` is
+refused (400).
 """
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import get_args
 
 import pytest
@@ -18,7 +21,9 @@ from app.domain.schemas.reservation import PAYMENT_TYPE
 from app.infrastructure.database.models import (
     LotModel,
     LotStatusHistoryModel,
+    PaymentInstallmentModel,
     ReservationModel,
+    ReservationPaymentModel,
     SaleModel,
     UserModel,
 )
@@ -76,8 +81,27 @@ async def _installment_ids(
     return [i["id"] for i in installments]
 
 
+async def _pay_all_installments(
+    db_session: AsyncSession, reservation_id: int, installment_ids: list[int]
+) -> None:
+    """Record one payment per installment (the payment API comes in E4-T5b)."""
+    for installment_id in installment_ids:
+        installment = await db_session.get(PaymentInstallmentModel, installment_id)
+        assert installment is not None
+        db_session.add(
+            ReservationPaymentModel(
+                reservation_id=reservation_id,
+                installment_id=installment_id,
+                amount=installment.amount,
+                paid_on=datetime.now(UTC).date(),
+                method="transfer",
+            )
+        )
+    await db_session.commit()
+
+
 class TestLastInstallmentPaid:
-    async def test_last_installment_saved_and_lot_unchanged(
+    async def test_patch_paid_refused_and_lot_unchanged(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -102,8 +126,10 @@ class TestLastInstallmentPaid:
             for installment_id in installment_ids
         ]
 
-        assert [r.status_code for r in responses] == [200, 200]
-        assert responses[-1].json()["status"] == "paid"
+        assert [r.status_code for r in responses] == [400, 400]
+        assert {r.json()["details"][0]["rule"] for r in responses} == {
+            "use_payment_record"
+        }
         await db_session.refresh(engaged_lot)
         assert engaged_lot.status == "reservation_engagee"
         assert engaged_lot.current_reservation_id == reservation_id
@@ -124,15 +150,13 @@ class TestLastInstallmentPaid:
     ) -> None:
         headers = auth_headers(commercial)
         await db_session.refresh(engaged_lot)
-        for installment_id in await _installment_ids(
-            client, headers, engaged_lot.current_reservation_id
-        ):
-            paid = await client.patch(
-                f"/api/payments/installments/{installment_id}",
-                headers=headers,
-                json={"status": "paid"},
-            )
-            assert paid.status_code == 200
+        reservation_id = engaged_lot.current_reservation_id
+        assert reservation_id is not None
+        await _pay_all_installments(
+            db_session,
+            reservation_id,
+            await _installment_ids(client, headers, reservation_id),
+        )
 
         response = await client.post(
             f"/api/lots/{engaged_lot.id}/transitions/solde",

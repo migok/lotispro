@@ -23,7 +23,14 @@ class SaleCreate(BaseSchema):
 class SaleFromReservation(BaseSchema):
     """Schema for converting a reservation to a sale."""
 
-    price: float = Field(ge=0, description="Final sale price")
+    price: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Ignoré : le prix de la vente est le prix total convenu de la "
+            "réservation (conservé pour compatibilité)"
+        ),
+    )
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
 
 

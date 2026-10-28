@@ -25,6 +25,9 @@ from app.infrastructure.database.repositories.payment_repository import (
 from app.infrastructure.database.repositories.project_repository import (
     ProjectRepository,
 )
+from app.infrastructure.database.repositories.reservation_payment_repository import (
+    ReservationPaymentRepository,
+)
 from app.infrastructure.database.repositories.reservation_repository import (
     ReservationRepository,
 )
@@ -43,6 +46,7 @@ __all__ = [
     "NotificationRepository",
     "PaymentRepository",
     "ProjectRepository",
+    "ReservationPaymentRepository",
     "ReservationRepository",
     "SaleRepository",
     "UserRepository",

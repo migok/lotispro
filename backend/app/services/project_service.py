@@ -122,6 +122,7 @@ class ProjectService:
                 geojson_file_url=p.geojson_file_url,
                 image_url=p.image_url,
                 enabled_optional_statuses=p.enabled_optional_statuses,
+                acte_min_paid_pct=p.acte_min_paid_pct,
                 enabled_statuses=enabled_statuses(p.enabled_optional_statuses),
                 created_by=p.created_by,
                 created_at=p.created_at,
@@ -193,6 +194,7 @@ class ProjectService:
             geojson_file_url=project.geojson_file_url,
             image_url=project.image_url,
             enabled_optional_statuses=project.enabled_optional_statuses,
+            acte_min_paid_pct=project.acte_min_paid_pct,
             enabled_statuses=enabled_statuses(project.enabled_optional_statuses),
             created_by=project.created_by,
             created_at=project.created_at,
@@ -240,6 +242,7 @@ class ProjectService:
             geojson_file_url=project.geojson_file_url,
             image_url=project.image_url,
             enabled_optional_statuses=project.enabled_optional_statuses,
+            acte_min_paid_pct=project.acte_min_paid_pct,
             enabled_statuses=enabled_statuses(project.enabled_optional_statuses),
             created_by=project.created_by,
             created_at=project.created_at,
@@ -296,6 +299,7 @@ class ProjectService:
             geojson_file_url=updated.geojson_file_url,
             image_url=updated.image_url,
             enabled_optional_statuses=updated.enabled_optional_statuses,
+            acte_min_paid_pct=updated.acte_min_paid_pct,
             enabled_statuses=enabled_statuses(updated.enabled_optional_statuses),
             created_by=updated.created_by,
             created_at=updated.created_at,
@@ -307,7 +311,8 @@ class ProjectService:
         project_id: int,
         data: ProjectWorkflowUpdate,
     ) -> ProjectResponse:
-        """Choose the optional lot statuses a project uses.
+        """Choose the optional lot statuses a project uses and, optionally,
+        the share of the agreed total price to collect before the deed.
 
         Raises:
             NotFoundError: If project not found
@@ -333,12 +338,15 @@ class ProjectService:
                 )
 
         await self.project_repo.update(
-            project_id, enabled_optional_statuses=new_enabled
+            project_id,
+            enabled_optional_statuses=new_enabled,
+            acte_min_paid_pct=data.acte_min_paid_pct,
         )
         logger.info(
             "Project workflow updated",
             project_id=project_id,
             enabled_optional_statuses=new_enabled,
+            acte_min_paid_pct=data.acte_min_paid_pct,
         )
         return await self._response_for(project_id)
 
@@ -479,6 +487,7 @@ class ProjectService:
             geojson_file_url=updated.geojson_file_url,
             image_url=updated.image_url,
             enabled_optional_statuses=updated.enabled_optional_statuses,
+            acte_min_paid_pct=updated.acte_min_paid_pct,
             enabled_statuses=enabled_statuses(updated.enabled_optional_statuses),
             created_by=updated.created_by,
             created_at=updated.created_at,

@@ -121,6 +121,10 @@ class ProjectModel(Base):
         default=lambda: ["option", "reservation_a_finaliser"],
         server_default=text('\'["option","reservation_a_finaliser"]\''),
     )
+    # Share (%) of the agreed total price to collect before the deed is issued.
+    acte_min_paid_pct: Mapped[float] = mapped_column(
+        Float, nullable=False, default=10.0, server_default=text("10")
+    )
     created_by: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id"),
@@ -178,6 +182,10 @@ class ProjectModel(Base):
         CheckConstraint(
             "visibility IN ('public', 'private')",
             name="valid_visibility",
+        ),
+        CheckConstraint(
+            "acte_min_paid_pct >= 0 AND acte_min_paid_pct <= 100",
+            name="valid_acte_min_paid_pct",
         ),
     )
 
@@ -494,8 +502,14 @@ class ReservationModel(Base):
     guarantee_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     notary_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     notary_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    # Réservation engagée — prix de vente et promotion
+    # Réservation engagée — prix figurant sur l'acte (≤ prix total convenu)
     sale_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Prix total convenu (montant demandé au client) ; écart = convenu − acte
+    agreed_total_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Échéance de l'écart à régulariser : 'debut' | 'fin' | 'date'
+    gap_due_timing: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    gap_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Dépréciés (E4-T5) : plus lus ni écrits par l'engagement
     promotion_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     promotion_paid_timing: Mapped[str | None] = mapped_column(String(10), nullable=True)
     promotion_received: Mapped[bool] = mapped_column(
@@ -560,6 +574,10 @@ class ReservationModel(Base):
         CheckConstraint(
             "status IN ('active', 'validated', 'expired', 'released', 'converted')",
             name="valid_reservation_status",
+        ),
+        CheckConstraint(
+            "gap_due_timing IN ('debut', 'fin', 'date')",
+            name="valid_gap_due_timing",
         ),
         Index("ix_reservations_status", "status"),
         Index("ix_reservations_expiration", "expiration_date"),
@@ -716,7 +734,7 @@ class PaymentInstallmentModel(Base):
     )
     payment_type: Mapped[str] = mapped_column(
         String(20), nullable=False
-    )  # 'deposit' | 'balance'
+    )  # 'deposit' | 'balance' | 'gap'
     installment_number: Mapped[int] = mapped_column(Integer, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -745,11 +763,11 @@ class PaymentInstallmentModel(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "payment_type IN ('deposit', 'balance')",
+            "payment_type IN ('deposit', 'balance', 'gap')",
             name="valid_payment_type",
         ),
         CheckConstraint(
-            "status IN ('pending', 'paid')",
+            "status IN ('pending', 'partial', 'paid')",
             name="valid_installment_status",
         ),
         Index("ix_installments_schedule", "schedule_id"),
@@ -1051,3 +1069,66 @@ class NotificationModel(Base):
             "deadline_at",
         ),
     )
+
+
+class ReservationPaymentModel(Base):
+    """Money actually received for a reservation (encaissement).
+
+    Never updated nor deleted by the application. ``installment_id`` is NULL
+    for what was received at engagement (first payment).
+    """
+
+    __tablename__ = "reservation_payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reservation_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("reservations.id"), nullable=False
+    )
+    installment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("payment_installments.id"), nullable=True
+    )
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    paid_on: Mapped[date] = mapped_column(Date, nullable=False)
+    method: Mapped[str] = mapped_column(String(20), nullable=False)
+    reference: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Optional proof of payment (lot document « justificatif_paiement »).
+    document_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lot_documents.id"), nullable=True
+    )
+    recorded_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="valid_reservation_payment_amount"),
+        CheckConstraint(
+            "method IN ('cash', 'card', 'check', 'transfer')",
+            name="valid_reservation_payment_method",
+        ),
+        Index("ix_reservation_payments_reservation", "reservation_id"),
+    )
+
+
+class ReservationChangeModel(Base):
+    """Audit trail of the edits of an engaged reservation (before / after)."""
+
+    __tablename__ = "reservation_changes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reservation_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("reservations.id"), nullable=False
+    )
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    before: Mapped[dict] = mapped_column(JSON, nullable=False)
+    after: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    __table_args__ = (Index("ix_reservation_changes_reservation", "reservation_id"),)

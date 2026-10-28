@@ -1,12 +1,21 @@
 """Reservation service — lot workflow transitions and reservation management."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
 from app.domain.lot_workflow import EDL_STATUSES, assert_transition_allowed
+from app.domain.reservation_amounts import (
+    format_mad,
+    gap_amount,
+    gap_installment_amount,
+    remaining,
+    split_schedule,
+    to_cents,
+    validate_amounts,
+)
 from app.domain.schemas.lot import LotResponse
 from app.domain.schemas.payment import InstallmentConfig
 from app.domain.schemas.reservation import (
@@ -15,6 +24,7 @@ from app.domain.schemas.reservation import (
     DirectToEngageeData,
     DirectToRAFData,
     EngageBaseData,
+    EngagementAmountsData,
     FinaliserEngageData,
     FinaliserRefundData,
     MarkPromotionReceivedData,
@@ -38,6 +48,7 @@ from app.infrastructure.database.repositories import (
     NotaireRepository,
     PaymentRepository,
     ProjectRepository,
+    ReservationPaymentRepository,
     ReservationRepository,
     SaleRepository,
 )
@@ -69,6 +80,14 @@ def _reservation_to_response(r: ReservationModel) -> ReservationResponse:
         notary_name=r.notary_name,
         notary_date=r.notary_date,
         sale_price=r.sale_price,
+        agreed_total_price=r.agreed_total_price,
+        gap_amount=(
+            gap_amount(r.agreed_total_price, r.sale_price)
+            if r.agreed_total_price is not None and r.sale_price is not None
+            else None
+        ),
+        gap_due_timing=r.gap_due_timing,
+        gap_due_date=r.gap_due_date,
         promotion_amount=r.promotion_amount,
         promotion_paid_timing=r.promotion_paid_timing,
         promotion_received=r.promotion_received,
@@ -92,6 +111,7 @@ class ReservationService:
         self.payment_repo = PaymentRepository(session)
         self.notaire_repo = NotaireRepository(session)
         self.pricing_repo = LotPricingConfigRepository(session)
+        self.received_repo = ReservationPaymentRepository(session)
 
     async def _enabled_optional(self, lot: LotModel) -> list[str]:
         """Optional statuses enabled for the lot's project."""
@@ -344,25 +364,103 @@ class ReservationService:
         return _reservation_to_response(updated)  # type: ignore[arg-type]
 
     # ------------------------------------------------------------------
-    # Private helper: create payment schedule inline during engagement
+    # Private helpers: amounts, first payment and schedule at engagement
     # ------------------------------------------------------------------
 
-    async def _create_payment_schedule_from_plan(
+    async def _engagement_amounts(
+        self, lot: LotModel, data: EngagementAmountsData, first_payment: float
+    ) -> tuple[float, float]:
+        """Agreed total price and deed price of an engagement, validated.
+
+        Agreed total defaults to the catalogue price; the deed price to the
+        pricing grid, else the agreed total.
+
+        Raises:
+            BusinessRuleError: No agreed total price, deed price or first
+                payment above the agreed total price.
+        """
+        agreed = (
+            data.agreed_total_price
+            if data.agreed_total_price is not None
+            else lot.price
+        )
+        if agreed is None:
+            raise BusinessRuleError(
+                message="Indiquez le prix total convenu.",
+                rule="agreed_price_required",
+            )
+        acte = data.sale_price
+        if acte is None:
+            pricing_cfg = await self.pricing_repo.get_for_combination(
+                lot.project_id, lot.zone, lot.type_lot, lot.type_maison, lot.emplacement
+            )
+            if pricing_cfg and lot.surface:
+                acte = round(pricing_cfg.prix_m2_acte * lot.surface, 2)
+            else:
+                acte = agreed
+        validate_amounts(agreed, acte, first_payment)
+        return agreed, acte
+
+    async def _record_engagement_finance(
         self,
         reservation_id: int,
-        lot_price: float,
-        plan: PaymentPlanData,
-        promotion_amount: float = 0.0,
+        data: EngagementAmountsData,
+        *,
+        agreed: float,
+        acte: float,
+        received: list[dict],
+        user_id: int | None,
     ) -> None:
-        """Create a payment schedule atomically as part of an engagement transition.
+        """Persist the amounts, the payments received and the schedule.
 
-        Uses the same logic as PaymentService.create_schedule but is called inline
-        so the schedule is created in the same transaction as the lot status change.
-        Silently skipped if a schedule already exists.
+        ``received``: payments received at engagement (``amount``,
+        ``paid_on``, ``method``, optional ``reference``), recorded without
+        installment; the first one is the first payment.
+        """
+        gap_date = data.gap_due_date if data.gap_due_timing == "date" else None
+        await self.reservation_repo.update(
+            reservation_id,
+            agreed_total_price=agreed,
+            sale_price=acte,
+            gap_due_timing=data.gap_due_timing,
+            gap_due_date=gap_date,
+        )
+        for payment in received:
+            await self.received_repo.create(
+                reservation_id=reservation_id,
+                installment_id=None,
+                recorded_by_user_id=user_id,
+                **payment,
+            )
+        first_payment = sum(to_cents(p["amount"]) for p in received) / 100
+        await self._create_engagement_schedule(
+            reservation_id,
+            agreed=agreed,
+            first_payment=first_payment,
+            gap=gap_amount(agreed, acte),
+            plan=data.payment_plan,
+            gap_timing=data.gap_due_timing,
+            gap_date=gap_date,
+        )
 
-        The deposit % applies to the catalogue price (lot_price + promotion_amount);
-        the promotion is then subtracted from the deposit gross to get the net
-        installments. Balance = catalogue × balance_pct% = lot_price − deposit_net.
+    async def _create_engagement_schedule(
+        self,
+        reservation_id: int,
+        *,
+        agreed: float,
+        first_payment: float,
+        gap: float,
+        plan: PaymentPlanData | None,
+        gap_timing: str,
+        gap_date: date | None,
+    ) -> None:
+        """Create the schedule of an engagement, in the transition's transaction.
+
+        It covers exactly ``agreed − first payment``: deposit / balance
+        installments (R2; without plan, one balance installment due today, R1)
+        and a ``gap`` installment for the écart (R3: due today, at the last
+        balance installment, or on ``gap_date``). A schedule created before
+        the engagement is replaced (nothing can have been received on it).
         """
         from app.services.payment_service import (
             _add_months,
@@ -370,80 +468,86 @@ class ReservationService:
             _split_amount,
         )
 
-        existing = await self.payment_repo.get_by_reservation(reservation_id)
-        if existing:
-            return
+        await self.payment_repo.delete_by_reservation(reservation_id)
 
-        deposit_pct = round(plan.deposit_pct, 4)
-        balance_pct = round(100.0 - deposit_pct, 4)
-        promo = max(0.0, promotion_amount or 0.0)
-        catalogue_price = round(lot_price + promo, 2)
-        deposit_gross = round(catalogue_price * deposit_pct / 100, 2)
-        deposit_total = max(0.0, round(deposit_gross - promo, 2))
-        balance_total = max(0.0, round(lot_price - deposit_total, 2))
-
+        engaged_at = datetime.now(UTC)
+        deposit_pct = plan.deposit_pct if plan is not None else None
+        deposit_total, balance_total = split_schedule(
+            agreed, first_payment, gap, deposit_pct, gap_timing
+        )
+        gap_total = gap_installment_amount(agreed, first_payment, gap)
         schedule = await self.payment_repo.create(
             reservation_id=reservation_id,
-            lot_price=lot_price,
-            deposit_pct=deposit_pct,
-            balance_pct=balance_pct,
+            lot_price=remaining(agreed, first_payment),
+            deposit_pct=deposit_pct or 0.0,
+            balance_pct=round(100.0 - (deposit_pct or 0.0), 4),
             deposit_total=deposit_total,
             balance_total=balance_total,
-            balance_delay_months=plan.balance_delay_months,
+            balance_delay_months=plan.balance_delay_months if plan else 0,
         )
 
-        deposit_start = plan.deposit_start_date or datetime.now(UTC)
-
-        dep_cfg = InstallmentConfig(
-            count=plan.deposit_count,
-            periodicity_months=plan.deposit_periodicity,
-        )
-        bal_cfg = InstallmentConfig(
-            count=plan.balance_count,
-            periodicity_months=plan.balance_periodicity,
-        )
-
-        deposit_dates = _generate_due_dates(deposit_start, dep_cfg)
-        deposit_amounts = _split_amount(deposit_total, plan.deposit_count)
-
-        for i, (due, amount) in enumerate(
-            zip(deposit_dates, deposit_amounts, strict=True)
-        ):
-            await self.payment_repo.create_installment(
-                schedule_id=schedule.id,
-                payment_type="deposit",
-                installment_number=i + 1,
-                amount=amount,
-                due_date=due,
+        if plan is not None:
+            deposit_dates = _generate_due_dates(
+                plan.deposit_start_date or engaged_at,
+                InstallmentConfig(
+                    count=plan.deposit_count,
+                    periodicity_months=plan.deposit_periodicity,
+                ),
             )
+            balance_dates = _generate_due_dates(
+                _add_months(deposit_dates[-1], plan.balance_delay_months),
+                InstallmentConfig(
+                    count=plan.balance_count,
+                    periodicity_months=plan.balance_periodicity,
+                ),
+            )
+        else:
+            deposit_dates, balance_dates = [], [engaged_at]
 
-        last_deposit_date = deposit_dates[-1]
-        balance_start = _add_months(last_deposit_date, plan.balance_delay_months)
-
-        balance_dates = _generate_due_dates(balance_start, bal_cfg)
-        balance_amounts = _split_amount(balance_total, plan.balance_count)
-
-        for i, (due, amount) in enumerate(
-            zip(balance_dates, balance_amounts, strict=True)
+        last_due = engaged_at
+        for payment_type, total, dates in (
+            ("deposit", deposit_total, deposit_dates),
+            ("balance", balance_total, balance_dates),
         ):
+            if to_cents(total) <= 0:
+                continue
+            amounts = _split_amount(total, len(dates))
+            for number, (due, amount) in enumerate(
+                zip(dates, amounts, strict=True), start=1
+            ):
+                await self.payment_repo.create_installment(
+                    schedule_id=schedule.id,
+                    payment_type=payment_type,
+                    installment_number=number,
+                    amount=amount,
+                    due_date=due,
+                )
+            last_due = dates[-1]
+
+        if to_cents(gap_total) > 0:
+            if gap_timing == "debut":
+                gap_due = engaged_at
+            elif gap_timing == "date" and gap_date is not None:
+                gap_due = datetime.combine(gap_date, time.min, tzinfo=UTC)
+            else:
+                gap_due = last_due
             await self.payment_repo.create_installment(
                 schedule_id=schedule.id,
-                payment_type="balance",
-                installment_number=i + 1,
-                amount=amount,
-                due_date=due,
+                payment_type="gap",
+                installment_number=1,
+                amount=gap_total,
+                due_date=gap_due,
             )
 
         logger.info(
-            "Payment schedule created inline during engagement",
+            "Payment schedule created at engagement",
             reservation_id=reservation_id,
-            lot_price=lot_price,
-            deposit_pct=deposit_pct,
+            agreed=agreed,
+            first_payment=first_payment,
             deposit_total=deposit_total,
             balance_total=balance_total,
-            promotion_amount=promo,
-            deposit_count=plan.deposit_count,
-            balance_count=plan.balance_count,
+            gap_total=gap_total,
+            with_plan=plan is not None,
         )
 
     # ------------------------------------------------------------------
@@ -462,7 +566,7 @@ class ReservationService:
 
         Raises:
             NotFoundError: If lot or client not found
-            BusinessRuleError: If lot is not available
+            BusinessRuleError: If lot is not available, or invalid amounts
         """
         lot = await self.lot_repo.get_by_id(lot_id)
         if not lot:
@@ -481,6 +585,8 @@ class ReservationService:
         if not client:
             raise NotFoundError("Client", data.client_id)
 
+        agreed, acte = await self._engagement_amounts(lot, data, data.guarantee_amount)
+
         reservation = await self.reservation_repo.create(
             project_id=lot.project_id,
             lot_id=lot_id,
@@ -495,6 +601,8 @@ class ReservationService:
             lot,
             reservation.id,
             data,
+            agreed=agreed,
+            acte=acte,
             new_status=new_status,
             transition="direct_engage",
             user_id=user_id,
@@ -509,48 +617,27 @@ class ReservationService:
         reservation_id: int,
         data: EngageBaseData,
         *,
+        agreed: float,
+        acte: float,
         new_status: str,
         transition: str,
         user_id: int | None,
         extra_reservation_update: dict | None = None,
-        schedule_deduction: float = 0.0,
+        kept_payments: list[dict] | None = None,
     ) -> None:
         """Record the engagement of ``reservation_id`` and move the lot.
 
-        Shared by ``direct_engage`` and ``option_engage``: sale price,
-        promotion, first payment, lot status change (history) and the optional
-        payment schedule. ``extra_reservation_update`` is merged into the
-        reservation update; ``schedule_deduction`` is subtracted from the
-        schedule base (amount already paid and kept).
+        Shared by ``direct_engage`` and ``option_engage``: amounts, first
+        payment (encaissement n° 1), lot status change (history) and the
+        schedule. ``extra_reservation_update`` is merged into the reservation
+        update; ``kept_payments`` are other payments already received and
+        kept (e.g. the option deposit), recorded after the first payment.
         """
-        # Auto-fill sale_price from pricing config if not provided
-        if data.sale_price is None:
-            pricing_cfg = await self.pricing_repo.get_for_combination(
-                lot.project_id, lot.zone, lot.type_lot, lot.type_maison, lot.emplacement
-            )
-            if pricing_cfg and lot.surface:
-                data.sale_price = round(pricing_cfg.prix_m2_acte * lot.surface, 2)
-
-        # Compute promotion amount
-        promotion_amount: float | None = None
-        if data.sale_price is not None and lot.price is not None:
-            diff = round(lot.price - data.sale_price, 2)
-            promotion_amount = diff if diff > 0 else 0.0
-
         reservation_update: dict = {
             "guarantee_amount": data.guarantee_amount,
             "payment_type": data.payment_type,
         }
-        if data.sale_price is not None:
-            reservation_update["sale_price"] = data.sale_price
-        if promotion_amount is not None:
-            reservation_update["promotion_amount"] = promotion_amount
-        if data.promotion_paid_timing is not None:
-            reservation_update["promotion_paid_timing"] = data.promotion_paid_timing
-        if data.promotion_received:
-            reservation_update["promotion_received"] = True
         reservation_update.update(extra_reservation_update or {})
-
         await self.reservation_repo.update(reservation_id, **reservation_update)
 
         await self.lot_repo.change_status(
@@ -561,18 +648,19 @@ class ReservationService:
             reservation_id=reservation_id,
         )
 
-        # Create payment schedule if plan provided
-        if data.payment_plan is not None:
-            schedule_price = (
-                data.sale_price if data.sale_price is not None else (lot.price or 0)
-            )
-            schedule_price = max(0.0, schedule_price - schedule_deduction)
-            await self._create_payment_schedule_from_plan(
-                reservation_id=reservation_id,
-                lot_price=schedule_price,
-                plan=data.payment_plan,
-                promotion_amount=promotion_amount or 0.0,
-            )
+        first_payment = {
+            "amount": data.guarantee_amount,
+            "paid_on": datetime.now(UTC).date(),
+            "method": data.payment_type,
+        }
+        await self._record_engagement_finance(
+            reservation_id,
+            data,
+            agreed=agreed,
+            acte=acte,
+            received=[first_payment, *(kept_payments or [])],
+            user_id=user_id,
+        )
 
         logger.info(
             "Lot engaged",
@@ -580,8 +668,8 @@ class ReservationService:
             lot_id=lot.id,
             reservation_id=reservation_id,
             guarantee_amount=data.guarantee_amount,
-            sale_price=data.sale_price,
-            promotion_amount=promotion_amount,
+            agreed_total_price=agreed,
+            sale_price=acte,
         )
 
     # ------------------------------------------------------------------
@@ -654,15 +742,37 @@ class ReservationService:
             if data.refund_payment_type is not None:
                 extra_update["deposit_refund_payment_type"] = data.refund_payment_type
 
+        # The option deposit kept is money already received: recorded as a
+        # payment of the engagement (its method was not captured with the
+        # option, the engagement's one is used).
+        kept_payments = []
+        if deduct:
+            kept_payments.append(
+                {
+                    "amount": option_deposit,
+                    "paid_on": reservation.deposit_date
+                    or reservation.reservation_date.date(),
+                    "method": data.payment_type,
+                    "reference": "Acompte de l'option",
+                }
+            )
+        agreed, acte = await self._engagement_amounts(
+            lot,
+            data,
+            data.guarantee_amount + sum(p["amount"] for p in kept_payments),
+        )
+
         await self._apply_engagement(
             lot,
             reservation.id,
             data,
+            agreed=agreed,
+            acte=acte,
             new_status=new_status,
             transition="option_engage",
             user_id=user_id,
             extra_reservation_update=extra_update,
-            schedule_deduction=option_deposit if deduct else 0.0,
+            kept_payments=kept_payments,
         )
 
         updated = await self.reservation_repo.get_by_id(reservation.id)
@@ -848,73 +958,58 @@ class ReservationService:
                     rule="insufficient_permissions",
                 )
 
-        guarantee_action = data.guarantee_action if data else "deduct"
+        data = data or FinaliserEngageData()
+        guarantee_action = data.guarantee_action
 
-        # Auto-fill sale_price from pricing config if not provided
-        if data and data.sale_price is None:
-            pricing_cfg = await self.pricing_repo.get_for_combination(
-                lot.project_id, lot.zone, lot.type_lot, lot.type_maison, lot.emplacement
+        # Deduct: the guarantee already received is the first payment (same
+        # rule as the other engagements). Refund: it was handed back, nothing
+        # has been received yet.
+        received: list[dict] = []
+        if (
+            current_reservation
+            and guarantee_action == "deduct"
+            and current_reservation.guarantee_amount
+        ):
+            received.append(
+                {
+                    "amount": current_reservation.guarantee_amount,
+                    "paid_on": datetime.now(UTC).date(),
+                    "method": current_reservation.payment_type,
+                }
             )
-            if pricing_cfg and lot.surface:
-                data.sale_price = round(pricing_cfg.prix_m2_acte * lot.surface, 2)
+        agreed, acte = await self._engagement_amounts(
+            lot, data, sum(p["amount"] for p in received)
+        )
 
-        # Compute promotion amount = prix catalogue - prix de vente
-        promotion_amount: float | None = None
-        if data and data.sale_price is not None and lot.price is not None:
-            diff = round(lot.price - data.sale_price, 2)
-            promotion_amount = diff if diff > 0 else 0.0
-
-        # Persist price/promotion/refund info on the reservation
-        if current_reservation:
-            update_kwargs: dict = {}
-            if data and data.sale_price is not None:
-                update_kwargs["sale_price"] = data.sale_price
-            if promotion_amount is not None:
-                update_kwargs["promotion_amount"] = promotion_amount
-            if data and data.promotion_paid_timing is not None:
-                update_kwargs["promotion_paid_timing"] = data.promotion_paid_timing
-            if data and data.promotion_received:
-                update_kwargs["promotion_received"] = True
-            # Refund fields (when guarantee_action == 'refund')
-            if guarantee_action == "refund" and data:
-                if data.refund_amount is not None:
-                    update_kwargs["deposit_refund_amount"] = data.refund_amount
-                if data.refund_date is not None:
-                    update_kwargs["deposit_refund_date"] = data.refund_date
-                if data.refund_payment_type is not None:
-                    update_kwargs["deposit_refund_payment_type"] = (
-                        data.refund_payment_type
-                    )
-            if update_kwargs:
-                await self.reservation_repo.update(
-                    current_reservation.id, **update_kwargs
-                )
+        # Refund fields (when guarantee_action == 'refund')
+        if current_reservation and guarantee_action == "refund":
+            await self.reservation_repo.update(
+                current_reservation.id,
+                deposit_refund_amount=data.refund_amount,
+                deposit_refund_date=data.refund_date,
+                deposit_refund_payment_type=data.refund_payment_type,
+            )
 
         await self.lot_repo.change_status(
             lot_id, new_status, transition="engage", user_id=user_id
         )
 
-        # Create payment schedule if plan provided
-        # When guarantee is deducted it counts as first payment → subtract from plan base
-        if data and data.payment_plan is not None and current_reservation:
-            base_price = (
-                data.sale_price if data.sale_price is not None else (lot.price or 0)
-            )
-            if guarantee_action == "deduct" and current_reservation.guarantee_amount:
-                base_price = max(0.0, base_price - current_reservation.guarantee_amount)
-            await self._create_payment_schedule_from_plan(
-                reservation_id=current_reservation.id,
-                lot_price=base_price,
-                plan=data.payment_plan,
-                promotion_amount=promotion_amount or 0.0,
+        if current_reservation:
+            await self._record_engagement_finance(
+                current_reservation.id,
+                data,
+                agreed=agreed,
+                acte=acte,
+                received=received,
+                user_id=user_id,
             )
 
         logger.info(
             "Lot engaged (finaliser → engagee)",
             lot_id=lot_id,
             guarantee_action=guarantee_action,
-            sale_price=data.sale_price if data else None,
-            promotion_amount=promotion_amount,
+            agreed_total_price=agreed,
+            sale_price=acte,
         )
         updated_lot = await self.lot_repo.get_by_id(lot_id)
         return LotResponse.model_validate(updated_lot)
@@ -1056,11 +1151,13 @@ class ReservationService:
     ) -> SaleResponse:
         """Mark full payment received: reservation_engagee → reservation_soldee.
 
-        Creates SaleModel record.
+        Creates the SaleModel record at the agreed total price (the free
+        ``sale_data.price`` is ignored).
 
         Raises:
             NotFoundError: If lot not found
-            BusinessRuleError: If lot is not in reservation_engagee status
+            BusinessRuleError: If lot is not in reservation_engagee status, or
+                an amount is still due (``amount_still_due``)
         """
         lot = await self.lot_repo.get_by_id(lot_id)
         if not lot:
@@ -1095,43 +1192,30 @@ class ReservationService:
                 rule="insufficient_permissions",
             )
 
-        # --- Validation : reçus de paiement ---
-        # Si un échéancier existe, tous les versements doivent être encaissés
-        payment_schedule = await self.payment_repo.get_by_reservation(
-            lot.current_reservation_id
+        # Everything agreed must have been received, gap included. Reservations
+        # engaged before E4-T5 have no agreed total: the catalogue price.
+        agreed = (
+            reservation.agreed_total_price
+            if reservation.agreed_total_price is not None
+            else (lot.price or 0.0)
         )
-        if payment_schedule:
-            unpaid = [i for i in payment_schedule.installments if i.status != "paid"]
-            if unpaid:
-                raise BusinessRuleError(
-                    message=(
-                        f"{len(unpaid)} versement(s) non encaissé(s) — tous les versements "
-                        "doivent être soldés avant de marquer le lot comme soldé"
-                    ),
-                    rule="unpaid_installments",
-                )
-
-        # Si promotion non reçue et timing 'fin' → bloquer avant de solder
-        if (
-            reservation.promotion_amount
-            and reservation.promotion_amount > 0
-            and not reservation.promotion_received
-            and reservation.promotion_paid_timing == "fin"
-        ):
+        due = remaining(
+            agreed, await self.received_repo.total_for_reservation(reservation.id)
+        )
+        if to_cents(due) > 0:
             raise BusinessRuleError(
                 message=(
-                    f"La différence de promotion ({reservation.promotion_amount:,.0f} MAD) "
-                    "doit être reçue avant de marquer le lot comme soldé "
-                    "(promotion prévue en fin de paiement)"
+                    f"Reste à payer : {format_mad(due)} MAD — la réservation "
+                    "ne peut pas être soldée."
                 ),
-                rule="promotion_not_received",
+                rule="amount_still_due",
             )
 
         sale = await self.sale_repo.create(
             project_id=lot.project_id,
             lot_id=lot_id,
             client_id=reservation.client_id,
-            price=sale_data.price,
+            price=agreed,
             sold_by_user_id=user_id,
             reservation_id=lot.current_reservation_id,
             notes=sale_data.notes,
@@ -1155,7 +1239,7 @@ class ReservationService:
             "Lot marked as soldee — sale created",
             lot_id=lot_id,
             sale_id=sale.id,
-            price=sale_data.price,
+            price=agreed,
         )
 
         return SaleResponse(

@@ -56,6 +56,15 @@ class ProjectWorkflowUpdate(BaseSchema):
     enabled_optional_statuses: list[OptionalStatusKey] = Field(
         description="Optional status keys enabled for the project",
     )
+    acte_min_paid_pct: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description=(
+            "Part du prix total convenu (%) à encaisser avant l'émission de "
+            "l'acte (inchangée si absente)"
+        ),
+    )
 
     @field_validator("enabled_optional_statuses")
     @classmethod
@@ -93,6 +102,10 @@ class ProjectResponse(BaseSchema):
     enabled_statuses: list[str] = Field(
         default_factory=list,
         description="Lot statuses usable by the project, in pipeline order",
+    )
+    acte_min_paid_pct: float = Field(
+        default=10.0,
+        description="Part du prix total convenu (%) à encaisser avant l'acte",
     )
     created_by: int
     created_at: datetime

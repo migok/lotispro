@@ -114,7 +114,7 @@ async def validation_error_handler(
     )
 
     return create_error_response(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         error="VALIDATION_ERROR",
         message=exc.message,
         details=[{"field": exc.field, "message": exc.message}] if exc.field else None,
@@ -250,7 +250,7 @@ async def request_validation_handler(
         )
 
     return create_error_response(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         error="VALIDATION_ERROR",
         message="Certains champs sont invalides",
         details=details,
@@ -279,7 +279,7 @@ async def pydantic_validation_handler(
         )
 
     return create_error_response(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         error="VALIDATION_ERROR",
         message="Data validation failed",
         details=details,

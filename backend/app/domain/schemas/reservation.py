@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.domain.schemas.common import BaseSchema
 
@@ -156,7 +156,51 @@ class FinaliserRefundData(BaseSchema):
     )
 
 
-class FinaliserEngageData(BaseSchema):
+GAP_DUE_TIMING = Literal["debut", "fin", "date"]
+
+
+class EngagementAmountsData(BaseSchema):
+    """Montants d'un engagement (E4-T5), communs aux trois chemins d'engagement.
+
+    ``sale_price`` garde son nom : c'est le prix figurant sur l'acte.
+    L'écart à régulariser (convenu − acte) n'est jamais saisi.
+    """
+
+    agreed_total_price: float | None = Field(
+        default=None,
+        gt=0,
+        description="Prix total convenu (par défaut : prix catalogue du lot)",
+    )
+    sale_price: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Prix figurant sur l'acte (par défaut : grille de prix, sinon prix "
+            "total convenu) ; ne peut pas dépasser le prix total convenu"
+        ),
+    )
+    gap_due_timing: GAP_DUE_TIMING = Field(
+        default="fin",
+        description="Échéance de l'écart à régulariser : début, fin ou date précise",
+    )
+    gap_due_date: date | None = Field(
+        default=None,
+        description="Date de l'écart (requise si gap_due_timing = 'date')",
+    )
+    # Échéancier de paiement (optionnel — sans plan, échéancier minimal)
+    payment_plan: PaymentPlanData | None = Field(
+        default=None,
+        description="Plan de paiement à créer lors de l'engagement (optionnel)",
+    )
+
+    @model_validator(mode="after")
+    def _gap_date_required(self) -> "EngagementAmountsData":
+        if self.gap_due_timing == "date" and self.gap_due_date is None:
+            raise ValueError("Indiquez la date de l'écart.")
+        return self
+
+
+class FinaliserEngageData(EngagementAmountsData):
     """Schema for reservation_a_finaliser → reservation_engagee.
 
     Both guarantee actions advance the lot to reservation_engagee.
@@ -181,25 +225,6 @@ class FinaliserEngageData(BaseSchema):
     refund_payment_type: PAYMENT_TYPE | None = Field(
         default=None,
         description="Payment method used for the refund (only when guarantee_action=refund)",
-    )
-    # Prix de vente et promotion
-    sale_price: float | None = Field(
-        default=None,
-        ge=0,
-        description="Prix de vente indiqué sur l'acte de réservation (peut différer du prix catalogue)",
-    )
-    promotion_paid_timing: Literal["debut", "fin"] | None = Field(
-        default=None,
-        description="Quand la promotion est payée : au début (avec le 1er acompte) ou à la fin",
-    )
-    promotion_received: bool = Field(
-        default=False,
-        description="Le montant de la promotion a déjà été reçu au moment de l'engagement",
-    )
-    # Échéancier de paiement (optionnel — créé atomiquement avec la transition)
-    payment_plan: PaymentPlanData | None = Field(
-        default=None,
-        description="Plan de paiement à créer lors de l'engagement (optionnel)",
     )
 
 
@@ -233,33 +258,14 @@ class DirectToRAFData(BaseSchema):
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
 
 
-class EngageBaseData(BaseSchema):
-    """Champs communs aux engagements directs (premier versement, prix, échéancier)."""
+class EngageBaseData(EngagementAmountsData):
+    """Champs communs aux engagements directs (premier acompte, prix, échéancier)."""
 
     guarantee_amount: float = Field(
-        gt=0, description="Initial deposit / first payment received"
+        gt=0, description="Premier acompte reçu à l'engagement"
     )
     payment_type: PAYMENT_TYPE = Field(description="Payment method used")
     notes: str | None = Field(default=None, max_length=2000, description="Notes")
-    # Prix de vente et promotion
-    sale_price: float | None = Field(
-        default=None,
-        ge=0,
-        description="Prix de vente indiqué sur l'acte de réservation",
-    )
-    promotion_paid_timing: Literal["debut", "fin"] | None = Field(
-        default=None,
-        description="Quand la promotion est payée : au début ou à la fin",
-    )
-    promotion_received: bool = Field(
-        default=False,
-        description="Le montant de la promotion a déjà été reçu",
-    )
-    # Échéancier de paiement (optionnel — créé atomiquement avec la transition)
-    payment_plan: PaymentPlanData | None = Field(
-        default=None,
-        description="Plan de paiement à créer lors de l'engagement (optionnel)",
-    )
 
 
 class OptionEngageData(EngageBaseData):
@@ -351,8 +357,13 @@ class ReservationResponse(BaseSchema):
     notaire_id: int | None = None
     notary_name: str | None = None
     notary_date: date | None = None
-    # Réservation engagée — prix de vente et promotion
-    sale_price: float | None = None
+    # Réservation engagée — montants (E4-T5)
+    sale_price: float | None = None  # prix figurant sur l'acte
+    agreed_total_price: float | None = None
+    gap_amount: float | None = None  # calculé : convenu − acte
+    gap_due_timing: str | None = None
+    gap_due_date: date | None = None
+    # Dépréciés (E4-T5) : plus écrits par l'engagement
     promotion_amount: float | None = None
     promotion_paid_timing: str | None = None
     promotion_received: bool = False

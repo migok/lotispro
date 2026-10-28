@@ -16,6 +16,7 @@ from app.infrastructure.database.models import (
     PaymentInstallmentModel,
     PaymentScheduleModel,
     ReservationModel,
+    ReservationPaymentModel,
     UserModel,
 )
 from app.services.certificate_service import CertificateService
@@ -131,6 +132,22 @@ async def _engage(
     assert lot.status == "reservation_engagee"
     assert lot.current_reservation_id is not None
     return lot, lot.current_reservation_id
+
+
+async def _legacy_pending_promotion(
+    db_session: AsyncSession, reservation_id: int
+) -> None:
+    """Turn the reservation into a pre-E4-T5 one whose promotion is pending.
+
+    Engagements no longer write ``promotion_*`` (E4-T5); the deed's promotion
+    gate is only reachable with such legacy data until it is removed.
+    """
+    reservation = await db_session.get(ReservationModel, reservation_id)
+    assert reservation is not None
+    reservation.promotion_amount = 50000
+    reservation.promotion_paid_timing = "fin"
+    reservation.promotion_received = False
+    await db_session.commit()
 
 
 async def _actes(db_session: AsyncSession, reservation_id: int) -> list[Any]:
@@ -276,11 +293,23 @@ async def test_promotion_pending_skips_acte_then_generates_on_receipt(
     manager: UserModel,
     commercial: UserModel,
     auth_headers: Headers,
+    monkeypatch: pytest.MonkeyPatch,
+    failing_storage: FailingStorage,
 ) -> None:
+    """Legacy reservation with a pending promotion and no archived deed."""
     headers = auth_headers(commercial)
     _, reservation_id = await _engage(
         "direct-engage", client, db_session, manager, headers, sale_price=450000
     )
+    await _legacy_pending_promotion(db_session, reservation_id)
+    storage = FakeStorage()
+    monkeypatch.setattr(
+        "app.services.document_service.get_storage_client", lambda: storage
+    )
+    refused = await client.post(
+        f"/api/reservations/{reservation_id}/acte", headers=headers
+    )
+    assert refused.status_code == 400
     assert await _actes(db_session, reservation_id) == []
 
     response = await client.post(
@@ -319,13 +348,14 @@ async def test_mark_promotion_received_keeps_single_acte_when_already_archived(
     assert len(await _actes(db_session, reservation_id)) == 1
 
 
-async def test_promotion_received_at_engagement_stores_acte(
+async def test_sale_price_below_catalogue_stores_acte(
     client: AsyncClient,
     db_session: AsyncSession,
     manager: UserModel,
     commercial: UserModel,
     auth_headers: Headers,
 ) -> None:
+    """The gap (agreed - deed price) is an installment, not a pending promotion."""
     _, reservation_id = await _engage(
         "direct-engage",
         client,
@@ -333,9 +363,12 @@ async def test_promotion_received_at_engagement_stores_acte(
         manager,
         auth_headers(commercial),
         sale_price=450000,
-        promotion_received=True,
     )
 
+    reservation = await db_session.get(ReservationModel, reservation_id)
+    assert reservation is not None
+    await db_session.refresh(reservation)
+    assert reservation.promotion_amount is None
     assert len(await _actes(db_session, reservation_id)) == 1
 
 
@@ -430,6 +463,8 @@ async def test_regenerate_refused_while_promotion_pending(
     _, reservation_id = await _engage(
         "direct-engage", client, db_session, manager, headers, sale_price=450000
     )
+    assert len(await _actes(db_session, reservation_id)) == 1
+    await _legacy_pending_promotion(db_session, reservation_id)
 
     response = await client.post(
         f"/api/reservations/{reservation_id}/acte", headers=headers
@@ -437,7 +472,7 @@ async def test_regenerate_refused_while_promotion_pending(
 
     assert response.status_code == 400
     assert response.json()["message"] == PROMOTION_PENDING_CERTIFICATE
-    assert await _actes(db_session, reservation_id) == []
+    assert len(await _actes(db_session, reservation_id)) == 1
 
 
 async def test_regenerate_returns_502_when_storage_fails(
@@ -468,10 +503,11 @@ async def test_get_acte_404_when_none(
     manager: UserModel,
     commercial: UserModel,
     auth_headers: Headers,
+    failing_storage: FailingStorage,
 ) -> None:
     headers = auth_headers(commercial)
     _, reservation_id = await _engage(
-        "direct-engage", client, db_session, manager, headers, sale_price=450000
+        "direct-engage", client, db_session, manager, headers
     )
 
     response = await client.get(
@@ -598,12 +634,19 @@ class TestArchivedDeedDeposit:
             payment_plan={"deposit_count": 1, "balance_count": 1},
         )
         first = await _first_installment(db_session, reservation_id)
-        paid = await client.patch(
-            f"/api/payments/installments/{first.id}",
-            headers=headers,
-            json={"status": "paid", "paid_date": "2026-10-20T10:00:00+00:00"},
+        # What recording a payment on the installment persists (E4-T5b API).
+        db_session.add(
+            ReservationPaymentModel(
+                reservation_id=reservation_id,
+                installment_id=first.id,
+                amount=first.amount,
+                paid_on=date(2026, 10, 20),
+                method="transfer",
+            )
         )
-        assert paid.status_code == 200, paid.text
+        first.status = "paid"
+        first.paid_date = datetime(2026, 10, 20, 10, tzinfo=UTC)
+        await db_session.commit()
 
         regenerated = await client.post(
             f"/api/reservations/{reservation_id}/acte", headers=headers
@@ -666,6 +709,7 @@ class TestCertificateEndpointsUnchanged:
         _, promo_id = await _engage(
             "direct-engage", client, db_session, manager, headers, sale_price=450000
         )
+        await _legacy_pending_promotion(db_session, promo_id)
         base = "/api/reservations"
 
         cases = [
@@ -742,6 +786,7 @@ class TestCertificateEndpointsUnchanged:
         _, reservation_id = await _engage(
             "direct-engage", client, db_session, manager, headers, sale_price=450000
         )
+        await _legacy_pending_promotion(db_session, reservation_id)
 
         response = await client.get(
             f"/api/reservations/{reservation_id}/receipt", headers=headers

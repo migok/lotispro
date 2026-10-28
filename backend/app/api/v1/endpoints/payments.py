@@ -62,8 +62,11 @@ async def get_client_payment_overview(
 @router.patch(
     "/installments/{installment_id}",
     response_model=PaymentInstallmentResponse,
-    summary="Update installment status",
-    description="Mark an installment as paid or pending",
+    summary="Update installment notes",
+    description=(
+        "Met à jour les notes d'une échéance. Son statut est calculé à partir "
+        "des encaissements : status='paid' est refusé (400 use_payment_record)."
+    ),
 )
 async def update_installment(
     installment_id: int,
@@ -71,5 +74,5 @@ async def update_installment(
     current_user: CommercialOrManager,
     payment_service: PaymentServiceDep,
 ) -> PaymentInstallmentResponse:
-    """Update an installment's status (paid / pending)."""
+    """Update an installment's notes (status ``paid`` refused)."""
     return await payment_service.update_installment(installment_id, data)
