@@ -12,6 +12,8 @@ import EdlPanel from './lots/EdlPanel';
 import EdlTransitionForm from './lots/EdlTransitionForm';
 import DepositDecisionFields from './lots/DepositDecisionFields';
 import { buildEngagePayload, refundFields } from '../utils/engagePayload';
+import NotifyClientPanel from './notifications/NotifyClientPanel';
+import NotificationHistory from './notifications/NotificationHistory';
 
 /* ── Default payment plan ─────────────────────────────────── */
 const DEFAULT_PAYMENT_PLAN = {
@@ -520,10 +522,35 @@ function AddClientPanel({ onSubmit, onCancel }) {
 }
 
 /* ════════════════════════════════════════════════════════════ */
-export default function LotDetailModal({
+/**
+ * Fiche lot. Après une étape de réservation réussie, le panneau « Notifier le
+ * client » remplace la fiche ; le fermer (avec ou sans envoi) ferme la fiche.
+ */
+export default function LotDetailModal(props) {
+  const { onClose, onRefresh } = props;
+  const [notify, setNotify] = useState(null);
+
+  const handleStepDone = async ({ kind, reservationId, clientId }) => {
+    if (onRefresh) onRefresh();
+    if (!reservationId) { onClose(); return; }
+    let client = null;
+    try {
+      client = clientId ? await apiGet(`/api/clients/${clientId}`) : null;
+    } catch {
+      // préférences inconnues : le panneau retombe sur l'email
+    }
+    setNotify({ kind, reservationId, client });
+  };
+
+  if (notify) return <NotifyClientPanel {...notify} onClose={onClose} />;
+  return <LotDetailModalContent {...props} onStepDone={handleStepDone} />;
+}
+
+function LotDetailModalContent({
   lot,
   onClose,
   onRefresh,
+  onStepDone,
   initialMode = null,
   enabledOptionalStatuses = DEFAULT_ENABLED_OPTIONAL,
 }) {
@@ -977,13 +1004,13 @@ export default function LotDetailModal({
     expDate.setDate(expDate.getDate() + days);
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/start-option`, {
+      const res = await apiPost(`/api/lots/${lot.id}/transitions/start-option`, {
         client_id: selectedClient.id,
         expiration_date: expDate.toISOString(),
         notes: notes || undefined,
       });
       toast.success('Option démarrée avec succès');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'option_confirmee', reservationId: res.id, clientId: res.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -1007,7 +1034,7 @@ export default function LotDetailModal({
     if (!finalizationDate) { toast.warning('La date de finalisation est requise'); return; }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/direct-reservation`, {
+      const res = await apiPost(`/api/lots/${lot.id}/transitions/direct-reservation`, {
         client_id: selectedClient.id,
         guarantee_amount: parseFloat(guaranteeAmount),
         payment_type: paymentType,
@@ -1015,7 +1042,7 @@ export default function LotDetailModal({
         notes: notes || undefined,
       });
       toast.success('Réservation à finaliser créée');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_a_finaliser', reservationId: res.id, clientId: res.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -1026,14 +1053,14 @@ export default function LotDetailModal({
     if (!guaranteeAmount || parseFloat(guaranteeAmount) <= 0) { toast.warning('Le montant du premier acompte (ND) est requis'); return; }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/direct-engage`, engageBody({
+      const res = await apiPost(`/api/lots/${lot.id}/transitions/direct-engage`, engageBody({
         client_id: selectedClient.id,
         guarantee_amount: parseFloat(guaranteeAmount),
         payment_type: paymentType,
         notes: notes || undefined,
       }));
       toast.success('Réservation engagée créée');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_engagee', reservationId: res.id, clientId: res.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -1055,14 +1082,14 @@ export default function LotDetailModal({
     }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/option-engage`, engageBody({
+      const res = await apiPost(`/api/lots/${lot.id}/transitions/option-engage`, engageBody({
         guarantee_amount: parseFloat(guaranteeAmount),
         payment_type: paymentType,
         notes: notes || undefined,
         ...depositFields,
       }));
       toast.success('Réservation engagée');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_engagee', reservationId: res.id, clientId: res.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -1094,14 +1121,14 @@ export default function LotDetailModal({
     if (!finalizationDate) { toast.warning('La date de finalisation est requise'); return; }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/to-reservation`, {
+      const res = await apiPost(`/api/lots/${lot.id}/transitions/to-reservation`, {
         guarantee_amount: parseFloat(guaranteeAmount),
         finalization_date: new Date(finalizationDate).toISOString(),
         payment_type: paymentType,
         notes: notes || undefined,
       });
       toast.success('Réservation à finaliser');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_a_finaliser', reservationId: res.id, clientId: res.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -1162,7 +1189,7 @@ export default function LotDetailModal({
     try {
       await apiPost(`/api/lots/${lot.id}/transitions/engage`, engageBody({ guarantee_action: 'deduct' }));
       toast.success('Réservation engagée — garantie déduite');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_engagee', reservationId: lot.reservation_id, clientId: lot.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -1178,7 +1205,7 @@ export default function LotDetailModal({
         ...refundFields(releaseData),
       }));
       toast.success('Garantie rendue au client — réservation engagée');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_engagee', reservationId: lot.reservation_id, clientId: lot.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -1594,6 +1621,12 @@ export default function LotDetailModal({
                 )}
               </div>
             )}
+          </div>
+
+          {/* ── Notifications ── */}
+          <div className="ldm-documents-section">
+            <div className="ldm-section-label">Notifications</div>
+            <NotificationHistory lotId={lot.id} />
           </div>
 
           {/* ── Documents notariés ── */}

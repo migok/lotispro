@@ -4,6 +4,7 @@ import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiPut, apiPatch, apiFetch } from '../utils/api';
 import { formatPrice, formatDate } from '../utils/formatters';
 import ClientForm from './clients/ClientForm';
+import NotificationHistory from './notifications/NotificationHistory';
 import {
   NOTIFICATION_CHANNEL_LABELS,
   acteAddressOf,
@@ -1174,6 +1175,12 @@ export default function ClientDetailPage() {
               })()
         )}
 
+      </div>
+
+      {/* ── Notifications ───────────────────────────────── */}
+      <div className="card cd-notifications">
+        <h4 className="cd-subsection-title">Notifications</h4>
+        <NotificationHistory clientId={clientId} />
       </div>
 
       {/* ── Notes internes ──────────────────────────────── */}

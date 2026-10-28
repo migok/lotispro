@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../test/renderWithProviders'
 import LotDetailModal from '../LotDetailModal'
@@ -347,6 +347,176 @@ describe('LotDetailModal', () => {
       renderModal(othersOption, ['option'])
 
       expect(screen.getByRole('button', { name: /Engager/ })).toBeEnabled()
+    })
+  })
+
+  describe('notification panel after a reservation step', () => {
+    const CLIENT = { id: 7, name: 'Fatima Benali', notification_channels: ['email'] }
+    const NOTIFY_ROWS = [{ id: 1, channel: 'email', status: 'sent', error: null }]
+
+    /** Mounts the modal with spies and the client / notify routes; `routes` adds the transition answer. */
+    function setup(lot, routes, enabled) {
+      const onClose = vi.fn()
+      const onRefresh = vi.fn()
+      const fetchMock = mockFetch({
+        '/api/clients': [CLIENT],
+        '/api/clients/7': CLIENT,
+        '/api/reservations/41/notify': NOTIFY_ROWS,
+        ...routes,
+      })
+      renderWithProviders(
+        <LotDetailModal lot={lot} onClose={onClose} onRefresh={onRefresh} enabledOptionalStatuses={enabled} />,
+        { user: MANAGER }
+      )
+      return { fetchMock, onClose, onRefresh, user: userEvent.setup() }
+    }
+
+    async function pickClient(user) {
+      await user.type(await screen.findByPlaceholderText(/Rechercher par nom, CIN/), 'fatima')
+      await user.click(await screen.findByRole('option', { name: /Fatima Benali/ }))
+    }
+
+    /** The panel is open with `label`; sending posts the notification of `kind` and closes the modal. */
+    async function expectPanelAndSend({ fetchMock, onClose, onRefresh, user }, label, kind) {
+      const panel = await screen.findByRole('dialog', { name: 'Notifier le client' })
+      expect(within(panel).getByText(new RegExp(label))).toBeInTheDocument()
+      expect(onClose).not.toHaveBeenCalled()
+      expect(onRefresh).toHaveBeenCalled()
+      await user.click(within(panel).getByRole('button', { name: 'Envoyer' }))
+      await waitFor(() => expect(postedBody(fetchMock, '/api/reservations/41/notify')).toEqual({
+        channels: ['email'],
+        kind,
+      }))
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    }
+
+    it('opens after start-option with kind option_confirmee', async () => {
+      const ctx = setup(
+        { id: 1, numero: 'A1', status: 'available', price: 500000 },
+        { '/api/lots/1/transitions/start-option': { id: 41, client_id: 7 } }
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /^Option$/ }))
+      await pickClient(ctx.user)
+      await ctx.user.click(screen.getByRole('button', { name: /Confirmer l'option/ }))
+
+      await expectPanelAndSend(ctx, 'Option confirmée', 'option_confirmee')
+    })
+
+    it('opens after direct-reservation with kind reservation_a_finaliser', async () => {
+      const ctx = setup(
+        { id: 2, numero: 'B2', status: 'available', price: 500000 },
+        { '/api/lots/2/transitions/direct-reservation': { id: 41, client_id: 7 } }
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /Résa\. à finaliser/ }))
+      await pickClient(ctx.user)
+      await ctx.user.type(screen.getByPlaceholderText('Montant reçu'), '20000')
+      await ctx.user.type(document.querySelector('input[type="date"]'), '2030-01-15')
+      await ctx.user.click(screen.getByRole('button', { name: /Créer la réservation/ }))
+
+      await expectPanelAndSend(ctx, 'Réservation à finaliser', 'reservation_a_finaliser')
+    })
+
+    it('opens after to-reservation with kind reservation_a_finaliser', async () => {
+      const ctx = setup(
+        { id: 3, numero: 'C3', status: 'option', price: 500000, client_id: 7, client_name: 'Fatima Benali' },
+        { '/api/lots/3/transitions/to-reservation': { id: 41, client_id: 7 } },
+        ['option', 'reservation_a_finaliser']
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /Passer à réservation à finaliser/ }))
+      await ctx.user.type(screen.getByPlaceholderText('Montant reçu'), '20000')
+      await ctx.user.type(document.querySelector('input[type="date"]'), '2030-01-15')
+      await ctx.user.click(screen.getByRole('button', { name: /Confirmer la réservation/ }))
+
+      await expectPanelAndSend(ctx, 'Réservation à finaliser', 'reservation_a_finaliser')
+    })
+
+    it('opens after direct-engage with kind reservation_engagee', async () => {
+      const ctx = setup(
+        { id: 4, numero: 'D4', status: 'available', price: 500000 },
+        { '/api/lots/4/transitions/direct-engage': { id: 41, client_id: 7 } }
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /Résa\. engagée/ }))
+      await pickClient(ctx.user)
+      await ctx.user.type(screen.getByPlaceholderText('Montant reçu'), '30000')
+      await ctx.user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+      await expectPanelAndSend(ctx, 'Réservation engagée', 'reservation_engagee')
+    })
+
+    it('opens after option-engage with kind reservation_engagee', async () => {
+      const ctx = setup(
+        { id: 5, numero: 'E5', status: 'option', price: 500000, client_id: 7, client_name: 'Fatima Benali', deposit: 5000 },
+        { '/api/lots/5/transitions/option-engage': { id: 41, client_id: 7 } },
+        ['option']
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /Engager/ }))
+      await ctx.user.type(screen.getByPlaceholderText('Montant reçu'), '20000')
+      await ctx.user.click(screen.getByRole('button', { name: /Déduire l'acompte/ }))
+      await ctx.user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+      await expectPanelAndSend(ctx, 'Réservation engagée', 'reservation_engagee')
+    })
+
+    it('opens after engage of a reservation to finalise, using the lot reservation', async () => {
+      const ctx = setup(
+        {
+          id: 6, numero: 'F6', status: 'reservation_a_finaliser', price: 500000,
+          reservation_id: 41, client_id: 7, client_name: 'Fatima Benali', guarantee_amount: 20000,
+        },
+        { '/api/lots/6/transitions/engage': { id: 6, current_reservation_id: 41 } },
+        ['option', 'reservation_a_finaliser']
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /Valider/ }))
+      await ctx.user.click(screen.getByRole('button', { name: /Déduire la garantie/ }))
+      await ctx.user.click(screen.getByRole('button', { name: /Confirmer l'engagement/ }))
+
+      await expectPanelAndSend(ctx, 'Réservation engagée', 'reservation_engagee')
+    })
+
+    it('closes the modal without sending anything when the panel is dismissed', async () => {
+      const ctx = setup(
+        { id: 1, numero: 'A1', status: 'available', price: 500000 },
+        { '/api/lots/1/transitions/start-option': { id: 41, client_id: 7 } }
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /^Option$/ }))
+      await pickClient(ctx.user)
+      await ctx.user.click(screen.getByRole('button', { name: /Confirmer l'option/ }))
+
+      const panel = await screen.findByRole('dialog', { name: 'Notifier le client' })
+      await ctx.user.click(within(panel).getByRole('button', { name: 'Fermer' }))
+
+      expect(ctx.onClose).toHaveBeenCalledTimes(1)
+      expect(postedBody(ctx.fetchMock, '/api/reservations/41/notify')).toBeUndefined()
+    })
+
+    it('still opens (email by default) when the client cannot be loaded', async () => {
+      const ctx = setup(
+        { id: 1, numero: 'A1', status: 'available', price: 500000 },
+        { '/api/lots/1/transitions/start-option': { id: 41, client_id: 7 } }
+      )
+      const base = ctx.fetchMock.getMockImplementation()
+      ctx.fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/clients/7')
+          ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ message: 'boom' }) })
+          : base(url, opts))
+      await ctx.user.click(screen.getByRole('button', { name: /^Option$/ }))
+      await pickClient(ctx.user)
+      await ctx.user.click(screen.getByRole('button', { name: /Confirmer l'option/ }))
+
+      const panel = await screen.findByRole('dialog', { name: 'Notifier le client' })
+      expect(within(panel).getByRole('checkbox', { name: /Email/ })).toBeChecked()
+    })
+
+    it('shows the notification history of the lot', async () => {
+      const fetchMock = mockFetch({
+        '/api/notifications': [
+          { id: 1, kind: 'option_confirmee', channel: 'email', recipient: 'client', status: 'sent', error: null, sent_at: '2026-10-28T09:12:00Z', sent_by_user_id: 2 },
+        ],
+      })
+      renderModal({ id: 9, numero: 'I9', status: 'available', price: 500000 })
+
+      expect(await screen.findByText('Option confirmée')).toBeInTheDocument()
+      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/notifications?lot_id=9'))).toBe(true)
     })
   })
 })

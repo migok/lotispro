@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-28 (E4-T0, E4-T1 et E4-T2 en revue ; E4-T5 ajoutée)_
+_Dernière mise à jour : 2026-10-28 (E4-T0 à E4-T3 en revue ; E4-T5 ajoutée)_
 
 ## Vue d'ensemble
 
@@ -50,7 +50,7 @@ _Dernière mise à jour : 2026-10-28 (E4-T0, E4-T1 et E4-T2 en revue ; E4-T5 ajo
 | E4-T0 | Correctif PDF : police Unicode (’, arabe) | 🟨 | [#49](https://github.com/migok/lotispro/issues/49) | | |
 | E4-T1 | Acte auto à l'engagement | 🟨 | [#30](https://github.com/migok/lotispro/issues/30) | | |
 | E4-T2 | Service de notifications | 🟨 | [#31](https://github.com/migok/lotispro/issues/31) | | |
-| E4-T3 | UI notifications + historique | ⬜ | [#32](https://github.com/migok/lotispro/issues/32) | | |
+| E4-T3 | UI notifications + historique | 🟨 | [#32](https://github.com/migok/lotispro/issues/32) | | |
 | E4-T4 | Rappels d'expiration | ⬜ | [#33](https://github.com/migok/lotispro/issues/33) | | |
 | E4-T5 | Modifier une réservation engagée | ⬜ | [#52](https://github.com/migok/lotispro/issues/52) | | |
 | E5-T1 | Endpoint `lots-matrix` | ⬜ | [#35](https://github.com/migok/lotispro/issues/35) | | |

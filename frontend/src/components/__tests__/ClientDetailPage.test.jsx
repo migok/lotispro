@@ -74,6 +74,23 @@ describe('ClientDetailPage - fiche client', () => {
     expect(screen.getByTitle("Adresse utilisée pour les actes")).toBeInTheDocument()
   })
 
+  it('shows the notification history of the client', async () => {
+    const fetchMock = vi.fn((url) => {
+      const path = String(url)
+      const body = path.includes('/details')
+        ? CLIENT
+        : path.includes('/api/notifications')
+          ? [{ id: 1, kind: 'reservation_engagee', channel: 'email', recipient: 'client', status: 'sent', error: null, sent_at: '2026-10-28T09:12:00Z', sent_by_user_id: 2 }]
+          : []
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage()
+
+    expect(await screen.findByText('Réservation engagée')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/notifications?client_id=7'))).toBe(true)
+  })
+
   it('shows the legacy address (address_morocco only) in read mode', async () => {
     mockFetch({ ...CLIENT, address_abroad: null, acte_address: null })
     renderPage()
