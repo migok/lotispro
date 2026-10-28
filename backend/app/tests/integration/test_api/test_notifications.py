@@ -327,6 +327,41 @@ async def test_engagee_email_attaches_acte(
     assert "acte de réservation" in call["html"].lower()
 
 
+async def test_engagee_email_shows_the_agreed_total_price(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    manager: UserModel,
+    auth_headers: Headers,
+    sent_emails: SentEmails,
+) -> None:
+    """The client pays the agreed total, not the deed price (E4-T5)."""
+    headers = auth_headers(manager)
+    project = await make_project(db_session, manager)
+    lot = await make_lot(db_session, project, status="available", price=500000)
+    buyer = await make_client(db_session, manager)
+    engaged = await client.post(
+        f"/api/lots/{lot.id}/transitions/direct-engage",
+        headers=headers,
+        json={
+            "client_id": buyer.id,
+            "guarantee_amount": 60000,
+            "payment_type": "cash",
+            "agreed_total_price": 520000,
+            "sale_price": 450000,
+        },
+    )
+    assert engaged.status_code == 200, engaged.text
+
+    response = await _notify(
+        client, headers, engaged.json()["id"], "reservation_engagee", ["email"]
+    )
+
+    assert response.status_code == 200, response.text
+    [call] = sent_emails.calls
+    assert "520 000,00 DH" in call["html"]
+    assert "450 000,00 DH" not in call["html"]
+
+
 async def test_engagee_without_archived_acte_sends_without_attachment(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -338,7 +373,7 @@ async def test_engagee_without_archived_acte_sends_without_attachment(
     _, reservation_id = await _lot_in(
         "reservation_engagee", client, db_session, manager, headers
     )
-    # No archived deed (e.g. promotion not received yet at engagement).
+    # No archived deed (e.g. paid threshold not reached yet at engagement).
     await db_session.execute(delete(LotDocumentModel))
     await db_session.commit()
 

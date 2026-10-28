@@ -27,7 +27,6 @@ from app.domain.schemas.reservation import (
     EngagementAmountsData,
     FinaliserEngageData,
     FinaliserRefundData,
-    MarkPromotionReceivedData,
     OptionCreate,
     OptionEngageData,
     PaymentPlanData,
@@ -1032,64 +1031,6 @@ class ReservationService:
         )
         updated_lot = await self.lot_repo.get_by_id(lot_id)
         return LotResponse.model_validate(updated_lot)
-
-    # ------------------------------------------------------------------
-    # Mark promotion received on an engaged reservation
-    # ------------------------------------------------------------------
-
-    async def mark_promotion_received(
-        self,
-        reservation_id: int,
-        data: MarkPromotionReceivedData,
-        user_id: int | None = None,
-    ) -> ReservationResponse:
-        """Mark the promotion amount as received for a reservation_engagee lot.
-
-        Raises:
-            NotFoundError: If reservation not found
-            BusinessRuleError: If lot is not in reservation_engagee status or promotion already received
-        """
-        reservation = await self.reservation_repo.get_by_id(reservation_id)
-        if not reservation:
-            raise NotFoundError("Reservation", reservation_id)
-
-        lot = await self.lot_repo.get_by_id(reservation.lot_id)
-        if not lot or lot.status != "reservation_engagee":
-            raise BusinessRuleError(
-                message="Le lot doit être en statut réservation engagée",
-                rule="invalid_lot_status",
-            )
-
-        if reservation.promotion_received:
-            raise BusinessRuleError(
-                message="La promotion a déjà été marquée comme reçue",
-                rule="promotion_already_received",
-            )
-
-        date_str = (
-            data.received_date.strftime("%d/%m/%Y")
-            if data.received_date
-            else date.today().strftime("%d/%m/%Y")
-        )
-        note_suffix = f"[{date_str}] Montant promotion reçu."
-        current_notes = reservation.notes or ""
-        new_notes = (
-            f"{current_notes}\n{note_suffix}".strip() if current_notes else note_suffix
-        )
-
-        updated = await self.reservation_repo.update(
-            reservation_id,
-            promotion_received=True,
-            notes=new_notes,
-        )
-
-        logger.info(
-            "Promotion reçue enregistrée",
-            reservation_id=reservation_id,
-            promotion_amount=reservation.promotion_amount,
-            user_id=user_id,
-        )
-        return await self._to_response(updated)
 
     # ------------------------------------------------------------------
     # Set notaire intent on a sold lot (soldée or EDL status)

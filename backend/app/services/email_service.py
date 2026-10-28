@@ -2,7 +2,7 @@
 
 import asyncio
 import base64
-from datetime import datetime
+from datetime import date, datetime
 
 import resend
 
@@ -199,17 +199,21 @@ def _format_amount(amount: float) -> str:
     return f"{amount:,.2f} DH".replace(",", " ")
 
 
-def _format_date(dt: datetime | None) -> str:
+def _format_date(dt: date | datetime | None) -> str:
     """Format a datetime to a readable French date string."""
     if dt is None:
         return "—"
     return dt.strftime("%d/%m/%Y")
 
 
+# Installment types (``payment_installments.payment_type``) in the emails.
+_PAYMENT_TYPE_LABELS = {"deposit": "Acompte", "balance": "Solde", "gap": "Écart"}
+
+
 def _build_payment_confirmation_html(
     client_name: str,
     amount: float,
-    paid_date: datetime | None,
+    paid_date: date | datetime | None,
     lot_numero: str,
     project_name: str,
     payment_type: str,
@@ -222,8 +226,8 @@ def _build_payment_confirmation_html(
     total_str = _format_amount(schedule_total)
     date_str = _format_date(paid_date)
 
-    is_balance = payment_type == "balance"
-    type_label = "Solde" if is_balance else "Acompte"
+    is_balance = payment_type != "deposit"
+    type_label = _PAYMENT_TYPE_LABELS.get(payment_type, "Acompte")
     banner_bg = "#1a3a4f" if is_balance else "#1a4731"
     banner_color = "#3b9edb" if is_balance else "#2ecc71"
     banner_text = f"Versement {type_label.lower()} confirmé"
@@ -577,7 +581,7 @@ class EmailService:
         client_name: str,
         client_email: str,
         amount: float,
-        paid_date: datetime | None,
+        paid_date: date | datetime | None,
         lot_numero: str,
         project_name: str,
         payment_type: str,
@@ -585,7 +589,7 @@ class EmailService:
         total_installments: int,
         schedule_total: float,
     ) -> bool:
-        """Send a payment confirmation email to the client (deposit or balance).
+        """Send a payment confirmation email (deposit, balance or gap installment).
 
         Returns True if sent successfully, False otherwise.
         """
@@ -596,7 +600,7 @@ class EmailService:
             )
             return False
 
-        type_label = "solde" if payment_type == "balance" else "acompte"
+        type_label = _PAYMENT_TYPE_LABELS.get(payment_type, "Acompte").lower()
         html = _build_payment_confirmation_html(
             client_name=client_name,
             amount=amount,

@@ -28,6 +28,10 @@ from app.infrastructure.storage.supabase_storage import get_storage_client
 
 logger = get_logger(__name__)
 
+# Documents tied to a payment (proof) or a deed: payments and deeds are never
+# deleted (spec E4-T5), so neither are these documents.
+LOCKED_CATEGORIES = {"justificatif_paiement", "acte_reservation"}
+
 ALLOWED_CONTENT_TYPES = {
     "application/pdf",
     "image/jpeg",
@@ -61,6 +65,40 @@ def _doc_to_response(doc: LotDocumentModel) -> LotDocumentResponse:
     )
 
 
+async def read_upload(file: UploadFile) -> tuple[bytes, str]:
+    """Read an uploaded file after checking its type and size.
+
+    Returns ``(content, content_type)``.
+
+    Raises:
+        BusinessRuleError: Type not allowed (``invalid_document_type``) or file
+            too large (``file_too_large``).
+    """
+    content_type = file.content_type or "application/octet-stream"
+    if content_type == "application/octet-stream" and file.filename:
+        guessed, _ = mimetypes.guess_type(file.filename)
+        if guessed:
+            content_type = guessed
+
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        raise BusinessRuleError(
+            message=(
+                f"Type de fichier non autorisé : {content_type}. "
+                "Formats acceptés : PDF, images (JPG/PNG/WebP), Word, Excel."
+            ),
+            rule="invalid_document_type",
+        )
+
+    content = await file.read()
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(content) > max_bytes:
+        raise BusinessRuleError(
+            message=f"Fichier trop volumineux. Maximum : {settings.MAX_UPLOAD_SIZE_MB} Mo.",
+            rule="file_too_large",
+        )
+    return content, content_type
+
+
 class DocumentService:
     """Service for managing lot documents stored in Supabase Storage."""
 
@@ -85,29 +123,7 @@ class DocumentService:
         if lot is None:
             raise NotFoundError("Lot", lot_id)
 
-        # Resolve content-type
-        content_type = file.content_type or "application/octet-stream"
-        if content_type == "application/octet-stream" and file.filename:
-            guessed, _ = mimetypes.guess_type(file.filename)
-            if guessed:
-                content_type = guessed
-
-        if content_type not in ALLOWED_CONTENT_TYPES:
-            raise BusinessRuleError(
-                message=(
-                    f"Type de fichier non autorisé : {content_type}. "
-                    "Formats acceptés : PDF, images (JPG/PNG/WebP), Word, Excel."
-                ),
-                rule="invalid_document_type",
-            )
-
-        content = await file.read()
-        max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-        if len(content) > max_bytes:
-            raise BusinessRuleError(
-                message=f"Fichier trop volumineux. Maximum : {settings.MAX_UPLOAD_SIZE_MB} Mo.",
-                rule="file_too_large",
-            )
+        content, content_type = await read_upload(file)
 
         doc = await self._store(
             lot_id=lot_id,
@@ -234,10 +250,19 @@ class DocumentService:
 
         Raises:
             NotFoundError: Document not found or belongs to a different lot.
+            BusinessRuleError: Proof of payment or deed (``document_locked``).
         """
         doc = await self.doc_repo.get_by_id(doc_id)
         if doc is None or doc.lot_id != lot_id:
             raise NotFoundError("Document", doc_id)
+        if doc.category in LOCKED_CATEGORIES:
+            raise BusinessRuleError(
+                message=(
+                    "Ce document est rattaché à un encaissement ou à un acte et "
+                    "ne peut pas être supprimé."
+                ),
+                rule="document_locked",
+            )
 
         try:
             get_storage_client().delete_from_bucket(

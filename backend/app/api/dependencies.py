@@ -29,6 +29,7 @@ from app.services import (
 )
 from app.services.email_service import EmailService
 from app.services.notifications.service import NotificationService
+from app.services.reservation_payment_service import ReservationPaymentService
 
 logger = get_logger(__name__)
 
@@ -199,6 +200,11 @@ def get_lot_pricing_service(session: DBSession) -> LotPricingService:
     return LotPricingService(session)
 
 
+def get_reservation_payment_service(session: DBSession) -> ReservationPaymentService:
+    """Get reservation payment (encaissements) service instance."""
+    return ReservationPaymentService(session)
+
+
 def get_notification_service(session: DBSession) -> NotificationService:
     """Get notification service instance."""
     return NotificationService(session, EmailService())
@@ -222,6 +228,9 @@ DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
 ActeServiceDep = Annotated[ActeService, Depends(get_acte_service)]
 NotaireServiceDep = Annotated[NotaireService, Depends(get_notaire_service)]
 LotPricingServiceDep = Annotated[LotPricingService, Depends(get_lot_pricing_service)]
+ReservationPaymentServiceDep = Annotated[
+    ReservationPaymentService, Depends(get_reservation_payment_service)
+]
 NotificationServiceDep = Annotated[
     NotificationService, Depends(get_notification_service)
 ]

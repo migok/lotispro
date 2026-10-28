@@ -49,7 +49,12 @@ def _amount(stage: str | None, details: dict) -> float | None:
     if stage == "reservation_a_finaliser":
         return details["guarantee_amount"]
     if stage == "reservation_engagee":
-        return details["sale_price"] or details["lot_price"]
+        # What the client pays in total (E4-T5), not the deed price.
+        return (
+            details["agreed_total_price"]
+            or details["sale_price"]
+            or details["lot_price"]
+        )
     return None
 
 

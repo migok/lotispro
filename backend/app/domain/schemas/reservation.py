@@ -228,16 +228,6 @@ class FinaliserEngageData(EngagementAmountsData):
     )
 
 
-class MarkPromotionReceivedData(BaseSchema):
-    """Schema for marking a promotion as received on an engaged reservation."""
-
-    received_date: date | None = Field(
-        default=None,
-        description="Date de réception du montant de la promotion (par défaut aujourd'hui)",
-    )
-    notes: str | None = Field(default=None, max_length=2000)
-
-
 class ChezNotaireData(BaseSchema):
     """Schema for reservation_soldee → chez_notaire."""
 

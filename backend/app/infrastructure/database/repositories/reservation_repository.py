@@ -132,7 +132,10 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             "notaire_id": reservation.notaire_id,
             "notary_name": reservation.notary_name,
             "notary_date": reservation.notary_date,
-            # Réservation engagée — prix de vente et promotion
+            # Réservation engagée — montants (E4-T5) ; promotion_* dépréciés
+            "agreed_total_price": reservation.agreed_total_price,
+            "gap_due_timing": reservation.gap_due_timing,
+            "gap_due_date": reservation.gap_due_date,
             "sale_price": reservation.sale_price,
             "promotion_amount": reservation.promotion_amount,
             "promotion_paid_timing": reservation.promotion_paid_timing,
@@ -150,6 +153,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             "client_address": acte_address_of(client),
             "reserved_by_name": reserver.name if reserver else None,
             "project_name": project.name,
+            "acte_min_paid_pct": project.acte_min_paid_pct,
         }
 
     async def get_active_for_lot(self, lot_id: int) -> ReservationModel | None:

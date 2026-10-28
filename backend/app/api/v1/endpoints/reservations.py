@@ -2,8 +2,18 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 
 from app.api.dependencies import (
     ActeServiceDep,
@@ -11,25 +21,26 @@ from app.api.dependencies import (
     CurrentUser,
     DocumentServiceDep,
     NotificationServiceDep,
+    ReservationPaymentServiceDep,
     ReservationServiceDep,
 )
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.domain.schemas.document import LotDocumentResponse
 from app.domain.schemas.notification import NotificationResponse, NotifyRequest
 from app.domain.schemas.reservation import (
-    MarkPromotionReceivedData,
     ReservationCreate,
     ReservationExtend,
     ReservationFilter,
     ReservationRelease,
     ReservationResponse,
 )
-from app.domain.schemas.sale import SaleFromReservation, SaleResponse
-from app.services.acte_service import (
-    DEPOSIT_UNPAID,
-    PROMOTION_PENDING,
-    ActeNotReadyError,
+from app.domain.schemas.reservation_payment import (
+    FinancialSummaryResponse,
+    ReservationPaymentForm,
+    ReservationPaymentResponse,
 )
+from app.domain.schemas.sale import SaleFromReservation, SaleResponse
+from app.services.acte_service import DEPOSIT_UNPAID, ActeNotReadyError
 from app.services.email_service import EmailService
 
 _email_service = EmailService()
@@ -193,12 +204,12 @@ def _pdf_response(content: bytes, filename: str) -> Response:
 
 
 @contextmanager
-def _legacy_pdf_errors(
-    reservation_id: int, not_ready_messages: dict[str, str] | None = None
-) -> Iterator[None]:
+def _legacy_pdf_errors(reservation_id: int) -> Iterator[None]:
     """Keep the historical HTTP errors of the certificate / receipt endpoints.
 
-    ``not_ready_messages`` overrides the message per ``ActeNotReadyError.rule``.
+    404 ``{"detail": ...}`` for an unknown reservation and 422 for the
+    receipt without first payment. The deed threshold
+    (``acte_threshold_not_reached``) is a regular business rule error (400).
     """
     try:
         yield
@@ -208,10 +219,9 @@ def _legacy_pdf_errors(
             detail=f"Reservation {reservation_id} not found",
         ) from exc
     except ActeNotReadyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(not_ready_messages or {}).get(exc.rule or "", exc.message),
-        ) from exc
+        if exc.rule != DEPOSIT_UNPAID:
+            raise
+        raise HTTPException(status_code=422, detail=exc.message) from exc
 
 
 @router.get(
@@ -225,22 +235,10 @@ async def download_reservation_certificate(
     current_user: CurrentUser,
     acte_service: ActeServiceDep,
 ) -> Response:
-    """Generate PDF certificate for a reservation (first deposit paid required)."""
+    """Generate the deed PDF (paid threshold of the project required)."""
     with _legacy_pdf_errors(reservation_id):
         pdf_bytes, filename = await acte_service.build_certificate_pdf(reservation_id)
     return _pdf_response(pdf_bytes, filename)
-
-
-_EMAIL_NOT_READY_MESSAGES = {
-    DEPOSIT_UNPAID: (
-        "Le premier versement d'acompte doit être effectué "
-        "avant d'envoyer l'acte de réservation."
-    ),
-    PROMOTION_PENDING: (
-        "Le montant de la promotion n'a pas encore été reçu. "
-        "L'acte de réservation ne peut être envoyé qu'après réception de la promotion."
-    ),
-}
 
 
 @router.post(
@@ -254,13 +252,13 @@ async def send_reservation_certificate_email(
     acte_service: ActeServiceDep,
 ) -> dict:
     """Generate PDF certificate and email it to the client."""
-    with _legacy_pdf_errors(reservation_id, _EMAIL_NOT_READY_MESSAGES):
+    with _legacy_pdf_errors(reservation_id):
         details = await acte_service.load_details(reservation_id)
 
         client_email = details.get("client_email")
         if not client_email:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=422,
                 detail="Le client n'a pas d'adresse email enregistrée.",
             )
 
@@ -291,9 +289,9 @@ async def send_reservation_certificate_email(
     "/{reservation_id}/receipt",
     summary="Download payment receipt",
     description=(
-        "Génère et télécharge le Reçu de Paiement (premier acompte). "
-        "Disponible dès que le premier acompte est enregistré, "
-        "y compris quand la promotion n'a pas encore été reçue."
+        "Génère et télécharge le Reçu de Paiement (premier acompte reçu). "
+        "Disponible dès que le premier acompte est reçu, même si le seuil "
+        "d'émission de l'acte n'est pas encore atteint."
     ),
     response_class=Response,
 )
@@ -327,7 +325,9 @@ async def regenerate_acte(
     await acte_service.load_details(reservation_id)  # 404 if unknown
     result = await acte_service.generate_and_store(reservation_id, current_user.id)
     if result.status == "not_ready":
-        raise BusinessRuleError(message=result.error or "", rule="acte_not_ready")
+        raise BusinessRuleError(
+            message=result.error or "", rule=result.rule or "acte_not_ready"
+        )
     if result.status == "failed":
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -364,30 +364,62 @@ async def download_archived_acte(
 
 
 @router.post(
-    "/{reservation_id}/mark-promotion-received",
-    response_model=ReservationResponse,
-    summary="Marquer la promotion comme reçue",
+    "/{reservation_id}/payments",
+    response_model=ReservationPaymentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Enregistrer un encaissement",
     description=(
-        "Enregistre la réception du montant de la promotion sur une réservation engagée. "
-        "Après cela, l'acte de réservation peut être généré."
+        "Enregistre un encaissement sur une échéance d'une réservation engagée "
+        "(multipart : amount, paid_on, method, reference, installment_id, file "
+        "facultatif = justificatif). Un encaissement n'est jamais modifié ni "
+        "supprimé. Réservé au commercial auteur de la réservation et aux managers."
     ),
 )
-async def mark_promotion_received(
+async def record_reservation_payment(
     reservation_id: int,
-    data: MarkPromotionReceivedData,
+    data: Annotated[ReservationPaymentForm, Form()],
     current_user: CurrentUser,
-    reservation_service: ReservationServiceDep,
-    acte_service: ActeServiceDep,
-) -> ReservationResponse:
-    """Mark promotion amount as received; archive the deed it was blocking."""
-    reservation = await reservation_service.mark_promotion_received(
-        reservation_id=reservation_id,
-        data=data,
-        user_id=current_user.id,
+    payment_service: ReservationPaymentServiceDep,
+    file: Annotated[UploadFile | None, File()] = None,
+) -> ReservationPaymentResponse:
+    """Record a payment on an installment (proof of payment optional)."""
+    return await payment_service.record_payment(
+        reservation_id, data, file, current_user
     )
-    if await acte_service.latest_acte(reservation_id) is None:
-        await acte_service.generate_and_store(reservation_id, current_user.id)
-    return reservation
+
+
+@router.get(
+    "/{reservation_id}/payments",
+    response_model=list[ReservationPaymentResponse],
+    summary="Lister les encaissements",
+    description="Encaissements de la réservation, du plus ancien au plus récent.",
+)
+async def list_reservation_payments(
+    reservation_id: int,
+    current_user: CurrentUser,
+    payment_service: ReservationPaymentServiceDep,
+) -> list[ReservationPaymentResponse]:
+    """List the payments of a reservation (``paid_on``, ``id`` order)."""
+    return await payment_service.list_payments(reservation_id)
+
+
+@router.get(
+    "/{reservation_id}/financial-summary",
+    response_model=FinancialSummaryResponse,
+    summary="Montants de la réservation",
+    description=(
+        "Prix catalogue, prix total convenu, prix sur l'acte, écart, premier "
+        "acompte reçu, total encaissé, reste à payer, seuil d'émission de "
+        "l'acte et échéances avec leur montant reçu."
+    ),
+)
+async def get_financial_summary(
+    reservation_id: int,
+    current_user: CurrentUser,
+    payment_service: ReservationPaymentServiceDep,
+) -> FinancialSummaryResponse:
+    """Financial summary of a reservation."""
+    return await payment_service.financial_summary(reservation_id)
 
 
 @router.post(

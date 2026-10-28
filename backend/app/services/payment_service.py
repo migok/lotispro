@@ -1,12 +1,13 @@
 """Payment service — schedule creation and installment management."""
 
 import calendar
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
+from app.domain.reservation_amounts import to_cents
 from app.domain.schemas.payment import (
     InstallmentConfig,
     PaymentInstallmentResponse,
@@ -293,16 +294,17 @@ class PaymentService:
                 reservation_id=reservation.id,
             )
 
-    async def _send_payment_confirmation(
+    async def send_payment_confirmation(
         self,
         installment_id: int,
         amount: float,
-        paid_date: object,
+        paid_date: date | None,
         payment_type: str,
     ) -> None:
-        """Load full context and send payment confirmation email for any installment."""
-        from datetime import datetime
+        """Email the client the confirmation of one payment on an installment.
 
+        Skipped (logged) when the client has no email address.
+        """
         ctx = await self.payment_repo.get_installment_with_context(installment_id)
         if not ctx:
             return
@@ -320,16 +322,11 @@ class PaymentService:
             )
             return
 
-        # Compute total installments count and schedule total for the current type
-        all_insts = ctx.schedule.installments
-        type_insts = [i for i in all_insts if i.payment_type == payment_type]
-        total_installments = len(type_insts)
-        schedule_total = (
-            ctx.schedule.deposit_total
-            if payment_type == "deposit"
-            else ctx.schedule.balance_total
-        )
-        # Find installment number for the given installment_id
+        # Installments of the same type: count, total and number of this one.
+        type_insts = [
+            i for i in ctx.schedule.installments if i.payment_type == payment_type
+        ]
+        schedule_total = sum(to_cents(i.amount) for i in type_insts) / 100
         inst_match = next((i for i in type_insts if i.id == installment_id), None)
         installment_number = inst_match.installment_number if inst_match else 1
 
@@ -337,11 +334,11 @@ class PaymentService:
             client_name=client.name,
             client_email=client.email,
             amount=amount,
-            paid_date=paid_date if isinstance(paid_date, datetime) else None,
+            paid_date=paid_date,
             lot_numero=lot.numero,
             project_name=project.name,
             payment_type=payment_type,
             installment_number=installment_number,
-            total_installments=total_installments,
+            total_installments=len(type_insts),
             schedule_total=schedule_total,
         )

@@ -34,6 +34,7 @@ from app.infrastructure.database.repositories import (
     ReservationRepository,
     SaleRepository,
 )
+from app.services.payment_progress import payment_progress
 
 logger = get_logger(__name__)
 
@@ -1245,62 +1246,7 @@ class DashboardService:
             lot["reservation_id"] for lot in lots_data if "reservation_id" in lot
         ]
         if reservation_ids:
-            from sqlalchemy.orm import selectinload
-
-            sched_query = (
-                select(PaymentScheduleModel)
-                .where(PaymentScheduleModel.reservation_id.in_(reservation_ids))
-                .options(selectinload(PaymentScheduleModel.installments))
-            )
-            sched_result = await self.session.execute(sched_query)
-            schedules = sched_result.scalars().all()
-
-            payment_info: dict[int, dict] = {}
-            for sched in schedules:
-                deposit_paid = sum(
-                    i.amount
-                    for i in sched.installments
-                    if i.payment_type == "deposit" and i.status == "paid"
-                )
-                balance_paid = sum(
-                    i.amount
-                    for i in sched.installments
-                    if i.payment_type == "balance" and i.status == "paid"
-                )
-                deposit_paid_pct = (
-                    round(deposit_paid / sched.deposit_total * 100)
-                    if sched.deposit_total > 0
-                    else 0
-                )
-                balance_paid_pct = (
-                    round(balance_paid / sched.balance_total * 100)
-                    if sched.balance_total > 0
-                    else 0
-                )
-                # First pending deposit installment
-                pending_deposits = sorted(
-                    [
-                        i
-                        for i in sched.installments
-                        if i.payment_type == "deposit" and i.status == "pending"
-                    ],
-                    key=lambda i: i.due_date,
-                )
-                first_deposit_due = (
-                    pending_deposits[0].due_date if pending_deposits else None
-                )
-                first_deposit_days = None
-                if first_deposit_due is not None:
-                    due = first_deposit_due
-                    if due.tzinfo is None:
-                        due = due.replace(tzinfo=UTC)
-                    first_deposit_days = (due - now).days
-
-                payment_info[sched.reservation_id] = {
-                    "deposit_paid_pct": deposit_paid_pct,
-                    "balance_paid_pct": balance_paid_pct,
-                    "first_deposit_days": first_deposit_days,
-                }
+            payment_info = await payment_progress(self.session, reservation_ids, now)
 
             for lot in lots_data:
                 rid = lot.get("reservation_id")
