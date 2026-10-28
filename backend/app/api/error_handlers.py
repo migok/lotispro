@@ -11,6 +11,7 @@ from app.core.exceptions import (
     AuthenticationError,
     AuthorizationError,
     BusinessRuleError,
+    ConflictError,
     DatabaseError,
     NotFoundError,
     RateLimitError,
@@ -169,6 +170,17 @@ async def business_rule_error_handler(
     )
 
 
+async def conflict_error_handler(request: Request, exc: ConflictError) -> JSONResponse:
+    """Handle optimistic concurrency conflicts (stale data)."""
+    logger.info("Conflict", message=exc.message)
+
+    return create_error_response(
+        status_code=status.HTTP_409_CONFLICT,
+        error="CONFLICT",
+        message=exc.message,
+    )
+
+
 async def database_error_handler(request: Request, exc: DatabaseError) -> JSONResponse:
     """Handle database errors."""
     logger.error(
@@ -314,6 +326,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AuthenticationError, authentication_error_handler)
     app.add_exception_handler(AuthorizationError, authorization_error_handler)
     app.add_exception_handler(BusinessRuleError, business_rule_error_handler)
+    app.add_exception_handler(ConflictError, conflict_error_handler)
     app.add_exception_handler(DatabaseError, database_error_handler)
     app.add_exception_handler(RateLimitError, rate_limit_error_handler)
     app.add_exception_handler(AppException, app_exception_handler)

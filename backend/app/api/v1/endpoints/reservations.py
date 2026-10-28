@@ -20,12 +20,18 @@ from app.api.dependencies import (
     CommercialOrManager,
     CurrentUser,
     DocumentServiceDep,
+    EngagementEditServiceDep,
     NotificationServiceDep,
     ReservationPaymentServiceDep,
     ReservationServiceDep,
 )
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.domain.schemas.document import LotDocumentResponse
+from app.domain.schemas.engagement_edit import (
+    EngagementEdit,
+    EngagementEditResponse,
+    ReservationChangeResponse,
+)
 from app.domain.schemas.notification import NotificationResponse, NotifyRequest
 from app.domain.schemas.reservation import (
     ReservationCreate,
@@ -420,6 +426,47 @@ async def get_financial_summary(
 ) -> FinancialSummaryResponse:
     """Financial summary of a reservation."""
     return await payment_service.financial_summary(reservation_id)
+
+
+@router.put(
+    "/{reservation_id}/engagement",
+    response_model=EngagementEditResponse,
+    summary="Modifier une réservation engagée",
+    description=(
+        "Modifie le prix total convenu, le prix figurant sur l'acte, le moment "
+        "ou la date de l'écart, les notes et les échéances non encore reçues "
+        "(motif obligatoire, expected_updated_at = updated_at du récapitulatif). "
+        "409 si la réservation a changé entre-temps. Renvoie le récapitulatif "
+        "des montants et le résultat de la nouvelle version de l'acte. Réservé "
+        "au commercial auteur de la réservation et aux managers."
+    ),
+)
+async def edit_engaged_reservation(
+    reservation_id: int,
+    data: EngagementEdit,
+    current_user: CurrentUser,
+    edit_service: EngagementEditServiceDep,
+) -> EngagementEditResponse:
+    """Edit an engaged reservation (audit trail in ``reservation_changes``)."""
+    return await edit_service.edit(reservation_id, data, current_user)
+
+
+@router.get(
+    "/{reservation_id}/changes",
+    response_model=list[ReservationChangeResponse],
+    summary="Historique des modifications",
+    description=(
+        "Modifications de la réservation engagée, de la plus récente à la plus "
+        "ancienne (auteur, date, motif, champs modifiés avant / après)."
+    ),
+)
+async def list_reservation_changes(
+    reservation_id: int,
+    current_user: CurrentUser,
+    edit_service: EngagementEditServiceDep,
+) -> list[ReservationChangeResponse]:
+    """Edit history of a reservation, newest first."""
+    return await edit_service.list_changes(reservation_id)
 
 
 @router.post(
