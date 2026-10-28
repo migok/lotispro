@@ -111,6 +111,31 @@ describe('NotifyClientPanel', () => {
     expect(screen.getByRole('button', { name: 'Envoyer' })).toBeEnabled()
   })
 
+  it('falls back to "erreur inconnue" for a failed row without error', async () => {
+    mockNotify([row('email', 'failed', null)])
+    const user = userEvent.setup()
+    renderPanel()
+
+    await user.click(screen.getByRole('button', { name: 'Envoyer' }))
+
+    expect(await screen.findByText('Échec : erreur inconnue')).toBeInTheDocument()
+  })
+
+  it('ignores "Fermer" and the overlay while sending, so onClose fires once', async () => {
+    let resolveRequest
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => { resolveRequest = resolve })))
+    const user = userEvent.setup()
+    const onClose = renderPanel()
+
+    await user.click(screen.getByRole('button', { name: 'Envoyer' }))
+    expect(screen.getByRole('button', { name: 'Fermer' })).toBeDisabled()
+    await user.click(screen.getByRole('dialog', { name: 'Notifier le client' }).parentElement)
+    expect(onClose).not.toHaveBeenCalled()
+
+    resolveRequest({ ok: true, status: 200, json: () => Promise.resolve([row('email', 'sent')]) })
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+
   it('closes without sending anything on "Fermer"', async () => {
     const fetchMock = mockNotify([])
     const user = userEvent.setup()

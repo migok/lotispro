@@ -11,10 +11,10 @@ function mockFetch(body) {
 }
 
 const ROWS = [
-  { id: 3, kind: 'option_confirmee', channel: 'email', recipient: 'client', status: 'sent', error: null, sent_at: '2026-10-28T09:12:00Z', sent_by_user_id: 2 },
-  { id: 2, kind: 'reservation_a_finaliser', channel: 'sms', recipient: 'client', status: 'not_configured', error: 'x', sent_at: '2026-10-27T09:12:00Z', sent_by_user_id: null },
-  { id: 1, kind: 'rappel_expiration', channel: 'whatsapp', recipient: 'commercial', status: 'failed', error: 'Boîte pleine', sent_at: '2026-10-26T09:12:00Z', sent_by_user_id: 2 },
-  { id: 0, kind: 'reservation_engagee', channel: 'email', recipient: 'client', status: 'sent', error: null, sent_at: '2026-10-25T09:12:00Z', sent_by_user_id: 2 },
+  { id: 3, kind: 'option_confirmee', channel: 'email', recipient: 'client', status: 'sent', error: null, sent_at: '2026-10-28T09:12:00Z', sent_by_user_id: 2, sent_by_name: 'Karim Alaoui' },
+  { id: 2, kind: 'reservation_a_finaliser', channel: 'sms', recipient: 'client', status: 'not_configured', error: 'x', sent_at: '2026-10-27T09:12:00Z', sent_by_user_id: null, sent_by_name: null },
+  { id: 1, kind: 'rappel_expiration', channel: 'whatsapp', recipient: 'commercial', status: 'failed', error: 'Boîte pleine', sent_at: '2026-10-26T09:12:00Z', sent_by_user_id: 2, sent_by_name: 'Karim Alaoui' },
+  { id: 0, kind: 'reservation_engagee', channel: 'email', recipient: 'client', status: 'sent', error: null, sent_at: '2026-10-25T09:12:00Z', sent_by_user_id: 2, sent_by_name: 'Karim Alaoui' },
 ]
 
 describe('NotificationHistory', () => {
@@ -37,6 +37,9 @@ describe('NotificationHistory', () => {
     expect(screen.getByText('WhatsApp')).toBeInTheDocument()
     expect(screen.getByText('Commercial')).toBeInTheDocument()
     expect(screen.getByText(/28\/10\/2026/)).toBeInTheDocument()
+    expect(screen.getAllByText('Karim Alaoui')).toHaveLength(3)
+    expect(screen.getByText('Automatique')).toBeInTheDocument()
+    expect(screen.queryByText(/Utilisateur n°/)).not.toBeInTheDocument()
   })
 
   it('shows the empty state', async () => {

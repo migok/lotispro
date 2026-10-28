@@ -25,4 +25,4 @@ async def list_notifications(
     if client_id is None and lot_id is None:
         raise ValidationError("Indiquez client_id ou lot_id.")
     rows = await notification_service.list(client_id, lot_id)
-    return [NotificationResponse.model_validate(row) for row in rows]
+    return await notification_service.responses(rows)

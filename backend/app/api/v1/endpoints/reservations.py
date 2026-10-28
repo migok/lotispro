@@ -410,4 +410,4 @@ async def notify_reservation(
     rows = await notification_service.notify(
         reservation_id, data.channels, data.kind, current_user.id
     )
-    return [NotificationResponse.model_validate(row) for row in rows]
+    return await notification_service.responses(rows)

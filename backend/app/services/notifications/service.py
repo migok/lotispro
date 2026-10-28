@@ -3,11 +3,12 @@
 from datetime import datetime
 from typing import Literal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
-from app.domain.schemas.notification import Channel
+from app.domain.schemas.notification import Channel, NotificationResponse
 from app.infrastructure.database.models import NotificationModel, UserModel
 from app.infrastructure.database.repositories import (
     LotRepository,
@@ -204,6 +205,24 @@ class NotificationService:
         except Exception:
             logger.exception("Notification channel failed", channel=name)
             return DeliveryResult(status="failed", error=_UNEXPECTED_ERROR)
+
+    async def responses(
+        self, rows: list[NotificationModel]
+    ) -> list[NotificationResponse]:
+        """History rows with the sender's name (one query for all senders)."""
+        sender_ids = {r.sent_by_user_id for r in rows if r.sent_by_user_id is not None}
+        names: dict[int, str] = {}
+        if sender_ids:
+            result = await self.session.execute(
+                select(UserModel.id, UserModel.name).where(UserModel.id.in_(sender_ids))
+            )
+            names = dict(result.all())
+        return [
+            NotificationResponse.model_validate(row).model_copy(
+                update={"sent_by_name": names.get(row.sent_by_user_id)}
+            )
+            for row in rows
+        ]
 
     # Last in the class body: once defined, ``list`` names this method there.
     async def list(

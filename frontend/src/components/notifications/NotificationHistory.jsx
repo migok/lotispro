@@ -59,7 +59,7 @@ export default function NotificationHistory({ clientId, lotId }) {
                   <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{n.error}</div>
                 )}
               </td>
-              <td>{n.sent_by_user_id ? `Utilisateur n°${n.sent_by_user_id}` : '—'}</td>
+              <td>{n.sent_by_name || 'Automatique'}</td>
             </tr>
           ))}
         </tbody>

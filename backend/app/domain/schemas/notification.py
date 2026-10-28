@@ -54,3 +54,4 @@ class NotificationResponse(BaseSchema):
     deadline_at: datetime | None = None
     sent_at: datetime
     sent_by_user_id: int | None = None
+    sent_by_name: str | None = None

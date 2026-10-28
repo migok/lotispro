@@ -41,6 +41,7 @@ RESPONSE_KEYS = {
     "deadline_at",
     "sent_at",
     "sent_by_user_id",
+    "sent_by_name",
 }
 
 
@@ -457,6 +458,44 @@ async def test_list_by_client_and_lot(
     assert [n["id"] for n in by_lot.json()] == [other.json()[0]["id"]]
     assert both.json() == []
     assert lot_a.id != lot_b.id
+
+
+async def test_list_returns_sender_name_or_null(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    manager: UserModel,
+    auth_headers: Headers,
+    sent_emails: SentEmails,
+) -> None:
+    headers = auth_headers(manager)
+    lot, reservation_id = await _lot_in("option", client, db_session, manager, headers)
+    sent = (
+        await _notify(client, headers, reservation_id, "option_confirmee", ["email"])
+    ).json()[0]
+    # A row without sender (e.g. a future automatic reminder).
+    automatic = NotificationModel(
+        client_id=sent["client_id"],
+        lot_id=lot.id,
+        reservation_id=reservation_id,
+        recipient="client",
+        channel="email",
+        kind="rappel_expiration",
+        status="sent",
+        sent_at=datetime.now(UTC) + timedelta(minutes=1),
+        sent_by_user_id=None,
+    )
+    db_session.add(automatic)
+    await db_session.commit()
+
+    response = await client.get(
+        "/api/notifications", headers=headers, params={"lot_id": lot.id}
+    )
+
+    assert response.status_code == 200, response.text
+    by_id = {n["id"]: n for n in response.json()}
+    assert by_id[sent["id"]]["sent_by_name"] == manager.name
+    assert by_id[automatic.id]["sent_by_name"] is None
+    assert sent["sent_by_name"] == manager.name
 
 
 async def test_commercial_phone_in_message(

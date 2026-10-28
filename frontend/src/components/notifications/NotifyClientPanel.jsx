@@ -27,7 +27,7 @@ export default function NotifyClientPanel({ reservationId, kind, client, onClose
   const toastFor = (row) => {
     const label = NOTIFICATION_CHANNEL_LABELS[row.channel] ?? row.channel;
     if (row.status === 'sent') toast.success(`${label} envoyé`);
-    else if (row.status === 'failed') toast.error(`Échec : ${row.error}`);
+    else if (row.status === 'failed') toast.error(`Échec : ${row.error || 'erreur inconnue'}`);
     else toast.warning('Canal non configuré');
   };
 
@@ -44,7 +44,7 @@ export default function NotifyClientPanel({ reservationId, kind, client, onClose
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={sending ? undefined : onClose}>
       <div
         className="modal"
         role="dialog"
@@ -79,7 +79,7 @@ export default function NotifyClientPanel({ reservationId, kind, client, onClose
           </div>
         </div>
         <div className="modal-footer">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Fermer</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={sending}>Fermer</button>
           <button
             type="button"
             className="btn btn-primary"
