@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, select
+from sqlalchemy import Select, and_, select
 
 from app.domain.client_profile import acte_address_of
 from app.domain.schemas.reservation import ReservationFilter
@@ -19,10 +19,29 @@ from app.infrastructure.database.repositories.reservation_payment_repository imp
 )
 
 
+def reservation_for_update(reservation_id: int) -> Select:
+    """The reservation, row locked (``FOR UPDATE``), values re-read.
+
+    First lock of every write on an engaged reservation (payments, edit,
+    solde). Single lock order: reservation → lot → installments.
+    """
+    return (
+        select(ReservationModel)
+        .where(ReservationModel.id == reservation_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
 class ReservationRepository(BaseRepository[ReservationModel]):
     """Repository for reservation data access operations."""
 
     model = ReservationModel
+
+    async def get_for_update(self, reservation_id: int) -> ReservationModel | None:
+        """The reservation, row locked (see :func:`reservation_for_update`)."""
+        result = await self.session.execute(reservation_for_update(reservation_id))
+        return result.scalar_one_or_none()
 
     async def get_filtered(
         self,

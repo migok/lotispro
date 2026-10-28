@@ -878,6 +878,8 @@ class TestBusinessRules:
             {"gap_due_timing": "date", "gap_due_date": None},
             {"agreed_total_price": 0},
             {"expected_updated_at": None},
+            {"agreed_total_price": 0.004},
+            {"sale_price": 0.004},
         ],
     )
     async def test_validation_422(
@@ -899,6 +901,62 @@ class TestBusinessRules:
 
         assert response.status_code == 422, response.text
         assert await _changes(client, headers, reservation_id) == []
+
+    async def test_sub_cent_installment_amount_422(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        headers = auth_headers(commercial)
+        _, reservation_id = await _engaged(client, db_session, manager, headers)
+        summary = await _summary(client, headers, reservation_id)
+        body = _body(summary, notes="x")
+        body["installments"][0]["amount"] = 0.004
+
+        response = await _edit(client, headers, reservation_id, body)
+
+        assert response.status_code == 422, response.text
+        assert "Le montant doit être d'au moins 0,01 MAD." in response.text
+        assert await _changes(client, headers, reservation_id) == []
+
+    async def test_received_gap_timing_cannot_change(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        headers = auth_headers(commercial)
+        _, reservation_id = await _engaged(client, db_session, manager, headers)
+        summary = await _summary(client, headers, reservation_id)
+        await _pay(client, headers, reservation_id, _inst(summary, "gap")["id"], 50000)
+        summary = await _summary(client, headers, reservation_id)
+        message = "L'écart est déjà entièrement reçu : sa date ne peut plus changer."
+
+        await self._assert_refused(
+            client,
+            headers,
+            reservation_id,
+            _body(
+                summary,
+                gap_due_timing="date",
+                gap_due_date=(_today() + timedelta(days=90)).isoformat(),
+            ),
+            message,
+            "gap_already_received",
+        )
+        await self._assert_refused(
+            client,
+            headers,
+            reservation_id,
+            _body(summary, gap_due_timing="debut"),
+            message,
+            "gap_already_received",
+        )
 
     async def test_gap_date_message(
         self,
@@ -1019,6 +1077,52 @@ class TestActeNewVersion:
         assert await _actes(db_session, reservation_id) == []
 
 
+class TestActeThresholdCrossing:
+    async def test_edit_crossing_the_threshold_archives_the_first_deed(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        headers = auth_headers(commercial)
+        # First payment 40 000 < 10 % of 500 000: no deed at engagement.
+        # Deed 380 000 → gap 120 000; deposit 210 000, balance 65 000 × 2.
+        _, reservation_id = await _engaged(
+            client,
+            db_session,
+            manager,
+            headers,
+            {**REFERENCE, "guarantee_amount": 40000, "sale_price": 380000},
+        )
+        summary = await _summary(client, headers, reservation_id)
+        assert summary["acte_available"] is False
+        assert await _actes(db_session, reservation_id) == []
+
+        # Agreed 400 000 → threshold 40 000 reached; deed price unchanged, the
+        # gap drops to 20 000 so the other installments stay as they are.
+        response = await _edit(
+            client,
+            headers,
+            reservation_id,
+            _body(summary, agreed_total_price=400000),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["acte_available"] is True
+        assert response.json()["acte_status"] == "stored"
+        assert len(await _actes(db_session, reservation_id)) == 1
+
+        # Still available, a deed exists, deed price unchanged: no new deed.
+        again = await _edit(
+            client, headers, reservation_id, _body(response.json(), notes="Suite")
+        )
+        assert again.status_code == 200, again.text
+        assert again.json()["acte_status"] is None
+        assert len(await _actes(db_session, reservation_id)) == 1
+
+
 class TestChangesHistory:
     async def test_history_newest_first(
         self,
@@ -1062,7 +1166,13 @@ class TestChangesHistory:
 
 
 class TestLocks:
-    def test_lock_queries_compile_to_for_update(self) -> None:
+    """One lock order for payments, edit and solde: reservation → lot →
+    installments."""
+
+    def test_lock_queries_compile(self) -> None:
+        from app.infrastructure.database.repositories.reservation_repository import (
+            reservation_for_update as shared_reservation_for_update,
+        )
         from app.services.engagement_edit_service import (
             installments_for_update,
             lot_for_update,
@@ -1070,9 +1180,97 @@ class TestLocks:
         )
 
         dialect = postgresql.dialect()
-        for query in (
-            lot_for_update(1),
-            reservation_for_update(1),
-            installments_for_update(1),
+
+        def sql(query: Any) -> str:
+            return str(query.compile(dialect=dialect))
+
+        assert reservation_for_update is shared_reservation_for_update
+        assert sql(reservation_for_update(1)).endswith("FOR UPDATE")
+        assert sql(lot_for_update(1)).endswith("FOR NO KEY UPDATE")
+        assert sql(installments_for_update(1)).endswith(
+            "FOR UPDATE OF payment_installments"
+        )
+
+    async def test_edit_locks_reservation_then_lot_then_installments(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.services import engagement_edit_service as module
+
+        headers = auth_headers(commercial)
+        _, reservation_id = await _engaged(client, db_session, manager, headers)
+        summary = await _summary(client, headers, reservation_id)
+        calls: list[str] = []
+        for name in (
+            "reservation_for_update",
+            "lot_for_update",
+            "installments_for_update",
         ):
-            assert "FOR UPDATE" in str(query.compile(dialect=dialect))
+            original = getattr(module, name)
+
+            def spy(*args: Any, _name: str = name, _original: Any = original) -> Any:
+                calls.append(_name)
+                return _original(*args)
+
+            monkeypatch.setattr(module, name, spy)
+
+        response = await _edit(
+            client, headers, reservation_id, _body(summary, notes="x")
+        )
+
+        assert response.status_code == 200, response.text
+        assert calls == [
+            "reservation_for_update",
+            "lot_for_update",
+            "installments_for_update",
+        ]
+
+    async def test_solde_locks_reservation_before_reading_payments(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.infrastructure.database.repositories import (
+            ReservationPaymentRepository,
+            ReservationRepository,
+        )
+
+        headers = auth_headers(commercial)
+        paid_in_full = {**REFERENCE, "guarantee_amount": 500000, "sale_price": 500000}
+        lot, reservation_id = await _engaged(
+            client, db_session, manager, headers, paid_in_full
+        )
+        calls: list[tuple[str, int]] = []
+        total = ReservationPaymentRepository.total_for_reservation
+
+        async def spy_total(self: Any, rid: int, **kwargs: Any) -> float:
+            calls.append(("total", rid))
+            return await total(self, rid, **kwargs)
+
+        lock = getattr(ReservationRepository, "get_for_update", None)
+        assert lock is not None, "ReservationRepository.get_for_update is missing"
+
+        async def spy_lock(self: Any, rid: int) -> Any:
+            calls.append(("lock", rid))
+            return await lock(self, rid)
+
+        monkeypatch.setattr(ReservationRepository, "get_for_update", spy_lock)
+        monkeypatch.setattr(
+            ReservationPaymentRepository, "total_for_reservation", spy_total
+        )
+
+        response = await client.post(
+            f"/api/lots/{lot.id}/transitions/solde", headers=headers, json={}
+        )
+
+        assert response.status_code == 200, response.text
+        assert calls[:2] == [("lock", reservation_id), ("total", reservation_id)]

@@ -3,13 +3,22 @@
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
+from app.domain.reservation_amounts import to_cents
 from app.domain.schemas.common import BaseSchema
 from app.domain.schemas.reservation import GAP_DUE_TIMING
 from app.domain.schemas.reservation_payment import FinancialSummaryResponse
 
 GAP_DATE_REQUIRED = "Indiquez la date de l'écart."
+MIN_AMOUNT_MESSAGE = "Le montant doit être d'au moins 0,01 MAD."
+
+
+def _at_least_one_cent(value: float) -> float:
+    """Refuse an amount that rounds to 0 cents (``0.004`` passes ``gt=0``)."""
+    if to_cents(value) < 1:
+        raise ValueError(MIN_AMOUNT_MESSAGE)
+    return value
 
 
 class InstallmentEdit(BaseSchema):
@@ -18,6 +27,8 @@ class InstallmentEdit(BaseSchema):
     id: int
     amount: float = Field(gt=0, description="Montant de l'échéance")
     due_date: date = Field(description="Date d'échéance")
+
+    _amount_in_cents = field_validator("amount")(_at_least_one_cent)
 
 
 class EngagementEdit(BaseSchema):
@@ -43,6 +54,10 @@ class EngagementEdit(BaseSchema):
     )
     expected_updated_at: datetime = Field(
         description="updated_at lu dans le récapitulatif (contrôle de concurrence)"
+    )
+
+    _amounts_in_cents = field_validator("agreed_total_price", "sale_price")(
+        _at_least_one_cent
     )
 
     @model_validator(mode="after")

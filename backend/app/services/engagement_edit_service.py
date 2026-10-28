@@ -8,11 +8,14 @@ editable: lot, client, status, payments, first payment.
 Everything is checked under row locks before anything is written, then the
 edit is saved in one transaction with a ``reservation_changes`` row holding
 only the changed fields (before / after). A new deed version is generated
-when the deed price changes (never fails the edit).
+when the deed price changes, and the first deed when the edit makes the
+reservation reach the paid threshold (never fails the edit).
 
-Lock order: lot, reservation, installments. Payments (Task 6) lock the
-reservation then the installment, so both paths take shared rows in the same
-order.
+Single lock order for every write on an engaged reservation — payments
+(Task 6), this edit and the solde transition: reservation (``FOR UPDATE``)
+→ lot → installments. The edit locks the lot ``FOR NO KEY UPDATE``: it
+blocks a concurrent status change but not the ``FOR KEY SHARE`` a payment
+takes on the lot when it inserts a proof document (FK ``lot_documents.lot_id``).
 """
 
 from dataclasses import dataclass
@@ -46,7 +49,6 @@ from app.infrastructure.database.models import (
     LotModel,
     PaymentInstallmentModel,
     PaymentScheduleModel,
-    ReservationModel,
     UserModel,
     utc_now,
 )
@@ -55,6 +57,9 @@ from app.infrastructure.database.repositories import (
     ReservationChangeRepository,
     ReservationPaymentRepository,
     ReservationRepository,
+)
+from app.infrastructure.database.repositories.reservation_repository import (
+    reservation_for_update,
 )
 from app.services.acte_service import ActeService
 from app.services.reservation_payment_service import ReservationPaymentService
@@ -65,21 +70,15 @@ STALE_MESSAGE = "La réservation a été modifiée entre-temps. Rechargez la fic
 
 
 def lot_for_update(lot_id: int) -> Select:
-    """The lot, row locked: no transition can change its status meanwhile."""
+    """The lot, ``FOR NO KEY UPDATE`` (taken after the reservation lock).
+
+    No transition can change the lot's status meanwhile; a payment's
+    ``FOR KEY SHARE`` (proof document FK) is not blocked.
+    """
     return (
         select(LotModel)
         .where(LotModel.id == lot_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-
-
-def reservation_for_update(reservation_id: int) -> Select:
-    """The reservation, row locked (also serialises with payments)."""
-    return (
-        select(ReservationModel)
-        .where(ReservationModel.id == reservation_id)
-        .with_for_update()
+        .with_for_update(key_share=True)
         .execution_options(populate_existing=True)
     )
 
@@ -183,13 +182,13 @@ class EngagementEditService:
                 )
             )
 
-        # ── Locks: lot, reservation, installments ────────────────────────
-        lot = (
-            await self.session.execute(lot_for_update(found.lot_id))
-        ).scalar_one_or_none()
+        # ── Locks: reservation, lot, installments ────────────────────────
         reservation = (
             await self.session.execute(reservation_for_update(reservation_id))
         ).scalar_one()
+        lot = (
+            await self.session.execute(lot_for_update(reservation.lot_id))
+        ).scalar_one_or_none()
         if (
             lot is None
             or lot.status != "reservation_engagee"
@@ -294,6 +293,10 @@ class EngagementEditService:
             position,
             timing=data.gap_due_timing,
             gap_date=gap_date,
+            timing_changed=(
+                data.gap_due_timing != reservation.gap_due_timing
+                or gap_date != reservation.gap_due_date
+            ),
             non_gap_days={i.id: (i.payment_type, new_state[i.id][1]) for i in non_gap},
             engaged_on=_utc(schedule.created_at).date() if schedule else None,
         )
@@ -335,6 +338,9 @@ class EngagementEditService:
         old_acte_cents = to_cents(
             reservation.sale_price or reservation.agreed_total_price or lot.price or 0.0
         )
+        was_available = (
+            await self.acte_service.acte_readiness(reservation_id)
+        ).available
 
         # ── Writes ───────────────────────────────────────────────────────
         now = utc_now()
@@ -392,10 +398,16 @@ class EngagementEditService:
             fields=sorted(after),
         )
 
-        # A new deed version when the printed price changes (R4 unchanged):
-        # generate_and_store re-checks the threshold and never raises.
+        # Deed (generate_and_store re-checks the threshold and never raises):
+        # a new version when the printed price changes (R4 unchanged), or the
+        # first deed when the edit makes the reservation reach the threshold
+        # (e.g. a lower agreed total) and none was archived yet.
         acte_status = None
-        if acte_cents != old_acte_cents:
+        if acte_cents != old_acte_cents or (
+            not was_available
+            and (await self.acte_service.acte_readiness(reservation_id)).available
+            and await self.acte_service.latest_acte(reservation_id) is None
+        ):
             acte_status = (
                 await self.acte_service.generate_and_store(reservation_id, user.id)
             ).status
@@ -422,14 +434,17 @@ class EngagementEditService:
         *,
         timing: str,
         gap_date: date | None,
+        timing_changed: bool,
         non_gap_days: dict[int, tuple[str, date]],
         engaged_on: date | None,
     ) -> _Line:
         """Planned ``gap`` installment: amount from the gap, due date from R3.
 
-        A fully received gap installment keeps its amount and date; a gap
-        installment cannot go below what it received (a gap of 0 deletes it
-        only when nothing was received on it).
+        A fully received gap installment keeps its amount and date, so its
+        timing / date cannot change either (the reservation and the
+        installment would disagree); a gap installment cannot go below what
+        it received (a gap of 0 deletes it only when nothing was received on
+        it).
         """
         old = (
             (to_cents(gap_inst.amount), _utc(gap_inst.due_date).date())
@@ -448,6 +463,14 @@ class EngagementEditService:
                             "reçue : son montant ne peut plus changer."
                         ),
                         rule="installment_already_received",
+                    )
+                if timing_changed:
+                    raise BusinessRuleError(
+                        message=(
+                            "L'écart est déjà entièrement reçu : sa date ne "
+                            "peut plus changer."
+                        ),
+                        rule="gap_already_received",
                     )
                 return _Line(gap_inst, old, old)
         if gap_cents <= 0:

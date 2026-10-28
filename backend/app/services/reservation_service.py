@@ -1138,7 +1138,12 @@ class ReservationService:
                 rule="no_active_reservation",
             )
 
-        reservation = await self.reservation_repo.get_by_id(lot.current_reservation_id)
+        # Locked first (order reservation → lot → installments, shared with
+        # payments and the engagement edit): the agreed total and the payments
+        # read below cannot change until the sale is created.
+        reservation = await self.reservation_repo.get_for_update(
+            lot.current_reservation_id
+        )
         if not reservation:
             raise NotFoundError("Reservation", lot.current_reservation_id)
 
