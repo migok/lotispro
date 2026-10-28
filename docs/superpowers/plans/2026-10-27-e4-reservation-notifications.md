@@ -19,7 +19,7 @@
 | E4-T2 Service de notifications | #31 | T1 (pièce jointe de l'acte) | après T1 |
 | E4-T3 UI notifications | #32 | T2 | après T2 |
 | E4-T4 Rappels d'expiration | #33 | T2 | après T2 (parallélisable avec T3) |
-| E4-T5 Modifier une réservation engagée | #52 | T1 (Q4, Q5 répondus) | après T1 |
+| E4-T5 Modifier une réservation engagée (Tasks 5-9) | #52 | T1-T2, spec E4-T5 validée le 2026-10-28 | après T4 |
 
 **Après le rebase sur `dev` (E3 fusionné)**, relire les références de fichiers/lignes des tâches T1-T5 : elles ont été écrites contre `origin/feature/e3-statuts-edl` (`0b4a036`).
 
@@ -266,14 +266,101 @@ git commit -m "fix: embed DejaVu Unicode font in reservation PDFs"
 
 ---
 
-### Task 5 (E4-T5, #52): Modifier une réservation engagée — à détailler
+## E4-T5 (#52) — Modifier une réservation engagée, encaissements, seuil de l'acte
 
-Hors spec à ce jour ; périmètre et critères dans l'issue #52 (montants : prix catalogue, prix total convenu, prix figurant sur l'acte, écart à régulariser, premier acompte reçu ; échéance de l'écart au début / à la fin / à date précise ; reste à payer = prix total convenu − paiements reçus ; refus de solder tant qu'une somme reste due ; historique avant/après ; nouvelle version d'acte si les données de l'acte changent).
+Spec : section « E4-T5 » de la spec E4 (validée le 2026-10-28 : justificatif facultatif ; seuil d'émission de l'acte réglable par projet, défaut 10 %). E4-T5 est découpée en Tasks 5 à 9 (une relecture chacune). Migration unique **`0025`** (Task 5).
 
-Prérequis avant d'écrire les étapes :
-1. Q4 et Q5 répondus (voir « Décisions à confirmer ») ; Q6 avec défaut non bloquant.
-2. T1 livré (versions d'actes via `ActeService.generate_and_store`).
-3. Ajout d'une section E4-T5 dans la spec E4 (validée par l'utilisateur), puis plan détaillé en sous-tâches (probablement : T5a modèle financier + migration `0025` ; T5b API de modification + historique ; T5c écrans engagement/modification/échéancier ; T5d règle de solde).
+**Décisions de conception (rulings du contrôleur, à signaler à l'utilisateur) :**
+- R1 — Sans `payment_plan` à l'engagement, un échéancier minimal est quand même créé : une échéance `balance` « Solde » du montant hors écart, échéance = date d'engagement (modifiable ensuite), + l'échéance `gap` si écart > 0. Raison : l'écart et le reste doivent toujours se suivre par échéances.
+- R2 — Répartition : `N = convenu − premier acompte − écart` ; `deposit_total = min(N, max(0, convenu × deposit_pct / 100 − premier acompte − (écart si moment = debut)))` ; `balance_total = N − deposit_total`. Exemple de référence (50 %) : 150 000 acompte + 200 000 solde + 50 000 écart = 400 000.
+- R3 — Échéance de l'écart : `debut` → date d'engagement ; `fin` → date de la dernière échéance `balance` ; `date` → `gap_due_date`. L'échéance `gap` n'est pas soumise à l'ordre acompte → solde.
+- R4 — Montant « avances » imprimé sur l'acte = premier acompte + encaissements affectés aux échéances `deposit`/`balance` (l'écart, hors acte, n'y figure pas), plafonné au prix figurant sur l'acte ; date = date du dernier de ces encaissements ; solde imprimé = prix sur l'acte − avances.
+- R5 — Montants comparés au centime : helper `to_cents(x: float) -> int` (= `round(x * 100)`), aucune égalité directe entre floats.
+- R6 — `PATCH /api/payments/installments/{id}` n'accepte plus `status="paid"` (400 « Enregistrez un encaissement pour cette échéance. », règle `use_payment_record`) ; il ne sert plus qu'aux notes. Les deux appels frontend sont remplacés en Task 8.
+
+### Task 5 (E4-T5a): Modèle financier, migration 0025, engagement
+
+**Files:**
+- Create: `backend/alembic/versions/0025_engaged_reservation_finance.py` — `reservations.agreed_total_price` Float null, `reservations.gap_due_timing` String(10) null (CHECK `debut|fin|date`), `reservations.gap_due_date` Date null, `projects.acte_min_paid_pct` Float non null défaut 10 (CHECK 0-100) ; `valid_payment_type` → `deposit|balance|gap` ; `valid_installment_status` → `pending|partial|paid` (drop + create même nom) ; table `reservation_payments` (colonnes de la spec, FK `installment_id` null, FK `document_id` null, index `reservation_id`) ; table `reservation_changes` (spec, index `reservation_id`). `downgrade` complet.
+- Create: `backend/app/domain/reservation_amounts.py` (pur, sans ORM)
+- Modify: `models.py`, `domain/schemas/reservation.py`, `domain/schemas/project.py` (+ réponse projet), `services/reservation_service.py` (`_apply_engagement`, `finaliser_engage`, `_create_payment_schedule_from_plan`, `engagee_to_soldee`), `services/project_service.py` (`update_workflow`), `services/payment_service.py` (R6)
+- Create: `backend/app/infrastructure/database/repositories/reservation_payment_repository.py`
+- Test: `backend/app/tests/unit/test_domain/test_reservation_amounts.py`, `backend/app/tests/integration/test_api/test_engagement_amounts.py`
+
+**Interfaces:**
+- Produces (`reservation_amounts.py`): `to_cents(x: float) -> int` ; `gap_amount(agreed: float, acte: float) -> float` (≥ 0) ; `split_schedule(agreed: float, first_payment: float, gap: float, deposit_pct: float | None, gap_timing: str) -> tuple[float, float]` (R2 ; `deposit_pct=None` = R1, tout en solde) ; `installment_status(amount: float, received: float) -> Literal["pending", "partial", "paid"]` ; `remaining(agreed: float, total_received: float) -> float` ; `validate_amounts(agreed: float, acte: float, first_payment: float) -> None` (lève `BusinessRuleError` : acte > convenu → « Le prix figurant sur l'acte ne peut pas dépasser le prix total convenu. » règle `acte_price_above_agreed` ; premier acompte > convenu → règle `first_payment_above_agreed`).
+- Produces (schémas) : `EngageBaseData` gagne `agreed_total_price: float | None` (défaut = prix catalogue), `gap_due_timing: Literal["debut","fin","date"] = "fin"`, `gap_due_date: date | None` (requis si `date`, sinon 422 « Indiquez la date de l'écart. ») ; `sale_price` garde son nom (= prix figurant sur l'acte) ; `promotion_paid_timing` et `promotion_received` **retirés** des schémas d'entrée. `ReservationResponse` expose `agreed_total_price`, `gap_due_timing`, `gap_due_date`, `gap_amount`. `ProjectWorkflowUpdate` gagne `acte_min_paid_pct: float | None` (0-100) ; la réponse projet l'expose.
+- Produces (repository) : `ReservationPaymentRepository.create(**fields)`, `list_for_reservation(reservation_id)`, `total_for_reservation(reservation_id, *, installment_types: set[str] | None = None) -> float`, `total_for_installment(installment_id) -> float`.
+- Comportement : à chaque engagement (`direct_engage`, `option_engage`, `engage`), la réservation reçoit `agreed_total_price`, `gap_due_*` ; un encaissement n° 1 (`installment_id` null, montant = `guarantee_amount`, `paid_on` = date d'engagement, `method` = `payment_type`) est créé ; l'échéancier est toujours créé (R1-R3) ; pour `engage` avec `guarantee_action=deduct`, la garantie déjà versée est le premier acompte (même règle). Solde : refus si `remaining > 0` (message de la spec, règle `amount_still_due`) ; `sales.price` = prix total convenu (le `price` libre du corps est ignoré).
+
+- [ ] **Step 1: Tests (RED)** — unitaires `reservation_amounts` (exemple de référence : `split_schedule(500000, 100000, 50000, 50, "fin") == (150000, 200000)` ; sans plan `(0, 350000)` ; écart au début ; acompte > part acompte → deposit 0 ; statuts pending/partial/paid au centime ; `validate_amounts` messages). Intégration : `test_direct_engage_records_first_payment_and_schedule` (exemple de référence : encaissement n° 1 = 100 000, échéances deposit+balance = 350 000, gap = 50 000 due à la dernière date balance) ; `test_engage_without_plan_creates_minimal_schedule` ; `test_gap_date_requires_date_422` ; `test_acte_price_above_agreed_400` ; `test_solde_refused_while_amount_due` (message exact, montant formaté) ; `test_solde_sale_price_is_agreed_total` ; `test_patch_installment_paid_rejected` (R6) ; `test_project_acte_min_paid_pct_default_and_update` (défaut 10, 101 → 422).
+- [ ] **Step 2: Lancer, vérifier l'échec.**
+- [ ] **Step 3: Migration + modèles** ; `alembic upgrade 0024:0025 --sql` (URL factice) relu ; **ne pas appliquer** (l'utilisateur décide).
+- [ ] **Step 4: Domaine, repository, services, schémas.** Adapter les tests existants qui envoient `promotion_*` ou marquent une échéance payée via PATCH (les remplacer par le nouveau flux, sans affaiblir leur intention ; lister chaque test modifié dans le rapport).
+- [ ] **Step 5: Suite verte + ruff** ; `docs/AVANCEMENT.md` ligne E4-T5 🟦 ; commit `feat: agreed price, gap installment and first payment at engagement`.
+
+### Task 6 (E4-T5b): Encaissements et seuil d'émission de l'acte
+
+**Files:**
+- Create: `backend/app/services/reservation_payment_service.py`, `backend/app/domain/schemas/reservation_payment.py`
+- Modify: `backend/app/api/v1/endpoints/reservations.py` (routes ci-dessous), `backend/app/services/acte_service.py` (règle de seuil, R4), `backend/app/services/payment_service.py` (email de confirmation réutilisé)
+- Test: `backend/app/tests/integration/test_api/test_reservation_payments.py`, mise à jour de `test_acte_auto.py`
+
+**Interfaces:**
+- Consumes: Task 5 (`reservation_amounts`, `ReservationPaymentRepository`, statuts d'échéance).
+- Produces (API) :
+  - `POST /api/reservations/{id}/payments` (multipart : `amount` > 0, `paid_on` date ≤ aujourd'hui, `method`, `reference?`, `installment_id?`, `file?`) → 201 `ReservationPaymentResponse` (`id, amount, paid_on, method, reference, installment_id, document_id, recorded_by_user_id, recorded_by_name, created_at`). Règles : réservation au statut `reservation_engagee` (sinon 400 règle `reservation_not_engaged`) ; `installment_id` requis et appartenant à la réservation ; montant ≤ restant de l'échéance (400 « Le montant dépasse le restant dû de cette échéance ({restant} MAD). ») ; ordre acompte → solde (messages existants de `update_installment`) ; le fichier passe par `DocumentService.store_generated_document(category="justificatif_paiement")` ; le statut de l'échéance est recalculé et persisté ; email de confirmation existant envoyé (échec d'email non bloquant) ; droits : commercial auteur de la réservation ou manager.
+  - `GET /api/reservations/{id}/payments` → liste (tri `paid_on`, `id`).
+  - `GET /api/reservations/{id}/financial-summary` → `{catalogue_price, agreed_total_price, acte_price, gap_amount, gap_due_timing, gap_due_date, first_payment, total_received, remaining, acte_min_paid_pct, acte_threshold_amount, acte_available, installments: [{id, payment_type, installment_number, amount, due_date, received, remaining, status}], updated_at}`.
+- Produces (`ActeService`) : `async acte_readiness(reservation_id: int) -> ActeReadiness` (dataclass `available: bool`, `message: str | None`, `total_received`, `threshold_amount`) ; règle de la spec (« > 0 et ≥ pct % du convenu », message exact) appliquée à `build_certificate_pdf`, `generate_and_store`, `/certificate`, `/certificate/email`, `POST /acte` ; les règles « premier versement payé » et « promotion reçue » sont supprimées (et leurs tests remplacés). Après chaque encaissement, si le seuil vient d'être franchi et qu'aucun acte n'existe pour la réservation → `generate_and_store` (même garantie de non-échec que T1). Le hook `mark-promotion-received` et l'endpoint sont retirés ; le reçu reste disponible dès le premier acompte.
+
+- [ ] **Step 1: Tests (RED)** — scénario de référence de bout en bout via l'API : engagement 500 000 / 450 000 / écart fin / acompte 100 000 → summary `remaining == 400000` ; encaissements 150 000 (deposit) + 200 000 (balance) → `remaining == 50000`, `POST .../transitions/solde` 400 ; 20 000 puis 30 000 sur `gap` → statut gap `partial` puis `paid`, `remaining == 0`, solde 200. Plus : dépassement du restant 400 ; ordre acompte → solde 400 ; `installment_id` d'une autre réservation 400 ; justificatif facultatif (avec et sans fichier) ; aucun endpoint ne modifie ni ne supprime un encaissement (`PUT/DELETE` → 405) ; seuil : projet à 30 %, acompte 100 000 sur 500 000 → pas d'acte, `/certificate` 400 message exact, puis encaissement de 50 000 → acte archivé automatiquement (1 seul), un encaissement suivant n'en crée pas d'autre ; R4 (avances imprimées excluent l'écart, capture des kwargs du PDF).
+- [ ] **Step 2: Lancer, vérifier l'échec.**
+- [ ] **Step 3: Implémenter** service, routes, règle de seuil, R4.
+- [ ] **Step 4: Suite verte + ruff** ; commit `feat: record payments per installment and gate the deed on a paid threshold`.
+
+### Task 7 (E4-T5c): API de modification d'une réservation engagée + historique
+
+**Files:**
+- Create: `backend/app/services/engagement_edit_service.py`, `backend/app/domain/schemas/engagement_edit.py`, `backend/app/infrastructure/database/repositories/reservation_change_repository.py`
+- Modify: `backend/app/api/v1/endpoints/reservations.py`
+- Test: `backend/app/tests/integration/test_api/test_engagement_edit.py`
+
+**Interfaces:**
+- Consumes: Tasks 5-6 (`reservation_amounts`, summary, `ActeService.generate_and_store`).
+- Produces: `PUT /api/reservations/{id}/engagement` corps `EngagementEdit(agreed_total_price, sale_price, gap_due_timing, gap_due_date, notes, installments: list[{id, amount, due_date}], reason: str (1-500, requis), expected_updated_at: datetime)` → 200 financial summary. Règles et messages : ceux de la spec (409 concurrence ; 400 statut sous verrou `SELECT … FOR UPDATE` sous PostgreSQL ; convenu < total encaissé → « Le prix total convenu ne peut pas être inférieur au total déjà encaissé ({total} MAD). » ; acte > convenu ; somme des échéances ≠ convenu − premier acompte → « Les échéances doivent totaliser {attendu} MAD (actuellement {somme} MAD). » ; échéance sous son montant déjà reçu → « L'échéance n° {n} a déjà reçu {reçu} MAD. ») ; l'échéance `gap` suit l'écart recalculé et son moment (R3) ; une échéance reçue ne peut changer ni de montant ni de date ; écart devenu 0 → échéance `gap` supprimée seulement si rien ne lui est affecté (sinon 400). `GET /api/reservations/{id}/changes` → `[{id, user_id, user_name, changed_at, reason, before, after}]` (tri décroissant). Acte : nouvelle version si `sale_price` change (R4 inchangée), échec non bloquant.
+- [ ] **Step 1: Tests (RED)** — modification valide (journal avant/après, auteur, motif) ; 403 commercial non auteur ; manager autorisé ; 400 hors `reservation_engagee` ; 409 `expected_updated_at` périmé ; chaque règle 400 avec message exact ; atomicité (une règle violée → aucune donnée changée, aucun journal) ; nouvelle version d'acte si prix sur l'acte change, aucune sinon ; encaissements inchangés après modification.
+- [ ] **Step 2: Lancer, vérifier l'échec.**
+- [ ] **Step 3: Implémenter.**
+- [ ] **Step 4: Suite verte + ruff** ; commit `feat: edit an engaged reservation with audit trail`.
+
+### Task 8 (E4-T5d): Écrans montants, échéancier et encaissements
+
+**Files:**
+- Create: `frontend/src/components/lots/EngagementAmountsFields.jsx` (+ test), `frontend/src/components/lots/PaymentsPanel.jsx` (+ test), `frontend/src/components/lots/RecordPaymentForm.jsx` (+ test), `frontend/src/services/reservationFinanceService.js`
+- Modify: `frontend/src/components/LotDetailModal.jsx` (3 formulaires d'engagement, bloc réservation, remplacement des 2 appels `PATCH .../installments`), `frontend/src/components/ClientDetailPage.jsx` (libellés, échéancier), `frontend/src/utils/engagePayload.js`, `frontend/src/components/project/WorkflowSettings.jsx` (« Seuil d'émission de l'acte (%) »)
+
+**Interfaces:**
+- Consumes: API Tasks 5-6.
+- Produces: `<EngagementAmountsFields cataloguePrice value onChange />` — « Prix catalogue » (lecture seule), « Prix total convenu », « Prix figurant sur l'acte », « Écart à régulariser » (calculé, lecture seule), « Échéance de l'écart » (Au début / À la fin / À une date + date), « Premier acompte reçu » ; erreurs inline pour acte > convenu et date manquante ; utilisé par les 3 formulaires d'engagement (plus aucun « Montant promotion » ni « Premier acompte (ND) »). `<PaymentsPanel reservationId canRecord />` — lit `financial-summary` et `payments` ; affiche Prix total convenu, Total encaissé, Reste à payer, l'échéancier avec statut « À recevoir / Partiellement reçu / Reçu » et l'écart en ligne distincte ; bouton « Enregistrer un encaissement » par échéance non reçue → `<RecordPaymentForm installment onSaved />` (montant prérempli au restant, date, mode, référence, justificatif facultatif) ; indicateur « Acte disponible » ou message de seuil. `WorkflowSettings` : champ numérique 0-100 envoyé avec `PUT /api/projects/{id}/workflow`.
+- [ ] **Step 1: Tests (RED, un fichier de test avant chaque composant)** — calcul de l'écart et validations ; payload d'engagement (`agreed_total_price`, `sale_price`, `gap_due_timing`, `gap_due_date`, plus aucun `promotion_*`) pour les 3 voies ; PaymentsPanel : scénario de référence (400 000 → 50 000 → 0 via mocks), statuts, bouton désactivé pour une échéance reçue ; RecordPaymentForm : multipart envoyé, message d'erreur API affiché ; WorkflowSettings : seuil envoyé et validé 0-100.
+- [ ] **Step 2: Lancer, vérifier l'échec.**
+- [ ] **Step 3: Implémenter et intégrer** (les anciens blocs promotion de `LotDetailModal` / `ClientDetailPage` sont retirés).
+- [ ] **Step 4: vitest, eslint 0, build** ; commit `feat: agreed price, gap and payments screens`.
+
+### Task 9 (E4-T5e): Écran « Modifier la réservation » + historique
+
+**Files:**
+- Create: `frontend/src/components/lots/EditEngagementForm.jsx` (+ test), `frontend/src/components/lots/ReservationChangesHistory.jsx` (+ test)
+- Modify: `frontend/src/components/LotDetailModal.jsx`, `frontend/src/services/reservationFinanceService.js`
+
+**Interfaces:**
+- Consumes: API Task 7 ; `EngagementAmountsFields` (Task 8, en mode édition, « Premier acompte reçu » non modifiable).
+- Produces: bouton « Modifier la réservation » (statut `reservation_engagee`, commercial auteur ou manager) ouvrant `<EditEngagementForm reservationId summary onSaved onCancel />` — montants, moment de l'écart, notes, échéances non reçues éditables (montant, date ; échéances reçues en lecture seule), total des échéances vs attendu affiché en direct, « Motif de la modification » requis ; 409 → message de la spec + bouton « Recharger » ; « Annuler » ne fait aucun appel. `<ReservationChangesHistory reservationId />` — date, auteur, motif, liste des champs changés « avant → après ».
+- [ ] **Step 1: Tests (RED)** — préremplissage ; échéance reçue non éditable ; envoi du corps exact avec `expected_updated_at` ; annuler sans appel ; erreurs 400 affichées ; 409 + recharger ; bouton absent pour un commercial non auteur et hors `reservation_engagee` ; historique rendu.
+- [ ] **Step 2: Lancer, vérifier l'échec.**
+- [ ] **Step 3: Implémenter et intégrer** (après enregistrement : rechargement du lot, du summary, des documents).
+- [ ] **Step 4: vitest, eslint 0, build** ; `docs/AVANCEMENT.md` E4-T5 🟨 ; commit `feat: edit engaged reservation screen with change history`.
 
 ---
 
