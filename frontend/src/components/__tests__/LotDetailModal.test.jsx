@@ -34,6 +34,9 @@ function renderModal(lot, enabledOptionalStatuses, user = MANAGER) {
   )
 }
 
+/** Keys of a request body that still talk about the removed « promotion ». */
+const promotionKeys = (body) => Object.keys(body).filter((key) => key.startsWith('promotion'))
+
 function postedBody(fetchMock, pathEnd) {
   const call = fetchMock.mock.calls.find(
     ([url, options]) => String(url).endsWith(pathEnd) && options?.method === 'POST'
@@ -161,11 +164,118 @@ describe('LotDetailModal', () => {
     await user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
 
     await waitFor(() => expect(postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')).toBeDefined())
-    expect(postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')).toMatchObject({
+    const body = postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')
+    expect(body).toMatchObject({
       client_id: 7,
       guarantee_amount: 30000,
       payment_type: 'transfer',
+      agreed_total_price: 500000,
       sale_price: 500000,
+    })
+    expect(promotionKeys(body)).toEqual([])
+  })
+
+  describe('engagement amounts (E4-T5)', () => {
+    it('sends the agreed price, the deed price and the gap date on a direct engagement', async () => {
+      const fetchMock = mockFetch({ '/api/clients': [{ id: 7, name: 'Fatima Benali' }] })
+      const user = userEvent.setup()
+      renderModal({ id: 8, numero: 'H8', status: 'available', price: 500000 })
+
+      await user.click(screen.getByRole('button', { name: /Résa\. engagée/ }))
+      await user.type(await screen.findByPlaceholderText(/Rechercher par nom, CIN/), 'fatima')
+      await user.click(await screen.findByRole('option', { name: /Fatima Benali/ }))
+      expect(screen.getByLabelText('Prix total convenu')).toHaveValue(500000)
+      await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
+      await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '450000')
+      expect(screen.getByLabelText('Écart à régulariser')).toHaveTextContent('50.000 MAD')
+      await user.click(screen.getByRole('button', { name: /^À une date/ }))
+      await user.type(screen.getByLabelText("Date de l'écart"), '2027-06-30')
+      await user.type(screen.getByLabelText('Premier acompte reçu'), '100000')
+      await user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+      await waitFor(() => expect(postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')).toBeDefined())
+      const body = postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')
+      expect(body).toMatchObject({
+        guarantee_amount: 100000,
+        agreed_total_price: 500000,
+        sale_price: 450000,
+        gap_due_timing: 'date',
+        gap_due_date: '2027-06-30',
+      })
+      expect(promotionKeys(body)).toEqual([])
+    })
+
+    it('sends the amounts on an option engagement', async () => {
+      const fetchMock = mockFetch()
+      const user = userEvent.setup()
+      renderModal({ id: 3, numero: 'C3', status: 'option', price: 500000, client_name: 'Fatima Benali' }, ['option'])
+
+      await user.click(screen.getByRole('button', { name: /Engager/ }))
+      await user.clear(screen.getByLabelText('Prix total convenu'))
+      await user.type(screen.getByLabelText('Prix total convenu'), '520000')
+      await user.type(screen.getByLabelText('Premier acompte reçu'), '20000')
+      await user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+      await waitFor(() => expect(postedBody(fetchMock, '/api/lots/3/transitions/option-engage')).toBeDefined())
+      const body = postedBody(fetchMock, '/api/lots/3/transitions/option-engage')
+      expect(body).toMatchObject({ guarantee_amount: 20000, agreed_total_price: 520000, sale_price: 500000, gap_due_timing: 'fin' })
+      expect(body.gap_due_date).toBeUndefined()
+      expect(promotionKeys(body)).toEqual([])
+    })
+
+    it('sends the amounts when engaging a reservation to finalise, the kept guarantee as first payment', async () => {
+      const fetchMock = mockFetch()
+      const user = userEvent.setup()
+      renderModal(
+        { id: 6, numero: 'F6', status: 'reservation_a_finaliser', price: 500000, reservation_id: 41, client_name: 'Fatima Benali', guarantee_amount: 20000 },
+        ['option', 'reservation_a_finaliser']
+      )
+
+      await user.click(screen.getByRole('button', { name: /Valider/ }))
+      await user.click(screen.getByRole('button', { name: /Déduire la garantie/ }))
+      expect(screen.getByLabelText('Premier acompte reçu')).toHaveTextContent('20.000 MAD')
+      await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
+      await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '480000')
+      await user.click(screen.getByRole('button', { name: /^Au début/ }))
+      await user.click(screen.getByRole('button', { name: /Confirmer l'engagement/ }))
+
+      await waitFor(() => expect(postedBody(fetchMock, '/api/lots/6/transitions/engage')).toBeDefined())
+      const body = postedBody(fetchMock, '/api/lots/6/transitions/engage')
+      expect(body).toMatchObject({ guarantee_action: 'deduct', agreed_total_price: 500000, sale_price: 480000, gap_due_timing: 'debut' })
+      expect(promotionKeys(body)).toEqual([])
+    })
+
+    it('blocks the engagement while the deed price is above the agreed total price', async () => {
+      const fetchMock = mockFetch()
+      const user = userEvent.setup()
+      renderModal({ id: 3, numero: 'C3', status: 'option', price: 500000, client_name: 'Fatima Benali' }, ['option'])
+
+      await user.click(screen.getByRole('button', { name: /Engager/ }))
+      await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
+      await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '550000')
+      await user.type(screen.getByLabelText('Premier acompte reçu'), '20000')
+      await user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+      expect(screen.getAllByText("Le prix figurant sur l'acte ne peut pas dépasser le prix total convenu.").length).toBeGreaterThan(0)
+      expect(postedBody(fetchMock, '/api/lots/3/transitions/option-engage')).toBeUndefined()
+    })
+
+    it.each([
+      ['direct', { id: 8, numero: 'H8', status: 'available', price: 500000 }, /Résa\. engagée/, undefined],
+      ['option', { id: 3, numero: 'C3', status: 'option', price: 500000, client_name: 'Fatima Benali' }, /Engager/, ['option']],
+      ['finalise', { id: 6, numero: 'F6', status: 'reservation_a_finaliser', price: 500000, reservation_id: 41, client_name: 'F B', guarantee_amount: 20000 }, /Valider/, ['option', 'reservation_a_finaliser']],
+    ])('no longer shows any promotion field in the %s engagement form', async (_name, lot, open, enabled) => {
+      mockFetch()
+      const user = userEvent.setup()
+      renderModal(lot, enabled)
+
+      await user.click(screen.getByRole('button', { name: open }))
+      await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
+      await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '450000')
+
+      expect(screen.queryByText(/promotion/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Premier acompte \(ND\)/)).not.toBeInTheDocument()
+      expect(screen.getByText('Prix catalogue', { selector: '.msr-label' })).toBeInTheDocument()
     })
   })
 
@@ -195,8 +305,19 @@ describe('LotDetailModal', () => {
   describe('archived reservation deed', () => {
     const ENGAGED = { id: 5, numero: 'E5', status: 'reservation_engagee', price: 500000, reservation_id: 11, client_name: 'Fatima Benali' }
     const ACTE = { id: 1, lot_id: 5, reservation_id: 11, filename: 'acte_reservation_11_lotE5.pdf', category: 'acte_reservation' }
-    const SCHEDULE = { '/api/payments/schedules/reservation/11': { installments: [] } }
-    const RESERVATION = { id: 11, sale_price: 500000, promotion_amount: 0, promotion_received: false }
+    const RESERVATION = { id: 11, sale_price: 450000, agreed_total_price: 500000, gap_amount: 50000, gap_due_timing: 'fin', first_payment: 100000 }
+    const SUMMARY = {
+      catalogue_price: 500000, agreed_total_price: 500000, acte_price: 450000, gap_amount: 50000,
+      gap_due_timing: 'fin', gap_due_date: null, first_payment: 100000, total_received: 100000, remaining: 400000,
+      acte_min_paid_pct: 10, acte_threshold_amount: 50000, acte_available: true,
+      installments: [
+        { id: 1, payment_type: 'deposit', installment_number: 1, amount: 150000, due_date: '2030-01-01T00:00:00', received: 0, remaining: 150000, status: 'pending' },
+        { id: 4, payment_type: 'gap', installment_number: 1, amount: 50000, due_date: '2030-06-01T00:00:00', received: 0, remaining: 50000, status: 'pending' },
+      ],
+      updated_at: '2026-10-28T10:00:00',
+    }
+    const BELOW_THRESHOLD = { ...SUMMARY, acte_min_paid_pct: 30, acte_threshold_amount: 150000, acte_available: false }
+    const SCHEDULE = { '/api/reservations/11/financial-summary': SUMMARY }
 
     it('shows the "Acte de réservation" badge when a deed is archived', async () => {
       mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [ACTE] })
@@ -220,17 +341,126 @@ describe('LotDetailModal', () => {
       await waitFor(() => expect(documentLoads()).toBeGreaterThan(before))
     })
 
-    it('does not alert while the promotion is pending (no deed is expected yet)', async () => {
-      const fetchMock = mockFetch({
-        ...SCHEDULE,
-        '/api/reservations/11': { ...RESERVATION, sale_price: 450000, promotion_amount: 50000 },
+    it('shows the threshold message, not the regenerate alert, while the deed threshold is not reached', async () => {
+      mockFetch({
+        '/api/reservations/11/financial-summary': BELOW_THRESHOLD,
+        '/api/reservations/11': RESERVATION,
         '/api/lots/5/documents': [],
       })
       renderModal(ENGAGED)
 
-      expect(await screen.findByText('Non reçue')).toBeInTheDocument()
-      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/lots/5/documents'))).toBe(true))
+      expect(await screen.findByText(
+        "L'acte sera disponible quand 30 % du prix total convenu aura été encaissé (100.000 MAD sur 150.000 MAD)."
+      )).toBeInTheDocument()
       expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Régénérer' })).not.toBeInTheDocument()
+    })
+
+    it('waits for the financial summary before offering to regenerate', async () => {
+      mockFetch({ '/api/reservations/11/financial-summary': PENDING, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      renderModal(ENGAGED)
+
+      await screen.findByText("Chargement de l'échéancier…")
+      expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Régénérer' })).not.toBeInTheDocument()
+    })
+
+    it('shows the engaged amounts with the spec labels, without any promotion', async () => {
+      mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      renderModal(ENGAGED)
+
+      const acte = await screen.findByText("Prix figurant sur l'acte")
+      expect(acte.nextSibling).toHaveTextContent('450.000 MAD')
+      expect(screen.getByText('Écart à régulariser', { selector: '.ldm-ri-key' }).nextSibling).toHaveTextContent('50.000 MAD — à la fin')
+      expect(screen.getByText('Premier acompte reçu').nextSibling).toHaveTextContent('100.000 MAD')
+      expect(screen.queryByText(/promotion/i)).not.toBeInTheDocument()
+    })
+
+    it('records a payment on an installment instead of marking it paid', async () => {
+      const fetchMock = mockFetch({
+        ...SCHEDULE,
+        '/api/reservations/11/financial-summary': {
+          ...SUMMARY,
+          installments: [{ ...SUMMARY.installments[0], due_date: '2020-01-01T00:00:00' }, SUMMARY.installments[1]],
+        },
+        '/api/reservations/11': RESERVATION,
+        '/api/lots/5/documents': [],
+      })
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText('Premier versement en retard')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Confirmer le paiement/ })).not.toBeInTheDocument()
+      const schedule = await screen.findByRole('table', { name: 'Échéancier' })
+      await user.click(within(within(schedule).getByRole('row', { name: /Acompte 1/ })).getByRole('button', { name: 'Enregistrer un encaissement' }))
+      await user.click(screen.getByRole('button', { name: "Enregistrer l'encaissement" }))
+
+      await waitFor(() => expect(fetchMock.mock.calls.some(
+        ([url, options]) => String(url).endsWith('/api/reservations/11/payments') && options?.method === 'POST'
+      )).toBe(true))
+      const [, options] = fetchMock.mock.calls.find(
+        ([url, opts]) => String(url).endsWith('/api/reservations/11/payments') && opts?.method === 'POST'
+      )
+      expect(options.body.get('installment_id')).toBe('1')
+      expect(options.body.get('amount')).toBe('150000')
+      expect(fetchMock.mock.calls.some(([url, opts]) => String(url).includes('/api/payments/installments/') && opts?.method === 'PATCH')).toBe(false)
+    })
+
+    it('offers the deed once available and the receipt otherwise', async () => {
+      mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      renderModal(ENGAGED)
+
+      expect(await screen.findByRole('button', { name: /^Acte de réservation$/ })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Reçu de paiement/ })).not.toBeInTheDocument()
+    })
+
+    it('offers the receipt while the deed threshold is not reached', async () => {
+      mockFetch({ '/api/reservations/11/financial-summary': BELOW_THRESHOLD, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      renderModal(ENGAGED)
+
+      expect(await screen.findByRole('button', { name: /Reçu de paiement/ })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^Acte de réservation$/ })).not.toBeInTheDocument()
+    })
+
+    it('shows the API message when the deed download is refused (400 message)', async () => {
+      const message = "L'acte sera disponible quand 10 % du prix total convenu aura été encaissé (0 MAD sur 50 000 MAD)."
+      const fetchMock = mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      const base = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/reservations/11/certificate')
+          ? Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ error: 'BUSINESS_RULE_VIOLATION', message }) })
+          : base(url, opts))
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: /^Acte de réservation$/ }))
+
+      expect(await screen.findByText(message)).toBeInTheDocument()
+    })
+
+    it('only lets the lot be marked sold once nothing is left to pay', async () => {
+      mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      renderModal(ENGAGED)
+
+      await screen.findByRole('table', { name: 'Échéancier' })
+      expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeDisabled()
+    })
+
+    it('sells at the agreed total price without asking for a price', async () => {
+      const paid = { ...SUMMARY, total_received: 500000, remaining: 0, installments: SUMMARY.installments.map((i) => ({ ...i, received: i.amount, remaining: 0, status: 'paid' })) }
+      const fetchMock = mockFetch({ '/api/reservations/11/financial-summary': paid, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await screen.findByRole('table', { name: 'Échéancier' })
+      await waitFor(() => expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeEnabled())
+      await user.click(screen.getByRole('button', { name: /Marquer soldé/ }))
+      expect(screen.queryByText(/Prix final de vente/)).not.toBeInTheDocument()
+      expect(screen.getByText('Prix total convenu', { selector: '.msr-label' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /Confirmer la vente/ }))
+
+      await waitFor(() => expect(postedBody(fetchMock, '/api/lots/5/transitions/solde')).toBeDefined())
+      expect(postedBody(fetchMock, '/api/lots/5/transitions/solde')).not.toHaveProperty('price')
     })
 
     it('downloads the latest archived deed from the badge', async () => {

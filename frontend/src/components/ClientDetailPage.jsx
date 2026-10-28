@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/toastHooks';
-import { apiGet, apiPost, apiPut, apiPatch, apiFetch } from '../utils/api';
+import { apiGet, apiPost, apiPut, apiFetch, buildApiError } from '../utils/api';
+import { useAuth } from '../contexts/authHooks';
 import { formatPrice, formatDate } from '../utils/formatters';
 import ClientForm from './clients/ClientForm';
 import NotificationHistory from './notifications/NotificationHistory';
+import PaymentsPanel from './lots/PaymentsPanel';
+import { acteThresholdMessage, getFinancialSummary } from '../services/reservationFinanceService';
 import {
   NOTIFICATION_CHANNEL_LABELS,
   acteAddressOf,
@@ -115,13 +118,6 @@ const IconSend = () => (
   </svg>
 );
 
-const IconClock = () => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="12" height="12">
-    <circle cx="8" cy="8" r="6" />
-    <path d="M8 5v3l2 2" />
-  </svg>
-);
-
 /* ── Monogram ───────────────────────────────────────────────── */
 function Monogram({ name, size = '' }) {
   const initials = (name || '?')
@@ -143,219 +139,35 @@ function timelineType(ev) {
   return ev.status || 'other';
 }
 
-/* ── SVG Donut Chart ────────────────────────────────────────── */
-function DonutChart({ paidPct, color, size = 80 }) {
-  const r = 28;
-  const circumference = 2 * Math.PI * r;
-  const safePct = Math.min(100, Math.max(0, paidPct || 0));
-  const offset = circumference - (safePct / 100) * circumference;
-  const cx = size / 2;
-  const cy = size / 2;
-
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {/* Background ring */}
-      <circle
-        cx={cx} cy={cy} r={r}
-        fill="none"
-        stroke="var(--bg-surface)"
-        strokeWidth="10"
-      />
-      {/* Progress ring */}
-      <circle
-        cx={cx} cy={cy} r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth="10"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${cx} ${cy})`}
-        style={{ transition: 'stroke-dashoffset 0.4s ease' }}
-      />
-      {/* Center label */}
-      <text
-        x={cx} y={cy + 1}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fill="var(--text-primary)"
-        fontSize="11"
-        fontWeight="600"
-        fontFamily="var(--font-body)"
-      >
-        {Math.round(safePct)}%
-      </text>
-    </svg>
-  );
-}
-
-/* ── Installment table brick (with donut) ───────────────────── */
-function InstallmentBrick({ type, label, items, onInstallmentUpdate, prerequisitesMet = true }) {
-  const total = items.reduce((s, i) => s + i.amount, 0);
-  const paid  = items.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0);
-  const paidPct = total > 0 ? (paid / total) * 100 : 0;
-  const allPaid = items.length > 0 && items.every(i => i.status === 'paid');
-  const color = type === 'deposit' ? 'var(--color-primary)' : 'var(--color-success, #2ecc71)';
-  // Always display by date order
-  const sortedItems = [...items].sort(
-    (a, b) => new Date(a.due_date) - new Date(b.due_date) || a.installment_number - b.installment_number
-  );
-
-  return (
-    <div className={`pay-brick pay-brick--${type}`}>
-      {/* Summary row with donut */}
-      <div className="pay-brick-summary">
-        <DonutChart paidPct={prerequisitesMet ? paidPct : 0} color={color} size={64} />
-        <div className="pay-brick-meta">
-          <div className="pay-brick-label">{label}</div>
-          <div className="pay-brick-amounts">
-            <span className="pay-brick-paid">{formatPrice(paid)}</span>
-            <span className="pay-brick-sep"> / </span>
-            <span className="pay-brick-total">{formatPrice(total)}</span>
-          </div>
-          <div className="pay-brick-remaining">Restant : {formatPrice(total - paid)}</div>
-        </div>
-        {allPaid && prerequisitesMet
-          ? <span className="badge badge-green pay-brick-status"><IconCheck /> Soldé</span>
-          : <span className="badge badge-gray pay-brick-status">{items.filter(i => i.status === 'paid').length}/{items.length} versements</span>
-        }
-      </div>
-      {/* prerequisite warning */}
-      {!prerequisitesMet && (
-        <div style={{ padding: '8px 12px', fontSize: '0.78rem', color: 'var(--color-warning, #f59e0b)', display: 'flex', alignItems: 'center', gap: 6, borderTop: '1px solid var(--border-color)' }}>
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2L1 13h14L8 2z"/><path d="M8 6v4M8 11.5v.5"/></svg>
-          {type === 'deposit'
-            ? "Le montant promotion doit être confirmé avant de déverrouiller l'acompte."
-            : "L'échéancier acompte doit être intégralement payé avant de valider le solde."
-          }
-        </div>
-      )}
-      {/* Table */}
-      {items.length > 0 && (
-        <table className="pay-table">
-          <thead>
-            <tr><th>#</th><th>Échéance</th><th>Montant</th><th>Statut</th><th></th></tr>
-          </thead>
-          <tbody>
-            {sortedItems.map((inst, idx) => {
-              const isOverdue = inst.status === 'pending' && new Date(inst.due_date) < new Date();
-              // Previous installment (by sorted order) must be paid; also prerequisites must be met
-              const prevPaid = idx === 0 ? true : sortedItems[idx - 1].status === 'paid';
-              const canMark = prerequisitesMet && prevPaid;
-              const blockedTooltip = !prerequisitesMet
-                ? 'L\'échéancier acompte doit être soldé en premier'
-                : !prevPaid
-                  ? 'Le versement précédent doit être validé en premier'
-                  : '';
-              return (
-                <tr key={inst.id} className={[
-                  inst.status === 'paid' ? 'pay-row--paid' : '',
-                  isOverdue ? 'pay-row--overdue' : '',
-                  !canMark && inst.status !== 'paid' ? 'pay-row--blocked' : '',
-                ].filter(Boolean).join(' ')}>
-                  <td className="pay-cell-num">{inst.installment_number}</td>
-                  <td className="pay-cell-date">{formatDate(inst.due_date)}</td>
-                  <td className="pay-cell-amount">{formatPrice(inst.amount)}</td>
-                  <td>
-                    <span className={`badge ${inst.status === 'paid' ? 'badge-green' : isOverdue && canMark ? 'badge-red' : 'badge-gray'}`}>
-                      {inst.status === 'paid' ? <><IconCheck /> Payé</> : <><IconClock /> En attente</>}
-                    </span>
-                  </td>
-                  <td>
-                    {inst.status === 'paid' ? (
-                      <button
-                        className="pay-toggle-btn pay-toggle-btn--undo"
-                        onClick={() => onInstallmentUpdate(inst.id, 'pending')}
-                        title="Annuler le paiement"
-                      >↩</button>
-                    ) : (
-                      <button
-                        className={`pay-toggle-btn pay-toggle-btn--mark${!canMark ? ' pay-toggle-btn--locked' : ''}`}
-                        onClick={() => canMark && onInstallmentUpdate(inst.id, 'paid')}
-                        disabled={!canMark}
-                        title={canMark ? 'Marquer payé' : blockedTooltip}
-                        style={!canMark ? { opacity: 0.35, cursor: 'not-allowed' } : {}}
-                      >
-                        {!canMark
-                        ? <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7.5" width="12" height="7" rx="1.5"/><path d="M5 7.5V5a3 3 0 016 0v2.5"/></svg>
-                        : '✓'}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
-
 /* ── Payment overview card ──────────────────────────────────── */
-function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate, onValidateDeposit }) {
+// Reservations on which a payment can still be recorded (engaged, not yet sold)
+const OPEN_RESERVATION_STATUSES = ['active', 'validated'];
+
+/**
+ * Échéancier et encaissements d'une réservation du client (spec E4-T5) : mêmes
+ * montants et libellés que la fiche lot (PaymentsPanel). `canRecord` : commercial
+ * auteur de la réservation ou manager, réservation non soldée.
+ */
+function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRecorded }) {
   const res = reservations.find(r => r.id === schedule.reservation_id);
   const label = res
     ? `Lot ${res.lot_numero} — ${res.project_name}`
     : `Réservation #${schedule.reservation_id}`;
-  // Dépôt initial reçu = réservation validée ou convertie (vendu)
-  const isValidated = res?.status === 'validated' || res?.status === 'converted';
   const isConverted = res?.status === 'converted';
-
-  const firstPaymentAmount = res?.deposit ?? 0;
-  const firstPaymentDate = res?.deposit_date || res?.reservation_date;
-
-  const depositInstallments = schedule.installments
-    .filter(i => i.payment_type === 'deposit')
-    .sort((a, b) => a.installment_number - b.installment_number);
-  const balanceInstallments = schedule.installments
-    .filter(i => i.payment_type === 'balance')
-    .sort((a, b) => a.installment_number - b.installment_number);
-
-  const allDepositPaid = depositInstallments.length > 0 && depositInstallments.every(i => i.status === 'paid');
-  const allBalancePaid = balanceInstallments.length > 0 && balanceInstallments.every(i => i.status === 'paid');
-  const isFullyPaid = allDepositPaid && allBalancePaid;
-
   const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div className="pay-overview-card">
-      {/* Bandeau vendu — toutes échéances réglées */}
-      {isFullyPaid && isConverted && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 16px',
-          background: 'color-mix(in srgb, #ef4444 12%, var(--bg-surface))',
-          borderBottom: '1px solid color-mix(in srgb, #ef4444 30%, transparent)',
-          borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
-        }}>
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#ef4444" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 12l2 2 4-4"/><rect x="2" y="3" width="16" height="14" rx="2"/>
-          </svg>
-          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#ef4444', letterSpacing: '0.02em' }}>
-            Lot vendu — Toutes les échéances réglées
-          </span>
-        </div>
-      )}
-      {/* Header */}
       <div className="pay-overview-header" onClick={() => setCollapsed(v => !v)}>
         <div className="pay-overview-label">
           {label}
-          {isValidated && !isFullyPaid && (
-            <span className="badge badge-green pay-validated-badge">
-              <IconCheck /> Réservation validée
-            </span>
-          )}
-          {isFullyPaid && isConverted && (
+          {isConverted && (
             <span className="badge pay-validated-badge" style={{ background: 'color-mix(in srgb, #ef4444 18%, var(--bg-surface))', color: '#ef4444', border: '1px solid color-mix(in srgb, #ef4444 35%, transparent)' }}>
               <IconCheck /> Vendu
             </span>
           )}
         </div>
-        <div className="pay-overview-price">
-          {formatPrice(firstPaymentAmount + schedule.lot_price)}
-        </div>
-        <button className={`pay-overview-toggle ${collapsed ? '' : 'open'}`}>
+        <button className={`pay-overview-toggle ${collapsed ? '' : 'open'}`} aria-label={collapsed ? 'Déplier' : 'Replier'}>
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
             <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -363,57 +175,85 @@ function PaymentOverviewCard({ schedule, reservations, onInstallmentUpdate, onVa
       </div>
 
       {!collapsed && (
-        <div className="pay-bricks">
-          {/* ── Ligne promotion compacte ── */}
-          {firstPaymentAmount > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-tertiary)' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>
-                  Montant promotion
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatPrice(firstPaymentAmount)}</span>
-                  {firstPaymentDate && (
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                      <IconCalendar /> {formatDate(firstPaymentDate)}
-                    </span>
-                  )}
-                </div>
-              </div>
-              {isValidated
-                ? <span className="badge badge-green"><IconCheck /> Confirmé</span>
-                : (
-                  <button
-                    className="pay-first-payment-confirm"
-                    onClick={() => res && onValidateDeposit && onValidateDeposit(res.id)}
-                  >
-                    <IconCheck /> Confirmer la réception
-                  </button>
-                )
-              }
-            </div>
-          )}
-
-          {/* ── Brique 1 : Échéancier acompte ── */}
-          <InstallmentBrick
-            type="deposit"
-            label="Échéancier acompte"
-            items={depositInstallments}
-            onInstallmentUpdate={onInstallmentUpdate}
-            prerequisitesMet={true}
-          />
-
-          {/* ── Brique 2 : Échéancier solde ── */}
-          <InstallmentBrick
-            type="balance"
-            label="Échéancier solde"
-            items={balanceInstallments}
-            onInstallmentUpdate={onInstallmentUpdate}
-            prerequisitesMet={depositInstallments.every(i => i.status === 'paid')}
+        <div className="pay-bricks" style={{ padding: '10px 14px' }}>
+          <PaymentsPanel
+            reservationId={schedule.reservation_id}
+            canRecord={canRecordFor(res)}
+            onPaymentRecorded={onPaymentRecorded}
           />
         </div>
       )}
     </div>
+  );
+}
+
+/* ── Acte / reçu d'une réservation ─────────────────────────── */
+/**
+ * Acte de réservation une fois le seuil d'encaissement atteint (`financial-summary`),
+ * sinon le message de seuil et, dès le premier acompte, le reçu de paiement.
+ */
+function ReservationDeedActions({ reservationId, lotNumero, clientEmail, onDownloadCertificate, onDownloadReceipt, onSendEmail }) {
+  const [summary, setSummary] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getFinancialSummary(reservationId)
+      .then((data) => { if (!cancelled && data && typeof data.acte_available === 'boolean') setSummary(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [reservationId]);
+
+  if (!summary) return null;
+
+  if (summary.acte_available) {
+    return (
+      <>
+        <span className="cd-cert-label">Acte de réservation</span>
+        <button
+          className="btn btn-ghost btn-sm cd-cert-btn"
+          onClick={() => onDownloadCertificate(reservationId, lotNumero)}
+          title="Télécharger l'acte de réservation en PDF"
+        >
+          <IconDownload />
+          Télécharger
+        </button>
+        {clientEmail && (
+          <button
+            className="btn btn-ghost btn-sm cd-cert-btn"
+            onClick={() => onSendEmail(reservationId)}
+            title={`Envoyer l'acte par email à ${clientEmail}`}
+          >
+            <IconSend />
+            Envoyer par email
+          </button>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="7.5" width="12" height="7" rx="1.5"/>
+          <path d="M5 7.5V5a3 3 0 016 0v2.5"/>
+        </svg>
+        {acteThresholdMessage(summary)}
+      </div>
+      {summary.first_payment > 0 && (
+        <>
+          <span className="cd-cert-label">Reçu de paiement</span>
+          <button
+            className="btn btn-ghost btn-sm cd-cert-btn"
+            onClick={() => onDownloadReceipt(reservationId, lotNumero)}
+            title="Télécharger le reçu de paiement"
+          >
+            <IconDownload />
+            Télécharger
+          </button>
+        </>
+      )}
+    </>
   );
 }
 
@@ -422,6 +262,7 @@ export default function ClientDetailPage() {
   const { clientId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user, isManager } = useAuth();
 
   const [client, setClient] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -484,29 +325,13 @@ export default function ClientDetailPage() {
     }
   };
 
-  const handleValidateDeposit = async (reservationId) => {
-    try {
-      await apiPost(`/api/reservations/${reservationId}/validate-deposit`, {});
-      await Promise.all([loadPaymentSchedules(), loadClient()]);
-      toast.success('1er versement confirmé — réservation validée');
-    } catch (err) {
-      toast.error(err.message || 'Erreur lors de la confirmation du versement');
-    }
-  };
+  // Payment recorded from the payments tab: reservation statuses / amounts may have changed
+  const handlePaymentRecorded = () => { loadClient(); };
 
-  const handleInstallmentUpdate = async (installmentId, newStatus) => {
-    try {
-      await apiPatch(`/api/payments/installments/${installmentId}`, {
-        status: newStatus,
-        paid_date: newStatus === 'paid' ? new Date().toISOString() : null,
-      });
-      // Reload both payment data and client (reservation status may have changed)
-      await Promise.all([loadPaymentSchedules(), loadClient()]);
-      toast.success(newStatus === 'paid' ? 'Versement marqué payé' : 'Versement remis en attente');
-    } catch (err) {
-      toast.error(err.message || 'Erreur lors de la mise à jour');
-    }
-  };
+  // Commercial author of the reservation or manager, reservation not yet sold
+  const canRecordFor = (res) => !!res
+    && OPEN_RESERVATION_STATUSES.includes(res.status)
+    && (isManager() || (res.reserved_by_user_id != null && res.reserved_by_user_id === user?.id));
 
   const handleDownloadCertificate = async (reservationId, lotNumero) => {
     try {
@@ -516,8 +341,8 @@ export default function ClientDetailPage() {
         response = await apiFetch(`/api/reservations/${reservationId}/certificate`);
       }
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || `Erreur ${response.status}`);
+        // threshold refusal: 400 `message`; other errors may carry `detail`
+        throw buildApiError(await response.json().catch(() => ({})), response.status);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -535,8 +360,7 @@ export default function ClientDetailPage() {
     try {
       const response = await apiFetch(`/api/reservations/${reservationId}/receipt`);
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || `Erreur ${response.status}`);
+        throw buildApiError(await response.json().catch(() => ({})), response.status);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -633,17 +457,6 @@ export default function ClientDetailPage() {
     .slice(0, 5);
 
   const hasMultipleProjects = projects.length > 1;
-
-  // Map reservationId → whether the first deposit (acompte) installment is paid
-  // Used to conditionally unlock the acte de réservation
-  const firstDepositPaidByReservation = {};
-  paymentSchedules.forEach(schedule => {
-    const depositInstallments = schedule.installments
-      .filter(i => i.payment_type === 'deposit')
-      .sort((a, b) => a.installment_number - b.installment_number);
-    firstDepositPaidByReservation[schedule.reservation_id] =
-      depositInstallments.length > 0 && depositInstallments[0].status === 'paid';
-  });
 
   const TABS = [
     { key: 'info',         label: 'Informations' },
@@ -1050,65 +863,16 @@ export default function ClientDetailPage() {
                           <div className="cd-list-expire">Expire {formatDate(res.expiration_date)}</div>
                         )}
                         <div className="cd-cert-actions">
-                          {(() => {
-                            const firstAcomptePaid = firstDepositPaidByReservation[res.id] ?? false;
-                            const promotionOk = res.promotion_received || !(res.promotion_amount > 0);
-
-                            // 1er acompte non encore reçu → aucun document
-                            if (!firstAcomptePaid) {
-                              return (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.73rem', color: 'var(--text-muted)' }}>
-                                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <rect x="2" y="7.5" width="12" height="7" rx="1.5"/>
-                                    <path d="M5 7.5V5a3 3 0 016 0v2.5"/>
-                                  </svg>
-                                  Acte disponible après réception du 1er acompte
-                                </div>
-                              );
-                            }
-
-                            // 1er acompte reçu + promotion reçue → Acte de réservation
-                            if (promotionOk) {
-                              return (
-                                <>
-                                  <span className="cd-cert-label">Acte de réservation</span>
-                                  <button
-                                    className="btn btn-ghost btn-sm cd-cert-btn"
-                                    onClick={() => handleDownloadCertificate(res.id, res.lot_numero)}
-                                    title="Télécharger l'acte de réservation en PDF"
-                                  >
-                                    <IconDownload />
-                                    Télécharger
-                                  </button>
-                                  {client.email && (
-                                    <button
-                                      className="btn btn-ghost btn-sm cd-cert-btn"
-                                      onClick={() => handleSendCertificateEmail(res.id)}
-                                      title={`Envoyer l'acte par email à ${client.email}`}
-                                    >
-                                      <IconSend />
-                                      Envoyer par email
-                                    </button>
-                                  )}
-                                </>
-                              );
-                            }
-
-                            // 1er acompte reçu, promotion en attente → Reçu de paiement
-                            return (
-                              <>
-                                <span className="cd-cert-label">Reçu de paiement</span>
-                                <button
-                                  className="btn btn-ghost btn-sm cd-cert-btn"
-                                  onClick={() => handleDownloadReceipt(res.id, res.lot_numero)}
-                                  title="Télécharger le reçu de paiement"
-                                >
-                                  <IconDownload />
-                                  Télécharger
-                                </button>
-                              </>
-                            );
-                          })()}
+                          {['active', 'validated', 'converted'].includes(res.status) && (
+                            <ReservationDeedActions
+                              reservationId={res.id}
+                              lotNumero={res.lot_numero}
+                              clientEmail={client.email}
+                              onDownloadCertificate={handleDownloadCertificate}
+                              onDownloadReceipt={handleDownloadReceipt}
+                              onSendEmail={handleSendCertificateEmail}
+                            />
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1164,8 +928,8 @@ export default function ClientDetailPage() {
                             key={schedule.id}
                             schedule={schedule}
                             reservations={allReservations}
-                            onInstallmentUpdate={handleInstallmentUpdate}
-                            onValidateDeposit={handleValidateDeposit}
+                            canRecordFor={canRecordFor}
+                            onPaymentRecorded={handlePaymentRecorded}
                           />
                         ))}
                       </div>

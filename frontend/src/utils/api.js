@@ -149,9 +149,17 @@ export const apiDelete = async (endpoint) => {
  * Upload file avec authentification
  */
 export const apiUploadFile = async (endpoint, file, fieldName = 'file') => {
-  const token = getAuthToken();
   const formData = new FormData();
   formData.append(fieldName, file);
+  return apiPostForm(endpoint, formData);
+};
+
+/**
+ * POST multipart (FormData) avec authentification — le navigateur fixe le
+ * Content-Type (boundary), il ne faut donc pas envoyer celui du JSON.
+ */
+export const apiPostForm = async (endpoint, formData) => {
+  const token = getAuthToken();
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     method: 'POST',
@@ -185,4 +193,5 @@ export default {
   patch: apiPatch,
   delete: apiDelete,
   uploadFile: apiUploadFile,
+  postForm: apiPostForm,
 };

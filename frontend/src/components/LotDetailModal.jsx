@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { apiGet, apiPost, apiPatch, apiPut, apiFetch, apiUploadFile } from '../utils/api';
+import { apiGet, apiPost, apiPut, apiFetch, apiUploadFile, buildApiError } from '../utils/api';
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
 import { formatPrice, formatDate } from '../utils/formatters';
@@ -11,7 +11,10 @@ import { DEFAULT_ENABLED_OPTIONAL, EDL_STATUSES, allowedTransitions, openEdlActi
 import EdlPanel from './lots/EdlPanel';
 import EdlTransitionForm from './lots/EdlTransitionForm';
 import DepositDecisionFields from './lots/DepositDecisionFields';
-import { buildEngagePayload, refundFields } from '../utils/engagePayload';
+import { buildEngagePayload, firstAmountsError, gapAmount, parseAmount, refundFields } from '../utils/engagePayload';
+import EngagementAmountsFields from './lots/EngagementAmountsFields';
+import PaymentsPanel from './lots/PaymentsPanel';
+import { acteThresholdMessage } from '../services/reservationFinanceService';
 import NotifyClientPanel from './notifications/NotifyClientPanel';
 import NotificationHistory from './notifications/NotificationHistory';
 
@@ -29,6 +32,10 @@ const DEFAULT_PAYMENT_PLAN = {
 // Statuts où l'acte de réservation est archivé (engagement et au-delà)
 const ACTE_CATEGORY = 'acte_reservation';
 const ACTE_STATUSES = ['reservation_engagee', 'reservation_soldee', ...EDL_STATUSES, 'chez_notaire', 'chez_proprietaire'];
+
+// Montants d'un engagement (EngagementAmountsFields) avant préremplissage
+const EMPTY_AMOUNTS = { agreedTotalPrice: '', salePrice: '', gapDueTiming: 'fin', gapDueDate: '', firstPayment: '' };
+const GAP_TIMING_TEXT = { debut: 'au début', fin: 'à la fin' };
 
 const PERIODICITY_OPTIONS = [
   { value: 1, label: 'Mensuel' },
@@ -67,14 +74,32 @@ function splitAmount(total, count) {
   amounts[count - 1] = Math.round((total - base * (count - 1)) * 100) / 100;
   return amounts;
 }
-function computePreview(salePrice, plan, promotionAmount = 0) {
+const toCents = (v) => Math.round((v || 0) * 100);
+/**
+ * Preview of a schedule covering `total`. With `engage` ({ agreed, firstPayment, gap,
+ * gapTiming, gapDate }) it mirrors the engagement schedule (spec E4-T5, R1/R2): it covers
+ * agreed − first payment; the deposit part is what remains of agreed × deposit % once the
+ * first payment (and the gap when due at the start) are counted; the gap is its own row.
+ */
+function computePreview(total, plan, engage = null) {
   const depPct = Math.min(100, Math.max(0, parseFloat(plan.deposit_pct) || 50));
-  const promo = Math.max(0, promotionAmount || 0);
-  // Deposit % applies to catalogue price (salePrice + promo); promotion is then deducted
-  const catalogueForPlan = salePrice + promo;
-  const depositGross = Math.round(catalogueForPlan * depPct) / 100;
-  const depositTotal = Math.max(0, Math.round((depositGross - promo) * 100) / 100);
-  const balanceTotal = Math.max(0, Math.round((salePrice - depositTotal) * 100) / 100);
+  let depositTotal;
+  let balanceTotal;
+  let gapTotal = 0;
+  if (engage) {
+    const agreed = toCents(engage.agreed);
+    const first = toCents(engage.firstPayment);
+    const gap = toCents(engage.gap);
+    const left = Math.max(0, agreed - first - gap);
+    const gapAtStart = engage.gapTiming === 'debut' ? gap : 0;
+    const deposit = Math.min(left, Math.max(0, Math.round(agreed * depPct / 100) - first - gapAtStart));
+    depositTotal = deposit / 100;
+    balanceTotal = (left - deposit) / 100;
+    gapTotal = Math.min(gap, Math.max(0, agreed - first)) / 100;
+  } else {
+    depositTotal = Math.round(total * depPct) / 100;
+    balanceTotal = Math.max(0, Math.round((total - depositTotal) * 100) / 100);
+  }
   const depositStart = plan.deposit_start_date ? new Date(plan.deposit_start_date) : new Date();
   const depCount = Math.max(1, parseInt(plan.deposit_count) || 1);
   const depPeriod = Math.max(1, parseInt(plan.deposit_periodicity) || 1);
@@ -89,8 +114,21 @@ function computePreview(salePrice, plan, promotionAmount = 0) {
   const balanceAmounts = splitAmount(balanceTotal, balCount);
   const depositRows = depositDates.map((d, i) => ({ type: 'deposit', number: i + 1, date: d, amount: depositAmounts[i] }));
   const balanceRows = balanceDates.map((d, i) => ({ type: 'balance', number: i + 1, date: d, amount: balanceAmounts[i] }));
-  const allRows = [...depositRows, ...balanceRows].sort((a, b) => a.date - b.date);
-  return { depositTotal, depositGross, balanceTotal, depositRows, balanceRows, allRows, balanceStart };
+  const planRows = [...depositRows, ...balanceRows];
+  const gapRows = [];
+  if (gapTotal > 0) {
+    const lastDate = planRows.reduce((last, r) => (r.date > last ? r.date : last), depositStart);
+    const gapDate = engage.gapTiming === 'debut' ? new Date()
+      : engage.gapTiming === 'date' && engage.gapDate ? new Date(engage.gapDate)
+      : lastDate;
+    gapRows.push({ type: 'gap', number: 1, date: gapDate, amount: gapTotal });
+  }
+  const allRows = [...planRows.filter((r) => r.amount > 0), ...gapRows].sort((a, b) => a.date - b.date);
+  return { depositTotal, balanceTotal, gapTotal, depositRows, balanceRows, allRows, balanceStart };
+}
+function previewRowLabel(row) {
+  if (row.type === 'gap') return 'Écart à régulariser';
+  return `${row.type === 'deposit' ? 'Acompte' : 'Solde'} ${row.number}`;
 }
 function fmtShort(date) {
   return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -115,7 +153,7 @@ function PaymentTimeline({ rows, total }) {
             <div className="pay-tl-content">
               <div className="pay-tl-top">
                 <span className={`pay-tl-badge pay-tl-badge--${row.type}`}>
-                  {row.type === 'deposit' ? 'Acompte' : 'Solde'} {row.number}
+                  {previewRowLabel(row)}
                 </span>
                 <span className="pay-tl-date">{fmtShort(row.date)}</span>
               </div>
@@ -279,11 +317,10 @@ function ExpiredAlert({ status, expirationDate }) {
 }
 
 /* ── Payment plan configurator ────────────────────────────── */
-function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, promotionAmount = 0 }) {
+function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, engage = null }) {
   const depPct = parseFloat(plan.deposit_pct) || 50;
   const balPct = Math.round((100 - depPct) * 100) / 100;
-  const promo = Math.max(0, promotionAmount || 0);
-  const preview = useMemo(() => computePreview(lotPrice, plan, promo), [lotPrice, plan, promo]);
+  const preview = useMemo(() => computePreview(lotPrice, plan, engage), [lotPrice, plan, engage]);
   const [showPreview, setShowPreview] = useState(false);
 
   return (
@@ -303,11 +340,6 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
               <span className="pay-plan-pct-sym">%</span>
             </div>
             <div className="pay-plan-tranche-amount">{formatPrice(preview.depositTotal)}</div>
-            {promo > 0 && (
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                {formatPrice(preview.depositGross)} brut − {formatPrice(promo)} promo
-              </div>
-            )}
           </div>
           <div className="pay-plan-divider">+</div>
           <div className="pay-plan-tranche">
@@ -323,6 +355,11 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
           <div className="pay-plan-bar-deposit" style={{ width: `${depPct}%` }} />
           <div className="pay-plan-bar-balance" style={{ width: `${balPct}%` }} />
         </div>
+        {preview.gapTotal > 0 && (
+          <div className="pay-plan-split-hint" style={{ marginTop: 6 }}>
+            + Écart à régulariser : {formatPrice(preview.gapTotal)} (échéance distincte)
+          </div>
+        )}
       </div>
 
       <div className="pay-plan-dates">
@@ -340,14 +377,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
         <div className="pay-plan-section pay-plan-section--deposit">
           <div className="pay-plan-section-title pay-plan-section-title--deposit">
             <span>Étalement acompte</span>
-            <span className="pay-plan-section-total">
-              {formatPrice(preview.depositTotal)}
-              {promo > 0 && (
-                <span style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
-                  ({formatPrice(preview.depositGross)} brut)
-                </span>
-              )}
-            </span>
+            <span className="pay-plan-section-total">{formatPrice(preview.depositTotal)}</span>
           </div>
           <div className="pay-plan-section-row">
             <div className="pay-plan-field">
@@ -444,7 +474,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
                   {preview.allRows.map((row, i) => (
                     <tr key={i} className={`pay-preview-row pay-preview-row--${row.type}`}>
                       <td className="pay-preview-num">{i + 1}</td>
-                      <td><span className={`pay-preview-badge pay-preview-badge--${row.type}`}>{row.type === 'deposit' ? 'Acompte' : 'Solde'} {row.number}</span></td>
+                      <td><span className={`pay-preview-badge pay-preview-badge--${row.type}`}>{previewRowLabel(row)}</span></td>
                       <td className="pay-preview-date">{fmtShort(row.date)}</td>
                       <td className="pay-preview-amount">{formatPrice(row.amount)}</td>
                     </tr>
@@ -570,8 +600,6 @@ function LotDetailModalContent({
   const [lotPricingConfig, setLotPricingConfig] = useState(null); // prix_m2_acte from project pricing grid
   const [showAddClient, setShowAddClient] = useState(false);
   const [releaseData, setReleaseData] = useState({ deposit_refund_amount: '', deposit_refund_date: new Date().toISOString().split('T')[0], release_reason: '' });
-  const [paymentSchedule, setPaymentSchedule] = useState(null);
-  const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [reservation, setReservation] = useState(null); // full reservation details from API
   const [validationChoice, setValidationChoice] = useState(null); // 'refund' | 'deduct' | null
   // New transition state
@@ -585,13 +613,10 @@ function LotDetailModalContent({
   const [newNotaire, setNewNotaire] = useState({ nom: '', prenom: '', telephone: '', email: '', ville: '', adresse: '' });
   const [savingNotaire, setSavingNotaire] = useState(false);
   const [blockReason, setBlockReason] = useState('');
-  const [finalSalePrice, setFinalSalePrice] = useState('');
   const [editForm, setEditForm] = useState({ price_per_sqm: '', price_per_sqm_acte: '', surface: '', zone: '', type_lot: '', emplacement: '', type_maison: '' });
   const [extendDays, setExtendDays] = useState(7);
-  // Réservation engagée — prix de vente et promotion
-  const [salePriceEngaged, setSalePriceEngaged] = useState('');
-  const [promotionTiming, setPromotionTiming] = useState('debut');
-  const [markingPromotion, setMarkingPromotion] = useState(false);
+  // Réservation engagée — montants (prix total convenu, prix sur l'acte, écart, premier acompte)
+  const [amounts, setAmounts] = useState(EMPTY_AMOUNTS);
   const [downloadingDoc, setDownloadingDoc] = useState(false);
   const [settingNotaireIntent, setSettingNotaireIntent] = useState(false);
   const [documents, setDocuments] = useState([]);
@@ -605,6 +630,14 @@ function LotDetailModalContent({
   // loaded; unknown (null) until then, so « Finaliser » stays disabled.
   const [edlCount, setEdlCount] = useState({ lotId: null, count: null });
   const edlOpenCount = edlCount.lotId === lot?.id ? edlCount.count : null;
+  // financial-summary of the displayed lot's reservation, reported by PaymentsPanel;
+  // null until loaded, so the deed alert / « Marquer soldé » wait for it.
+  const [finance, setFinance] = useState({ reservationId: null, summary: null });
+  const financeSummary = lot?.reservation_id != null && finance.reservationId === lot.reservation_id ? finance.summary : null;
+  const reportFinanceSummary = useCallback(
+    (summary) => setFinance({ reservationId: lot?.reservation_id, summary }),
+    [lot?.reservation_id]
+  );
   const reportEdlOpenCount = useCallback(
     (count) => setEdlCount({ lotId: lot?.id, count }),
     [lot?.id]
@@ -614,7 +647,6 @@ function LotDetailModalContent({
     loadClients();
     loadNotaires();
     if (lot?.reservation_id) {
-      loadPaymentSchedule(lot.reservation_id);
       loadReservation(lot.reservation_id);
     } else {
       setReservation(null);
@@ -645,7 +677,7 @@ function LotDetailModalContent({
     if (!lotPricingConfig?.sale_price_computed) return;
     if (!['direct_engage', 'finaliser_engage', 'option_engage'].includes(mode)) return;
     if (lot?.price_per_sqm_acte) return; // already set on lot directly
-    setSalePriceEngaged(String(lotPricingConfig.sale_price_computed));
+    setAmounts((a) => ({ ...a, salePrice: String(lotPricingConfig.sale_price_computed) }));
   // eslint-disable-next-line react-hooks/exhaustive-deps -- re-applying auto-calc on mode change would overwrite the price the user typed; only run when the pricing config loads
   }, [lotPricingConfig]);
 
@@ -830,32 +862,10 @@ function LotDetailModalContent({
     }
   };
 
-  const loadPaymentSchedule = async (reservationId) => {
-    try {
-      const schedule = await apiGet(`/api/payments/schedules/reservation/${reservationId}`);
-      setPaymentSchedule(schedule);
-    } catch {
-      setPaymentSchedule(null); // no schedule yet
-    }
-  };
-
-  const handleConfirmFirstPayment = async () => {
-    const firstDeposit = paymentSchedule?.installments
-      ?.filter(i => i.payment_type === 'deposit')
-      .sort((a, b) => a.installment_number - b.installment_number)[0];
-    if (!firstDeposit) return;
-    setConfirmingPayment(true);
-    try {
-      await apiPatch(`/api/payments/installments/${firstDeposit.id}`, {
-        status: 'paid',
-        paid_date: new Date().toISOString(),
-      });
-      toast.success('Premier versement confirmé — réservation validée');
-      await loadPaymentSchedule(lot.reservation_id);
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      toast.error(error.message || 'Erreur lors de la confirmation');
-    } finally { setConfirmingPayment(false); }
+  // A payment may archive the deed (threshold crossed): reload documents and the lot list
+  const handlePaymentRecorded = () => {
+    loadDocuments();
+    if (onRefresh) onRefresh();
   };
 
   const handleCreateClient = async (payload) => {
@@ -893,18 +903,15 @@ function LotDetailModalContent({
     setPaymentType('cash');
     setNotaryDate('');
     setBlockReason('');
-    setFinalSalePrice('');
     setEditForm({ price_per_sqm: '', price_per_sqm_acte: '', surface: '', zone: '', type_lot: '', emplacement: '', type_maison: '' });
     setExtendDays(7);
     setValidationChoice(null);
-    setSalePriceEngaged('');
-    setPromotionTiming('debut');
+    setAmounts(EMPTY_AMOUNTS);
   };
 
   const handleSetMode = (newMode) => {
     resetFormState();
     setMode(newMode);
-    if (newMode === 'to_soldee' && lot?.price) setFinalSalePrice(lot.price.toString());
     if (newMode === 'finaliser_refund' || newMode === 'finaliser_engage') {
       const gAmount = reservation?.guarantee_amount ?? lot?.guarantee_amount ?? 0;
       const gPayType = reservation?.payment_type ?? lot?.payment_type ?? 'cash';
@@ -926,13 +933,15 @@ function LotDetailModalContent({
     }
     if (newMode === 'finaliser_engage' || newMode === 'direct_engage' || newMode === 'option_engage') {
       setEnablePaymentPlan(true);
+      // Prix total convenu = prix catalogue ; prix sur l'acte = grille de prix, sinon convenu
+      const agreed = lot?.price ? String(lot.price) : '';
+      let acte = agreed;
       if (lot?.price_per_sqm_acte && lot?.surface && lot.surface > 0) {
-        setSalePriceEngaged(String(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100));
+        acte = String(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100);
       } else if (lotPricingConfig?.sale_price_computed) {
-        setSalePriceEngaged(String(lotPricingConfig.sale_price_computed));
-      } else if (lot?.price) {
-        setSalePriceEngaged(lot.price.toString());
+        acte = String(lotPricingConfig.sale_price_computed);
       }
+      setAmounts({ ...EMPTY_AMOUNTS, agreedTotalPrice: agreed, salePrice: acte });
     }
     if (newMode === 'update_notaire') {
       setNotaryDate(lot?.notary_date || '');
@@ -1049,13 +1058,13 @@ function LotDetailModalContent({
 
   const handleDirectEngage = async () => {
     if (!selectedClient) { toast.warning('Veuillez sélectionner un client'); return; }
-    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
-    if (!guaranteeAmount || parseFloat(guaranteeAmount) <= 0) { toast.warning('Le montant du premier acompte (ND) est requis'); return; }
+    const amountsError = typedFirstPaymentError();
+    if (amountsError) { toast.warning(amountsError); return; }
     setLoading(true);
     try {
       const res = await apiPost(`/api/lots/${lot.id}/transitions/direct-engage`, engageBody({
         client_id: selectedClient.id,
-        guarantee_amount: parseFloat(guaranteeAmount),
+        guarantee_amount: parseAmount(amounts.firstPayment),
         payment_type: paymentType,
         notes: notes || undefined,
       }));
@@ -1067,8 +1076,8 @@ function LotDetailModalContent({
 
   // option → reservation_engagee (project without « réservation à finaliser »)
   const handleOptionEngage = async () => {
-    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
-    if (!guaranteeAmount || parseFloat(guaranteeAmount) <= 0) { toast.warning('Le montant du premier acompte (ND) est requis'); return; }
+    const amountsError = typedFirstPaymentError();
+    if (amountsError) { toast.warning(amountsError); return; }
     const optionDeposit = reservation?.deposit ?? lot?.deposit ?? 0;
     let depositFields = {};
     if (optionDeposit > 0) {
@@ -1083,7 +1092,7 @@ function LotDetailModalContent({
     setLoading(true);
     try {
       const res = await apiPost(`/api/lots/${lot.id}/transitions/option-engage`, engageBody({
-        guarantee_amount: parseFloat(guaranteeAmount),
+        guarantee_amount: parseAmount(amounts.firstPayment),
         payment_type: paymentType,
         notes: notes || undefined,
         ...depositFields,
@@ -1164,15 +1173,17 @@ function LotDetailModalContent({
     };
   };
 
-  // Body of an engagement: `fields` + sale price, promotion and payment plan from the form
+  // Body of an engagement: `fields` + agreed price, deed price, gap timing and payment plan
   function engageBody(fields) {
-    return buildEngagePayload({
-      lotPrice: lot?.price,
-      salePrice: salePriceEngaged ? parseFloat(salePriceEngaged) : undefined,
-      promotionTiming,
-      paymentPlan: _buildPaymentPlanPayload(),
-      ...fields,
-    });
+    return buildEngagePayload({ amounts, paymentPlan: _buildPaymentPlanPayload(), ...fields });
+  }
+
+  // Amounts error of a direct / option engagement (typed first payment, required), else null
+  function typedFirstPaymentError() {
+    const error = firstAmountsError(amounts);
+    if (error) return error;
+    if (!(parseAmount(amounts.firstPayment) > 0)) return 'Le premier acompte reçu est requis';
+    return null;
   }
 
   // Warning for an incomplete refund form (guarantee or option deposit), else null
@@ -1184,7 +1195,8 @@ function LotDetailModalContent({
   }
 
   const handleFinaliserEngage = async () => {
-    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
+    const amountsError = firstAmountsError(amounts, { firstPayment: activeGuaranteeAmount() });
+    if (amountsError) { toast.warning(amountsError); return; }
     setLoading(true);
     try {
       await apiPost(`/api/lots/${lot.id}/transitions/engage`, engageBody({ guarantee_action: 'deduct' }));
@@ -1197,7 +1209,8 @@ function LotDetailModalContent({
   const handleFinaliserEngageWithRefund = async () => {
     const refundError = refundFormError();
     if (refundError) { toast.warning(refundError); return; }
-    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
+    const amountsError = firstAmountsError(amounts, { firstPayment: 0 });
+    if (amountsError) { toast.warning(amountsError); return; }
     setLoading(true);
     try {
       await apiPost(`/api/lots/${lot.id}/transitions/engage`, engageBody({
@@ -1210,17 +1223,10 @@ function LotDetailModalContent({
     finally { setLoading(false); }
   };
 
-  const handleMarkPromotionReceived = async () => {
-    if (!lot?.reservation_id) return;
-    setMarkingPromotion(true);
-    try {
-      const updatedRes = await apiPost(`/api/reservations/${lot.reservation_id}/mark-promotion-received`, {});
-      setReservation(updatedRes);
-      toast.success('Montant de la promotion marqué comme reçu — acte de réservation disponible');
-      if (onRefresh) onRefresh();
-    } catch (error) { toast.error(error.message || 'Erreur'); }
-    finally { setMarkingPromotion(false); }
-  };
+  // Guarantee kept as first payment when engaging a reservation to finalise
+  function activeGuaranteeAmount() {
+    return reservation?.guarantee_amount ?? lot?.guarantee_amount ?? 0;
+  }
 
   const handleSetNotaireIntent = async (wantsNotaire) => {
     if (!lot?.id) return;
@@ -1244,8 +1250,8 @@ function LotDetailModalContent({
     try {
       const response = await apiFetch(`/api/reservations/${lot.reservation_id}/certificate`);
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || `Erreur ${response.status}`);
+        // threshold refusal: 400 `message`; other errors may carry `detail`
+        throw buildApiError(await response.json().catch(() => ({})), response.status);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -1264,8 +1270,7 @@ function LotDetailModalContent({
     try {
       const response = await apiFetch(`/api/reservations/${lot.reservation_id}/receipt`);
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || `Erreur ${response.status}`);
+        throw buildApiError(await response.json().catch(() => ({})), response.status);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -1278,12 +1283,11 @@ function LotDetailModalContent({
     finally { setDownloadingDoc(false); }
   };
 
+  // The sale is recorded at the agreed total price (backend); no price is typed any more
   const handleToSoldee = async () => {
-    const price = finalSalePrice ? parseFloat(finalSalePrice) : lot.price;
-    if (!price || price <= 0) { toast.warning('Le prix final est requis'); return; }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/solde`, { price, notes: notes || undefined });
+      await apiPost(`/api/lots/${lot.id}/transitions/solde`, { notes: notes || undefined });
       toast.success('Lot soldé — vente enregistrée');
       onClose(); if (onRefresh) onRefresh();
     } catch (error) { toast.error(error.message || 'Erreur'); }
@@ -1351,13 +1355,6 @@ function LotDetailModalContent({
     finally { setLoading(false); }
   };
 
-  // Preview row count for panel header subtitle (based on remaining balance).
-  // Must be called before the `if (!lot) return null` below (rules of hooks), hence the lot?.price guard.
-  const previewRowCount = useMemo(() => {
-    const balance = lot?.price ? Math.max(0, lot.price - (parseFloat(depositAmount) || 0)) : 0;
-    return balance > 0 && enablePaymentPlan ? computePreview(balance, paymentPlan).allRows.length : 0;
-  }, [lot?.price, depositAmount, enablePaymentPlan, paymentPlan]);
-
   if (!lot) return null;
 
   // Actions offered = transitions allowed for this status by the project settings
@@ -1382,12 +1379,16 @@ function LotDetailModalContent({
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   })();
 
-  // First deposit installment — for alert logic
-  const firstDepositInstallment = paymentSchedule?.installments
+  // First deposit installment (financial summary) — for the overdue alert
+  const firstDepositInstallment = financeSummary?.installments
     ?.filter(i => i.payment_type === 'deposit')
     .sort((a, b) => a.installment_number - b.installment_number)[0] ?? null;
-  const firstPaymentIsOverdue = firstDepositInstallment?.status === 'pending'
+  const firstPaymentIsOverdue = firstDepositInstallment != null && firstDepositInstallment.status !== 'paid'
     && new Date(firstDepositInstallment.due_date) < new Date();
+  // Payments are recorded on an engaged reservation, by its commercial or a manager
+  const canRecordPayments = lot.status === 'reservation_engagee'
+    && (isManager || (lot.reserved_by_user_id != null && lot.reserved_by_user_id === user?.id));
+  const showFinance = ACTE_STATUSES.includes(lot.status) && !!lot.reservation_id;
   const lotStats = [
     lot.surface && { icon: <IcSurface />, value: `${lot.surface} m²`, label: 'Surface' },
     (lot.price_per_sqm || (lot.price && lot.surface && lot.surface > 0)) && {
@@ -1503,52 +1504,28 @@ function LotDetailModalContent({
                       </span>
                     </div>
                   )}
-                  {firstDepositInstallment && (
-                    <div className="ldm-ri-row">
-                      <span className="ldm-ri-key">1er versement plan</span>
-                      <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {formatPrice(firstDepositInstallment.amount)}
-                        {firstDepositInstallment.status === 'paid'
-                          ? <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Payé</span>
-                          : <span className="badge badge-red" style={{ fontSize: '0.65rem' }}>En attente</span>
-                        }
-                      </span>
-                    </div>
-                  )}
-                  {/* Bloc promotion — visible uniquement en réservation engagée et au-delà */}
-                  {['reservation_engagee','reservation_soldee',...EDL_STATUSES,'chez_notaire','chez_proprietaire'].includes(lot.status) && reservation?.sale_price != null && (
+                  {/* Montants de la réservation engagée (spec E4-T5) */}
+                  {ACTE_STATUSES.includes(lot.status) && reservation?.sale_price != null && (
                     <>
-                      {reservation.sale_price !== lot.price && (
+                      <div className="ldm-ri-row">
+                        <span className="ldm-ri-key">Prix figurant sur l'acte</span>
+                        <span className="ldm-ri-val ldm-ri-val--bold">{formatPrice(reservation.sale_price)}</span>
+                      </div>
+                      {(reservation.gap_amount ?? 0) > 0 && (
                         <div className="ldm-ri-row">
-                          <span className="ldm-ri-key">Prix de vente</span>
-                          <span className="ldm-ri-val ldm-ri-val--bold">{formatPrice(reservation.sale_price)}</span>
+                          <span className="ldm-ri-key">Écart à régulariser</span>
+                          <span className="ldm-ri-val">
+                            {formatPrice(reservation.gap_amount)}
+                            {reservation.gap_due_timing === 'date'
+                              ? ` — le ${formatDate(reservation.gap_due_date)}`
+                              : GAP_TIMING_TEXT[reservation.gap_due_timing] ? ` — ${GAP_TIMING_TEXT[reservation.gap_due_timing]}` : ''}
+                          </span>
                         </div>
                       )}
-                      {(reservation.promotion_amount ?? 0) > 0 && (
-                        <>
-                          <div className="ldm-ri-row">
-                            <span className="ldm-ri-key">Promotion</span>
-                            <span className="ldm-ri-val" style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
-                              {formatPrice(reservation.promotion_amount)}
-                            </span>
-                          </div>
-                          <div className="ldm-ri-row">
-                            <span className="ldm-ri-key">Paiement promotion</span>
-                            <span className="ldm-ri-val">
-                              {reservation.promotion_paid_timing === 'debut' ? 'Au début' : reservation.promotion_paid_timing === 'fin' ? 'À la fin' : '—'}
-                            </span>
-                          </div>
-                          <div className="ldm-ri-row">
-                            <span className="ldm-ri-key">Promotion reçue</span>
-                            <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {reservation.promotion_received
-                                ? <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Reçue</span>
-                                : <span className="badge badge-red" style={{ fontSize: '0.65rem' }}>Non reçue</span>
-                              }
-                            </span>
-                          </div>
-                        </>
-                      )}
+                      <div className="ldm-ri-row">
+                        <span className="ldm-ri-key">Premier acompte reçu</span>
+                        <span className="ldm-ri-val">{formatPrice(reservation.first_payment)}</span>
+                      </div>
                     </>
                   )}
                   {/* Acte de réservation archivé */}
@@ -1572,33 +1549,21 @@ function LotDetailModalContent({
                         </div>
                       );
                     }
-                    const promotionPending = (reservation?.promotion_amount ?? 0) > 0 && !reservation?.promotion_received;
-                    if (!reservation || promotionPending) return null;
+                    // No deed yet: legitimately waiting for the paid threshold, or a failed generation
+                    if (!financeSummary) return null;
+                    if (!financeSummary.acte_available) {
+                      return (
+                        <div className="ldm-ri-row">
+                          <span className="ldm-ri-key" style={{ color: 'var(--color-warning)' }}>{acteThresholdMessage(financeSummary)}</span>
+                        </div>
+                      );
+                    }
                     return (
                       <div className="ldm-ri-row">
                         <span className="ldm-ri-key" style={{ color: 'var(--color-warning)' }}>L'acte n'a pas été généré.</span>
                         <button type="button" className="btn btn-ghost btn-sm" onClick={handleRegenerateActe} disabled={regeneratingActe}>
                           {regeneratingActe ? 'Génération...' : 'Régénérer'}
                         </button>
-                      </div>
-                    );
-                  })()}
-                  {/* Montant restant à payer */}
-                  {lot.status === 'reservation_engagee' && paymentSchedule && (() => {
-                    const unpaidTotal = paymentSchedule.installments
-                      ?.filter(i => i.status === 'pending')
-                      .reduce((s, i) => s + i.amount, 0) ?? 0;
-                    const promoRemaining = (reservation?.promotion_amount ?? 0) > 0 && !reservation?.promotion_received
-                      ? (reservation.promotion_paid_timing === 'fin' ? reservation.promotion_amount : 0)
-                      : 0;
-                    const remaining = unpaidTotal + promoRemaining;
-                    if (remaining <= 0) return null;
-                    return (
-                      <div className="ldm-ri-row" style={{ marginTop: 4, borderTop: '1px solid var(--bg-surface)', paddingTop: 6 }}>
-                        <span className="ldm-ri-key" style={{ fontWeight: 600 }}>Restant à payer</span>
-                        <span className="ldm-ri-val ldm-ri-val--bold" style={{ color: 'var(--color-primary)' }}>
-                          {formatPrice(remaining)}
-                        </span>
                       </div>
                     );
                   })()}
@@ -1609,19 +1574,30 @@ function LotDetailModalContent({
                     <div className="ldm-fpa-body">
                       <div className="ldm-fpa-title">Premier versement en retard</div>
                       <div className="ldm-fpa-desc">
-                        Échéance du {formatDate(firstDepositInstallment.due_date)} — {formatPrice(firstDepositInstallment.amount)}
+                        Échéance du {formatDate(firstDepositInstallment.due_date)} — restant dû {formatPrice(firstDepositInstallment.remaining)}.
+                        {canRecordPayments && ' Enregistrez l\'encaissement dans l\'échéancier.'}
                       </div>
                     </div>
-                    <button className="btn btn-primary btn-sm"
-                      onClick={handleConfirmFirstPayment} disabled={confirmingPayment}
-                      style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      <IcCheck />{confirmingPayment ? 'Confirmation...' : 'Confirmer le paiement'}
-                    </button>
                   </div>
                 )}
               </div>
             )}
           </div>
+
+          {/* ── Échéancier et encaissements (réservation engagée et au-delà) ── */}
+          {showFinance && (
+            <div className="ldm-documents-section">
+              <div className="ldm-section-label">Échéancier et encaissements</div>
+              <PaymentsPanel
+                key={lot.reservation_id}
+                reservationId={lot.reservation_id}
+                canRecord={canRecordPayments}
+                showActeStatus={false}
+                onSummaryChange={reportFinanceSummary}
+                onPaymentRecorded={handlePaymentRecorded}
+              />
+            </div>
+          )}
 
           {/* ── Notifications ── */}
           <div className="ldm-documents-section">
@@ -1795,36 +1771,32 @@ function LotDetailModalContent({
             })()}
             {lot.status === 'reservation_engagee' && (
               <>
-                {(reservation?.promotion_amount ?? 0) > 0 && !reservation?.promotion_received && (
-                  <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    onClick={handleMarkPromotionReceived} disabled={markingPromotion}
-                    title="Marquer le montant de la promotion comme reçu">
-                    <IcTag /> {markingPromotion ? 'En cours...' : 'Promotion reçue'}
-                  </button>
-                )}
-                {/* Document : reçu si promotion en attente, acte si promotion reçue (ou pas de promotion) */}
-                {(reservation?.promotion_received || !(reservation?.promotion_amount > 0)) ? (
+                {/* Document : acte une fois le seuil d'encaissement atteint, reçu dès le premier acompte */}
+                {financeSummary?.acte_available ? (
                   <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     onClick={handleDownloadCertificate} disabled={downloadingDoc}
                     title="Télécharger l'acte de réservation PDF">
                     <IcDownload /> {downloadingDoc ? 'Génération...' : 'Acte de réservation'}
                   </button>
-                ) : (
+                ) : (financeSummary?.first_payment ?? 0) > 0 && (
                   <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     onClick={handleDownloadReceipt} disabled={downloadingDoc}
-                    title="Télécharger le reçu de paiement (promotion non encore reçue)">
+                    title="Télécharger le reçu de paiement (acte pas encore disponible)">
                     <IcDownload /> {downloadingDoc ? 'Génération...' : 'Reçu de paiement'}
                   </button>
                 )}
                 {can('solde') && (() => {
-                  const allPaid = !paymentSchedule || paymentSchedule.installments.every(i => i.status === 'paid');
+                  // Soldable only once nothing is left to pay (gap included) — checked again by the backend
+                  const allPaid = financeSummary != null && financeSummary.remaining <= 0;
                   return (
                     <button
                       className="btn btn-success"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, ...(!allPaid ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
                       onClick={() => allPaid && handleSetMode('to_soldee')}
                       disabled={!allPaid}
-                      title={!allPaid ? 'Tous les versements doivent être encaissés avant de marquer soldé' : 'Marquer le lot comme soldé'}
+                      title={!allPaid
+                        ? (financeSummary ? `Reste à payer : ${formatPrice(financeSummary.remaining)} — la réservation ne peut pas être soldée.` : "Chargement de l'échéancier…")
+                        : 'Marquer le lot comme soldé'}
                     >
                       <IcCheck /> Marquer soldé
                     </button>
@@ -1964,17 +1936,28 @@ function LotDetailModalContent({
   const isEngageMode = mode === 'direct_engage' || mode === 'finaliser_engage' || mode === 'option_engage';
   const isEdlMode = ['edl_schedule', 'edl_reschedule', 'edl_done'].includes(mode);
   const showThirdPanel = (isStartOption || isEngageMode) && enablePaymentPlan && lot.price;
-  // Price to use in the third panel for engage modes (sale price if set, else catalogue)
-  const engagePlanPrice = salePriceEngaged ? parseFloat(salePriceEngaged) : (lot?.price || 0);
-  // When finaliser_engage + deduct: guarantee already paid → subtract from plan base
-  // Same for option_engage + deduct: the option deposit is subtracted
-  const finaliserDeductOffset = validationChoice !== 'deduct' ? 0
-    : mode === 'finaliser_engage' ? activeGuarantee
-    : mode === 'option_engage' ? optionDeposit
-    : 0;
-  const thirdPanelPrice = isEngageMode ? Math.max(0, engagePlanPrice - finaliserDeductOffset) : remainingBalance;
-  // Promotion = catalogue − prix de vente (si engage mode, sinon 0)
-  const engagePromoAmount = isEngageMode ? Math.max(0, (lot?.price || 0) - engagePlanPrice) : 0;
+  // Premier acompte reçu à l'engagement : saisi (direct / option, + acompte de l'option déduit),
+  // ou la garantie conservée (réservation à finaliser), 0 si elle est rendue
+  const finaliserFirstPayment = validationChoice === 'deduct' ? activeGuarantee : 0;
+  const engageFirstPayment = mode === 'finaliser_engage'
+    ? finaliserFirstPayment
+    : (parseAmount(amounts.firstPayment) ?? 0) + (mode === 'option_engage' && validationChoice === 'deduct' ? optionDeposit : 0);
+  const engageAgreed = parseAmount(amounts.agreedTotalPrice) ?? 0;
+  // The schedule covers agreed − first payment, the gap on its own installment (spec E4-T5)
+  const engagePreview = isEngageMode ? {
+    agreed: engageAgreed,
+    firstPayment: engageFirstPayment,
+    gap: gapAmount(amounts.agreedTotalPrice, amounts.salePrice),
+    gapTiming: amounts.gapDueTiming,
+    gapDate: amounts.gapDueDate,
+  } : null;
+  const thirdPanelPrice = isEngageMode ? Math.max(0, engageAgreed - engageFirstPayment) : remainingBalance;
+  const previewRowCount = showThirdPanel && thirdPanelPrice > 0
+    ? computePreview(thirdPanelPrice, paymentPlan, engagePreview).allRows.length : 0;
+  // Deed price hint: deed price per m² × surface
+  const salePriceHint = lot?.surface && lot.surface > 0 && (lot?.price_per_sqm_acte || lotPricingConfig?.prix_m2_acte)
+    ? `${Number(lot?.price_per_sqm_acte || lotPricingConfig.prix_m2_acte).toLocaleString('fr-FR')} MAD/m² acte × ${lot.surface} m²`
+    : null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -2026,7 +2009,7 @@ function LotDetailModalContent({
             <button className="modal-close" onClick={onClose}><IcClose /></button>
           </div>
 
-          {lot.price && (
+          {lot.price && !isEngageMode && (
             <div className="msr-price-pill">
               <span className="msr-price-pill-label">Prix catalogue</span>
               <span className="msr-price-pill-value">{formatPrice(lot.price)}</span>
@@ -2034,7 +2017,7 @@ function LotDetailModalContent({
           )}
           {['direct_engage', 'finaliser_engage', 'option_engage'].includes(mode) && !lot.price_per_sqm_acte && lotPricingConfig?.sale_price_computed && Math.abs(lotPricingConfig.sale_price_computed - lot.price) > 1 && (
             <div className="msr-price-pill" style={{ background: 'rgba(139,92,246,0.08)', borderColor: 'rgba(139,92,246,0.25)' }}>
-              <span className="msr-price-pill-label">Prix acte</span>
+              <span className="msr-price-pill-label">Grille de prix (acte)</span>
               <span className="msr-price-pill-value" style={{ color: '#8b5cf6' }}>{formatPrice(lotPricingConfig.sale_price_computed)}</span>
             </div>
           )}
@@ -2222,8 +2205,6 @@ function LotDetailModalContent({
 
             {/* ── direct_engage (available → engagée) / option_engage (option → engagée) form ── */}
             {(mode === 'direct_engage' || mode === 'option_engage') && (() => {
-              const salePrice = salePriceEngaged ? parseFloat(salePriceEngaged) : null;
-              const promoAmt = (salePrice != null && lot?.price != null) ? Math.max(0, lot.price - salePrice) : 0;
               return (
                 <>
                   {/* Client — choisi en direct, celui de l'option sinon */}
@@ -2252,99 +2233,22 @@ function LotDetailModalContent({
                     </div>
                   )}
 
-                  {/* Premier acompte (ND) — requis par l'engagement */}
-                  <div className="msr-field-group">
-                    <label className="msr-label"><IcMoney /> Premier acompte (ND) <span className="msr-required">*</span></label>
-                    <div className="msr-price-input-wrap">
-                      <input type="number" className="msr-price-input" placeholder="Montant reçu"
-                        min="0" step="1000" value={guaranteeAmount} onChange={e => setGuaranteeAmount(e.target.value)} />
-                      <span className="msr-price-input-currency">MAD</span>
-                    </div>
-                  </div>
+                  {/* Montants : prix total convenu, prix sur l'acte, écart, premier acompte reçu */}
+                  <EngagementAmountsFields
+                    cataloguePrice={lot.price ?? null}
+                    value={amounts}
+                    onChange={setAmounts}
+                    salePriceHint={salePriceHint}
+                    firstPaymentHint={mode === 'option_engage' && validationChoice === 'deduct' && optionDeposit > 0
+                      ? `+ acompte de l'option conservé : ${formatPrice(optionDeposit)}`
+                      : undefined}
+                  />
                   <div className="msr-field-group">
                     <label className="msr-label"><IcPayments /> Mode de paiement <span className="msr-required">*</span></label>
                     <select className="msr-select" value={paymentType} onChange={e => setPaymentType(e.target.value)}>
                       {PAYMENT_TYPES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                     </select>
                   </div>
-
-                  {/* Prix de vente (acte) — calculé automatiquement si prix/m² acte défini */}
-                  <div className="msr-field-group">
-                    <label className="msr-label"><IcTag /> Prix de vente (acte) <span className="msr-required">*</span></label>
-                    <div className="msr-price-input-wrap">
-                      <input type="number" className="msr-price-input"
-                        placeholder={lot?.price_per_sqm_acte && lot?.surface ? 'Calculé automatiquement' : "Prix indiqué sur l'acte"}
-                        min="0" step="1000"
-                        value={salePriceEngaged}
-                        onChange={e => setSalePriceEngaged(e.target.value)} />
-                      <span className="msr-price-input-currency">MAD</span>
-                    </div>
-                    {lot?.surface && lot.surface > 0 && (lot?.price_per_sqm_acte || lotPricingConfig?.prix_m2_acte) && (
-                      <div className="msr-price-diff msr-price-diff--eq" style={{ opacity: 0.7 }}>
-                        {Number(lot?.price_per_sqm_acte || lotPricingConfig.prix_m2_acte).toLocaleString('fr-FR')} MAD/m² acte × {lot.surface} m²
-                      </div>
-                    )}
-                    {lot?.price && salePriceEngaged && (
-                      <div className={`msr-price-diff msr-price-diff--${parseFloat(salePriceEngaged) < lot.price ? 'down' : parseFloat(salePriceEngaged) > lot.price ? 'up' : 'eq'}`}>
-                        {(() => {
-                          const diff = lot.price - parseFloat(salePriceEngaged);
-                          const pct = (Math.abs(diff) / lot.price * 100).toFixed(1);
-                          return diff > 0
-                            ? `Promotion : ${formatPrice(diff)} (−${pct}% du catalogue)`
-                            : diff < 0
-                              ? `Au-dessus du catalogue : +${formatPrice(Math.abs(diff))}`
-                              : 'Identique au prix catalogue — aucune promotion';
-                        })()}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Montant promotion — calculé automatiquement */}
-                  {lot?.price != null && (
-                    <div className="msr-field-group">
-                      <label className="msr-label"><IcTag /> Montant promotion <span className="msr-optional">(calculé)</span></label>
-                      <div className="msr-price-input-wrap">
-                        <input type="number" className="msr-price-input" placeholder="0"
-                          min="0" step="1000"
-                          value={salePriceEngaged ? String(Math.max(0, Math.round((lot.price - parseFloat(salePriceEngaged)) * 100) / 100)) : ''}
-                          onChange={e => {
-                            const p = parseFloat(e.target.value) || 0;
-                            setSalePriceEngaged(String(lot.price - p));
-                          }} />
-                        <span className="msr-price-input-currency">MAD</span>
-                      </div>
-                    </div>
-                  )}
-                  {promoAmt > 0 && (
-                    <>
-                      <div className="msr-field-group">
-                        <label className="msr-label">Paiement promotion <span className="msr-required">*</span></label>
-                        <div className="msr-validation-choice" style={{ flexDirection: 'row', gap: 8 }}>
-                          <button type="button"
-                            className={`msr-vc-btn${promotionTiming === 'debut' ? ' msr-vc-btn--deduct-active' : ''}`}
-                            style={{ flex: 1 }}
-                            onClick={() => setPromotionTiming('debut')}>
-                            <IcCalendar />
-                            <span className="msr-vc-label">Au début</span>
-                            <span className="msr-vc-desc">Avec le 1er acompte</span>
-                          </button>
-                          <button type="button"
-                            className={`msr-vc-btn${promotionTiming === 'fin' ? ' msr-vc-btn--deduct-active' : ''}`}
-                            style={{ flex: 1 }}
-                            onClick={() => setPromotionTiming('fin')}>
-                            <IcCalendar />
-                            <span className="msr-vc-label">À la fin</span>
-                            <span className="msr-vc-desc">Avec le solde</span>
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: 4, fontSize: '0.8rem', color: promotionTiming === 'debut' ? 'var(--color-success)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {promotionTiming === 'debut'
-                          ? <><IcCheck /> Promotion encaissée maintenant — avant validation de l'engagement.</>
-                          : 'Promotion encaissée avec le solde final.'}
-                      </div>
-                    </>
-                  )}
 
                   {/* Échéancier de paiement */}
                   <div className="pay-plan-toggle-row">
@@ -2524,8 +2428,6 @@ function LotDetailModalContent({
 
             {/* ── finaliser_engage — écran de décision (rembourser ou déduire) ── */}
             {mode === 'finaliser_engage' && (() => {
-              const salePrice = salePriceEngaged ? parseFloat(salePriceEngaged) : null;
-              const promoAmt = (salePrice != null && lot?.price != null) ? Math.max(0, lot.price - salePrice) : 0;
               return (
                 <>
                   {lot.client_name && (
@@ -2549,83 +2451,17 @@ function LotDetailModalContent({
                     </div>
                   )}
 
-                  {/* Prix de vente (acte) — calculé automatiquement si prix/m² acte défini */}
-                  <div className="msr-field-group">
-                    <label className="msr-label"><IcTag /> Prix de vente (acte) <span className="msr-required">*</span></label>
-                    <div className="msr-price-input-wrap">
-                      <input type="number" className="msr-price-input"
-                        placeholder={lot?.price_per_sqm_acte && lot?.surface ? 'Calculé automatiquement' : "Prix indiqué sur l'acte"}
-                        min="0" step="1000"
-                        value={salePriceEngaged}
-                        onChange={e => setSalePriceEngaged(e.target.value)} />
-                      <span className="msr-price-input-currency">MAD</span>
-                    </div>
-                    {lot?.surface && lot.surface > 0 && (lot?.price_per_sqm_acte || lotPricingConfig?.prix_m2_acte) && (
-                      <div className="msr-price-diff msr-price-diff--eq" style={{ opacity: 0.7 }}>
-                        {Number(lot?.price_per_sqm_acte || lotPricingConfig.prix_m2_acte).toLocaleString('fr-FR')} MAD/m² acte × {lot.surface} m²
-                      </div>
-                    )}
-                    {lot?.price && salePriceEngaged && (
-                      <div className={`msr-price-diff msr-price-diff--${parseFloat(salePriceEngaged) < lot.price ? 'down' : parseFloat(salePriceEngaged) > lot.price ? 'up' : 'eq'}`}>
-                        {(() => {
-                          const diff = lot.price - parseFloat(salePriceEngaged);
-                          const pct = (Math.abs(diff) / lot.price * 100).toFixed(1);
-                          return diff > 0
-                            ? `Promotion : ${formatPrice(diff)} (−${pct}% du catalogue)`
-                            : diff < 0
-                              ? `Au-dessus du catalogue : +${formatPrice(Math.abs(diff))}`
-                              : 'Identique au prix catalogue — aucune promotion';
-                        })()}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Montant promotion — calculé automatiquement */}
-                  {lot?.price != null && (
-                    <div className="msr-field-group">
-                      <label className="msr-label"><IcTag /> Montant promotion <span className="msr-optional">(calculé)</span></label>
-                      <div className="msr-price-input-wrap">
-                        <input type="number" className="msr-price-input" placeholder="0"
-                          min="0" step="1000"
-                          value={salePriceEngaged ? String(Math.max(0, Math.round((lot.price - parseFloat(salePriceEngaged)) * 100) / 100)) : ''}
-                          onChange={e => {
-                            const p = parseFloat(e.target.value) || 0;
-                            setSalePriceEngaged(String(lot.price - p));
-                          }} />
-                        <span className="msr-price-input-currency">MAD</span>
-                      </div>
-                    </div>
-                  )}
-                  {promoAmt > 0 && (
-                    <>
-                      <div className="msr-field-group">
-                        <label className="msr-label">Paiement promotion <span className="msr-required">*</span></label>
-                        <div className="msr-validation-choice" style={{ flexDirection: 'row', gap: 8 }}>
-                          <button type="button"
-                            className={`msr-vc-btn${promotionTiming === 'debut' ? ' msr-vc-btn--deduct-active' : ''}`}
-                            style={{ flex: 1 }}
-                            onClick={() => setPromotionTiming('debut')}>
-                            <IcCalendar />
-                            <span className="msr-vc-label">Au début</span>
-                            <span className="msr-vc-desc">Avec le 1er acompte</span>
-                          </button>
-                          <button type="button"
-                            className={`msr-vc-btn${promotionTiming === 'fin' ? ' msr-vc-btn--deduct-active' : ''}`}
-                            style={{ flex: 1 }}
-                            onClick={() => setPromotionTiming('fin')}>
-                            <IcCalendar />
-                            <span className="msr-vc-label">À la fin</span>
-                            <span className="msr-vc-desc">Avec le solde</span>
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: 4, fontSize: '0.8rem', color: promotionTiming === 'debut' ? 'var(--color-success)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {promotionTiming === 'debut'
-                          ? <><IcCheck /> Promotion encaissée maintenant — avant validation de l'engagement.</>
-                          : 'Promotion encaissée avec le solde final.'}
-                      </div>
-                    </>
-                  )}
+                  {/* Montants : la garantie conservée est le premier acompte reçu */}
+                  <EngagementAmountsFields
+                    cataloguePrice={lot.price ?? null}
+                    value={amounts}
+                    onChange={setAmounts}
+                    salePriceHint={salePriceHint}
+                    firstPayment={finaliserFirstPayment}
+                    firstPaymentHint={validationChoice === 'deduct'
+                      ? 'Garantie conservée'
+                      : validationChoice === 'refund' ? 'Garantie rendue : aucun acompte reçu' : 'Selon la décision sur la garantie'}
+                  />
 
                   {/* Échéancier de paiement */}
                   <div className="pay-plan-toggle-row">
@@ -2660,9 +2496,9 @@ function LotDetailModalContent({
                   {validationChoice === 'deduct' && (
                     <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
                       <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                        La garantie de <strong>{formatPrice(activeGuarantee)}</strong> sera déduite du prix de vente.
-                        {enablePaymentPlan && engagePlanPrice > 0 && (
-                          <> Le plan de paiement portera sur le solde restant : <strong>{formatPrice(Math.max(0, engagePlanPrice - activeGuarantee))}</strong>.</>
+                        La garantie de <strong>{formatPrice(activeGuarantee)}</strong> est comptée comme premier acompte reçu.
+                        {engageAgreed > 0 && (
+                          <> L'échéancier portera sur le reste : <strong>{formatPrice(Math.max(0, engageAgreed - activeGuarantee))}</strong>.</>
                         )}
                       </span>
                     </div>
@@ -2674,28 +2510,14 @@ function LotDetailModalContent({
             {/* ── to_soldee form ── */}
             {mode === 'to_soldee' && (
               <>
-                {/* Avertissement promotion non reçue (timing 'fin') */}
-                {reservation?.promotion_amount > 0
-                  && !reservation?.promotion_received
-                  && reservation?.promotion_paid_timing === 'fin' && (
-                  <div className="msr-info-pill" style={{ background: 'rgba(239,68,68,0.10)', borderColor: 'var(--color-danger)', marginBottom: 12 }}>
-                    <span style={{ fontSize: '0.82rem', color: 'var(--color-danger)' }}>
-                      La différence de promotion (<strong>{reservation.promotion_amount.toLocaleString('fr-FR')} MAD</strong>) doit être reçue avant de solder — utilisez le bouton <em>Promotion reçue</em> sur la fiche du lot.
-                    </span>
-                  </div>
-                )}
                 <div className="msr-field-group">
-                  <label className="msr-label"><IcMoney /> Prix final de vente <span className="msr-required">*</span></label>
-                  <div className="msr-price-input-wrap">
-                    <input type="number" className="msr-price-input" placeholder="Prix de vente final"
-                      value={finalSalePrice} onChange={e => setFinalSalePrice(e.target.value)} />
-                    <span className="msr-price-input-currency">MAD</span>
+                  <span className="msr-label"><IcMoney /> Prix total convenu</span>
+                  <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                    <span className="msr-info-pill-value">
+                      {formatPrice(financeSummary?.agreed_total_price ?? reservation?.agreed_total_price ?? lot.price)}
+                    </span>
+                    <span className="msr-info-pill-sub">La vente est enregistrée au prix total convenu.</span>
                   </div>
-                  {finalSalePrice && lot.price && (
-                    <div className={`msr-price-diff msr-price-diff--${parseFloat(finalSalePrice) > lot.price ? 'up' : parseFloat(finalSalePrice) < lot.price ? 'down' : 'eq'}`}>
-                      {(() => { const diff = parseFloat(finalSalePrice) - lot.price; const pct = (diff / lot.price * 100).toFixed(1); return `${diff > 0 ? '+' : ''}${pct}% ${diff > 0 ? 'au-dessus du' : diff < 0 ? 'en-dessous du' : 'identique au'} catalogue`; })()}
-                    </div>
-                  )}
                 </div>
                 <div className="msr-field-group">
                   <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
@@ -2932,7 +2754,7 @@ function LotDetailModalContent({
               <span className="mpp-total">{formatPrice(thirdPanelPrice)}</span>
             </div>
             <div className="mpp-body">
-              <PaymentPlanConfigurator lotPrice={thirdPanelPrice} plan={paymentPlan} onChange={setPaymentPlan} panel promotionAmount={engagePromoAmount} />
+              <PaymentPlanConfigurator lotPrice={thirdPanelPrice} plan={paymentPlan} onChange={setPaymentPlan} panel engage={engagePreview} />
             </div>
           </div>
         )}

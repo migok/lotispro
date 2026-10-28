@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { renderWithProviders } from '../../test/renderWithProviders'
@@ -103,17 +103,32 @@ describe('ClientDetailPage - fiche client', () => {
     const WITH_RESERVATION = {
       ...CLIENT,
       reservations_history: [
-        { id: 5, status: 'reservation_engagee', lot_numero: 'A1', project_id: 1, project_name: 'Projet', promotion_amount: 0 },
+        { id: 5, status: 'active', lot_numero: 'A1', project_id: 1, project_name: 'Projet', reserved_by_user_id: 2 },
       ],
     }
+    const SUMMARY = {
+      catalogue_price: 500000, agreed_total_price: 500000, acte_price: 450000, gap_amount: 50000,
+      gap_due_timing: 'fin', gap_due_date: null, first_payment: 100000, total_received: 100000, remaining: 400000,
+      acte_min_paid_pct: 10, acte_threshold_amount: 50000, acte_available: true,
+      installments: [
+        { id: 1, payment_type: 'deposit', installment_number: 1, amount: 150000, due_date: '2030-01-01T00:00:00', received: 0, remaining: 150000, status: 'pending' },
+        { id: 4, payment_type: 'gap', installment_number: 1, amount: 50000, due_date: '2030-06-01T00:00:00', received: 0, remaining: 50000, status: 'pending' },
+      ],
+      updated_at: '2026-10-28T10:00:00',
+    }
 
-    function mockDownloads(acteStatus) {
-      const fetchMock = vi.fn((url) => {
+    function mockDownloads(acteStatus, summary = SUMMARY) {
+      const fetchMock = vi.fn((url, options = {}) => {
         const path = String(url).replace(/^https?:\/\/[^/]+/, '')
-        const json = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
+        const json = (body, status = 200) => Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) })
         if (path.endsWith('/details')) return json(WITH_RESERVATION)
         if (path.includes('/api/payments/schedules/client/')) {
-          return json([{ reservation_id: 5, installments: [{ payment_type: 'deposit', installment_number: 1, status: 'paid' }] }])
+          return json([{ id: 9, reservation_id: 5, lot_price: 400000, installments: [] }])
+        }
+        if (path.endsWith('/api/reservations/5/financial-summary')) return json(summary)
+        if (path.endsWith('/api/reservations/5/payments') && options.method === 'POST') return json({ id: 2 }, 201)
+        if (path.endsWith('/api/reservations/5/certificate/email')) {
+          return json({ error: 'BUSINESS_RULE_VIOLATION', message: "L'acte sera disponible quand 10 % du prix total convenu aura été encaissé (0 MAD sur 50 000 MAD)." }, 400)
         }
         if (path.endsWith('/api/reservations/5/acte')) {
           return Promise.resolve({ ok: acteStatus === 200, status: acteStatus, blob: () => Promise.resolve(new Blob(['%PDF'])), json: () => Promise.resolve({}) })
@@ -161,6 +176,50 @@ describe('ClientDetailPage - fiche client', () => {
 
       await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled())
       expect(calledPaths(fetchMock)).toEqual(expect.arrayContaining(['/api/reservations/5/acte', '/api/reservations/5/certificate']))
+    })
+
+    it('shows the threshold message and the receipt while the deed is not available', async () => {
+      mockDownloads(404, { ...SUMMARY, acte_min_paid_pct: 30, acte_threshold_amount: 150000, acte_available: false })
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(await screen.findByRole('button', { name: /Réservations \(1\)/ }))
+
+      expect(await screen.findByText(
+        "L'acte sera disponible quand 30 % du prix total convenu aura été encaissé (100.000 MAD sur 150.000 MAD)."
+      )).toBeInTheDocument()
+      expect(screen.getByText('Reçu de paiement')).toBeInTheDocument()
+      expect(screen.queryByText('Acte de réservation')).not.toBeInTheDocument()
+    })
+
+    it('shows the API message when the deed email is refused (400 message)', async () => {
+      mockDownloads(200)
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(await screen.findByRole('button', { name: /Réservations \(1\)/ }))
+      await user.click(await screen.findByRole('button', { name: /Envoyer par email/ }))
+
+      expect(await screen.findByText(
+        "L'acte sera disponible quand 10 % du prix total convenu aura été encaissé (0 MAD sur 50 000 MAD)."
+      )).toBeInTheDocument()
+    })
+
+    it('shows the schedule and records a payment from the payments tab, without promotion', async () => {
+      const fetchMock = mockDownloads(200)
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(await screen.findByRole('button', { name: 'Paiements' }))
+
+      const schedule = await screen.findByRole('table', { name: 'Échéancier' })
+      expect(within(schedule).getByRole('row', { name: /Écart à régulariser/ })).toHaveTextContent('50.000 MAD')
+      expect(screen.getByText('Reste à payer').nextSibling).toHaveTextContent('400.000 MAD')
+      expect(screen.queryByText(/promotion/i)).not.toBeInTheDocument()
+      await user.click(within(within(schedule).getByRole('row', { name: /Acompte 1/ })).getByRole('button', { name: 'Enregistrer un encaissement' }))
+      await user.click(screen.getByRole('button', { name: "Enregistrer l'encaissement" }))
+
+      await waitFor(() => expect(fetchMock.mock.calls.some(
+        ([url, opts]) => String(url).endsWith('/api/reservations/5/payments') && opts?.method === 'POST'
+      )).toBe(true))
+      expect(fetchMock.mock.calls.some(([url, opts]) => String(url).includes('/api/payments/installments/') && opts?.method === 'PATCH')).toBe(false)
     })
   })
 })
