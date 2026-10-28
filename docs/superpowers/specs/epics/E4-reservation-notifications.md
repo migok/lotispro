@@ -60,7 +60,7 @@
 | Prix total convenu | `reservations.agreed_total_price` (nouveau) | montant total demandé au client ; défaut = prix catalogue |
 | Prix figurant sur l'acte | `reservations.sale_price` (existant) | imprimé sur l'acte ; défaut = grille de prix (`lot_pricing_config`) sinon prix total convenu ; ≤ prix total convenu |
 | Écart à régulariser | calculé = convenu − acte | jamais saisi, jamais ajouté ni déduit une seconde fois ; remplace « Montant promotion » |
-| Premier acompte reçu | `reservations.guarantee_amount` (existant) | encaissé à l'engagement ; remplace « Premier acompte (ND) » |
+| Premier acompte reçu | calculé = somme des encaissements sans échéance (`reservation_payments.installment_id` null) | encaissé à l'engagement (garantie conservée, versement d'option conservé, premier versement) ; 0 si la garantie a été remboursée ; remplace « Premier acompte (ND) » ; `reservations.guarantee_amount` garde son sens d'origine (garantie versée) — précisé le 2026-10-28 |
 | Reste à payer | calculé = convenu − total des encaissements | seule source du « reste » affiché |
 
 #### Encaissements et échéancier
