@@ -8,6 +8,22 @@ const GAP_TIMINGS = [
   { value: 'date', label: 'À une date', desc: 'Date précise' },
 ];
 
+/**
+ * « (−0,30 %) » : écart du prix convenu au prix catalogue, en % du catalogue, signé, au centième
+ * (calculé en centimes, sans bruit flottant). Vide si le catalogue est nul ou si l'écart arrondi
+ * vaut 0,00 %.
+ */
+function cataloguePctText(agreed, cataloguePrice) {
+  const catalogueCents = Math.round(cataloguePrice * 100);
+  if (!catalogueCents) return '';
+  const diffCents = Math.round(agreed * 100) - catalogueCents;
+  // hundredths of a percent, rounded half away from zero
+  const hundredths = Math.round(Math.abs(diffCents) * 10000 / catalogueCents);
+  if (!hundredths) return '';
+  const text = `${Math.floor(hundredths / 100)},${String(hundredths % 100).padStart(2, '0')}`;
+  return ` (${diffCents < 0 ? '−' : '+'}${text} %)`;
+}
+
 function FieldError({ message }) {
   if (!message) return null;
   return <span className="client-form-error" role="alert">{message}</span>;
@@ -61,8 +77,8 @@ export default function EngagementAmountsFields({
         {agreed != null && cataloguePrice != null && agreed !== cataloguePrice && (
           <div className={`msr-price-diff msr-price-diff--${agreed < cataloguePrice ? 'down' : 'up'}`}>
             {agreed < cataloguePrice
-              ? `${formatMad(cataloguePrice - agreed)} sous le prix catalogue`
-              : `${formatMad(agreed - cataloguePrice)} au-dessus du prix catalogue`}
+              ? `${formatMad(cataloguePrice - agreed)} sous le prix catalogue${cataloguePctText(agreed, cataloguePrice)}`
+              : `${formatMad(agreed - cataloguePrice)} au-dessus du prix catalogue${cataloguePctText(agreed, cataloguePrice)}`}
           </div>
         )}
         <FieldError message={errors.agreedTotalPrice} />

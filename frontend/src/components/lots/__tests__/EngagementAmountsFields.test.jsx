@@ -107,4 +107,43 @@ describe('EngagementAmountsFields', () => {
       expect(screen.getByLabelText(label)).toBeValid()
     }
   })
+
+  describe('difference from the catalogue price, with its percentage', () => {
+    it('below the catalogue price: amount and negative percentage at 2 decimals', () => {
+      render(<Host cataloguePrice={399000} initial={{ ...REFERENCE, agreedTotalPrice: '397807.05', salePrice: '397807.05' }} />)
+
+      expect(screen.getByText('1 192,95 MAD sous le prix catalogue (−0,30 %)')).toBeInTheDocument()
+    })
+
+    it('above the catalogue price: amount and positive percentage', () => {
+      render(<Host cataloguePrice={400000} initial={{ ...REFERENCE, agreedTotalPrice: '405000', salePrice: '405000' }} />)
+
+      expect(screen.getByText('5 000 MAD au-dessus du prix catalogue (+1,25 %)')).toBeInTheDocument()
+    })
+
+    it('follows the agreed price as it is typed', async () => {
+      const user = userEvent.setup()
+      render(<Host />)
+
+      const agreed = screen.getByLabelText('Prix total convenu')
+      await user.clear(agreed)
+      await user.type(agreed, '475000')
+
+      expect(screen.getByText('25 000 MAD sous le prix catalogue (−5,00 %)')).toBeInTheDocument()
+    })
+
+    it('shows no percentage when the catalogue price is 0', () => {
+      render(<Host cataloguePrice={0} initial={{ ...REFERENCE, agreedTotalPrice: '1000', salePrice: '1000', firstPayment: '' }} />)
+
+      expect(screen.getByText('1 000 MAD au-dessus du prix catalogue')).toBeInTheDocument()
+      expect(screen.queryByText(/%/)).not.toBeInTheDocument()
+    })
+
+    it('shows no difference at all when the agreed price equals the catalogue price', () => {
+      render(<Host />)
+
+      expect(screen.queryByText(/prix catalogue \(/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/sous le prix catalogue|au-dessus du prix catalogue/)).not.toBeInTheDocument()
+    })
+  })
 })
