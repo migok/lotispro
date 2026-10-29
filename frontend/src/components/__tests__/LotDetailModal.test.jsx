@@ -187,7 +187,7 @@ describe('LotDetailModal', () => {
       expect(screen.getByLabelText('Prix total convenu')).toHaveValue(500000)
       await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
       await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '450000')
-      expect(screen.getByLabelText('Écart à régulariser')).toHaveTextContent('50.000 MAD')
+      expect(screen.getByLabelText('Écart à régulariser')).toHaveTextContent('50 000 MAD')
       await user.click(screen.getByRole('button', { name: /^À une date/ }))
       await user.type(screen.getByLabelText("Date de l'écart"), '2027-06-30')
       await user.type(screen.getByLabelText('Premier acompte reçu'), '100000')
@@ -233,7 +233,7 @@ describe('LotDetailModal', () => {
 
       await user.click(screen.getByRole('button', { name: /Valider/ }))
       await user.click(screen.getByRole('button', { name: /Déduire la garantie/ }))
-      expect(screen.getByLabelText('Premier acompte reçu')).toHaveTextContent('20.000 MAD')
+      expect(screen.getByLabelText('Premier acompte reçu')).toHaveTextContent('20 000 MAD')
       await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
       await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '480000')
       await user.click(screen.getByRole('button', { name: /^Au début/ }))
@@ -350,7 +350,7 @@ describe('LotDetailModal', () => {
       renderModal(ENGAGED)
 
       expect(await screen.findByText(
-        "L'acte sera disponible quand 30 % du prix total convenu aura été encaissé (100.000 MAD sur 150.000 MAD)."
+        "L'acte sera disponible quand 30 % du prix total convenu aura été encaissé (100 000 MAD sur 150 000 MAD)."
       )).toBeInTheDocument()
       expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Régénérer' })).not.toBeInTheDocument()
@@ -370,9 +370,9 @@ describe('LotDetailModal', () => {
       renderModal(ENGAGED)
 
       const acte = await screen.findByText("Prix figurant sur l'acte")
-      expect(acte.nextSibling).toHaveTextContent('450.000 MAD')
-      expect(screen.getByText('Écart à régulariser', { selector: '.ldm-ri-key' }).nextSibling).toHaveTextContent('50.000 MAD — à la fin')
-      expect(screen.getByText('Premier acompte reçu').nextSibling).toHaveTextContent('100.000 MAD')
+      expect(acte.nextSibling).toHaveTextContent('450 000 MAD')
+      expect(screen.getByText('Écart à régulariser', { selector: '.ldm-ri-key' }).nextSibling).toHaveTextContent('50 000 MAD — à la fin')
+      expect(screen.getByText('Premier acompte reçu').nextSibling).toHaveTextContent('100 000 MAD')
       expect(screen.queryByText(/promotion/i)).not.toBeInTheDocument()
     })
 
@@ -443,6 +443,34 @@ describe('LotDetailModal', () => {
       renderModal(ENGAGED)
 
       await screen.findByRole('table', { name: 'Échéancier' })
+      expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeDisabled()
+    })
+
+    it('explains the refusal with the exact amount left, cents included', async () => {
+      mockFetch({
+        '/api/reservations/11/financial-summary': { ...SUMMARY, total_received: 499999.6, remaining: 0.4 },
+        '/api/reservations/11': RESERVATION,
+        '/api/lots/5/documents': [],
+      })
+      renderModal(ENGAGED)
+
+      await screen.findByRole('table', { name: 'Échéancier' })
+      await waitFor(() => expect(screen.getByRole('button', { name: /Marquer soldé/ }))
+        .toHaveAttribute('title', 'Reste à payer : 0,40 MAD — la réservation ne peut pas être soldée.'))
+      expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeDisabled()
+    })
+
+    it('says the schedule is unavailable on « Marquer soldé » when the summary fails', async () => {
+      const fetchMock = mockFetch({ '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      const base = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/reservations/11/financial-summary')
+          ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ message: 'boom' }) })
+          : base(url, opts))
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText('Échéancier indisponible.', { selector: '.ldm-documents-empty' })).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByRole('button', { name: /Marquer soldé/ })).toHaveAttribute('title', 'Échéancier indisponible.'))
       expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeDisabled()
     })
 

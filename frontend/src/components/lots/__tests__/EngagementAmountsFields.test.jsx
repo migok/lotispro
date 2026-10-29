@@ -23,10 +23,10 @@ describe('EngagementAmountsFields', () => {
     render(<Host />)
 
     expect(screen.getByText('Prix catalogue')).toBeInTheDocument()
-    expect(screen.getByText('500.000 MAD')).toBeInTheDocument()
+    expect(screen.getByText('500 000 MAD')).toBeInTheDocument()
     expect(screen.getByLabelText('Prix total convenu')).toHaveValue(500000)
     expect(screen.getByLabelText("Prix figurant sur l'acte")).toHaveValue(450000)
-    expect(screen.getByLabelText('Écart à régulariser')).toHaveTextContent('50.000 MAD')
+    expect(screen.getByLabelText('Écart à régulariser')).toHaveTextContent('50 000 MAD')
     expect(screen.getByLabelText('Premier acompte reçu')).toHaveValue(100000)
   })
 
@@ -40,7 +40,7 @@ describe('EngagementAmountsFields', () => {
     await user.type(agreed, '520000')
 
     expect(onChange).toHaveBeenLastCalledWith({ ...REFERENCE, agreedTotalPrice: '520000' })
-    expect(screen.getByLabelText('Écart à régulariser')).toHaveTextContent('70.000 MAD')
+    expect(screen.getByLabelText('Écart à régulariser')).toHaveTextContent('70 000 MAD')
   })
 
   it('shows an inline error when the deed price is above the agreed total price', async () => {
@@ -81,7 +81,7 @@ describe('EngagementAmountsFields', () => {
   it('shows a first payment that is not typed read-only', () => {
     render(<Host firstPayment={20000} firstPaymentHint="Garantie déduite" />)
 
-    expect(screen.getByLabelText('Premier acompte reçu')).toHaveTextContent('20.000 MAD')
+    expect(screen.getByLabelText('Premier acompte reçu')).toHaveTextContent('20 000 MAD')
     expect(screen.getByText('Garantie déduite')).toBeInTheDocument()
     expect(screen.queryByPlaceholderText('Montant reçu')).not.toBeInTheDocument()
   })

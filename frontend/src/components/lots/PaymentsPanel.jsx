@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PAYMENT_TYPES } from '../../utils/constants';
-import { formatDate, formatPrice } from '../../utils/formatters';
+import { formatDate, formatMad } from '../../utils/formatters';
 import {
   acteThresholdMessage,
   getFinancialSummary,
@@ -24,13 +24,15 @@ const isSummary = (data) => data != null && Array.isArray(data.installments);
  *
  * `canRecord` : bouton « Enregistrer un encaissement » par échéance (désactivé une fois reçue).
  * `showActeStatus` (défaut true) : false quand l'hôte affiche déjà l'état de l'acte.
- * `onSummaryChange(summary)` : chaque résumé chargé ; `onPaymentRecorded()` après un encaissement.
+ * `onSummaryChange(summary)` : chaque résumé chargé ; `onSummaryError()` si le résumé ne peut
+ * pas être chargé ; `onPaymentRecorded()` après un encaissement.
  */
 export default function PaymentsPanel({
   reservationId,
   canRecord = false,
   showActeStatus = true,
   onSummaryChange,
+  onSummaryError,
   onPaymentRecorded,
 }) {
   const [data, setData] = useState(null); // null = chargement
@@ -40,11 +42,12 @@ export default function PaymentsPanel({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getFinancialSummary(reservationId), listPayments(reservationId).catch(() => [])])
+    // null payments = the list could not be loaded (said so, never shown as empty)
+    Promise.all([getFinancialSummary(reservationId), listPayments(reservationId).catch(() => null)])
       .then(([summary, payments]) => {
         if (cancelled) return;
         if (!isSummary(summary)) throw new Error('summary');
-        setData({ summary, payments: Array.isArray(payments) ? payments : [] });
+        setData({ summary, payments: Array.isArray(payments) ? payments : null });
         setFailed(false);
       })
       .catch(() => { if (!cancelled) { setData(null); setFailed(true); } });
@@ -55,6 +58,9 @@ export default function PaymentsPanel({
   useEffect(() => {
     if (summary) onSummaryChange?.(summary);
   }, [summary, onSummaryChange]);
+  useEffect(() => {
+    if (failed) onSummaryError?.();
+  }, [failed, onSummaryError]);
 
   if (failed) return <div className="ldm-documents-empty">Échéancier indisponible.</div>;
   if (!data) return <div className="ldm-documents-empty">Chargement de l'échéancier…</div>;
@@ -75,15 +81,15 @@ export default function PaymentsPanel({
       <div role="group" aria-label="Montants" className="ldm-ri-rows" style={{ marginBottom: 10 }}>
         <div className="ldm-ri-row">
           <span className="ldm-ri-key">Prix total convenu</span>
-          <span className="ldm-ri-val ldm-ri-val--bold">{formatPrice(summary.agreed_total_price)}</span>
+          <span className="ldm-ri-val ldm-ri-val--bold">{formatMad(summary.agreed_total_price)}</span>
         </div>
         <div className="ldm-ri-row">
           <span className="ldm-ri-key">Total encaissé</span>
-          <span className="ldm-ri-val">{formatPrice(summary.total_received)}</span>
+          <span className="ldm-ri-val">{formatMad(summary.total_received)}</span>
         </div>
         <div className="ldm-ri-row">
           <span className="ldm-ri-key" style={{ fontWeight: 600 }}>Reste à payer</span>
-          <span className="ldm-ri-val ldm-ri-val--bold" style={{ color: 'var(--color-primary)' }}>{formatPrice(summary.remaining)}</span>
+          <span className="ldm-ri-val ldm-ri-val--bold" style={{ color: 'var(--color-primary)' }}>{formatMad(summary.remaining)}</span>
         </div>
       </div>
 
@@ -114,8 +120,8 @@ export default function PaymentsPanel({
                   ].filter(Boolean).join(' ')}>
                     <td style={inst.payment_type === 'gap' ? { fontWeight: 600 } : undefined}>{installmentLabel(inst)}</td>
                     <td>{formatDate(inst.due_date)}</td>
-                    <td>{formatPrice(inst.amount)}</td>
-                    <td>{formatPrice(inst.received)}</td>
+                    <td>{formatMad(inst.amount)}</td>
+                    <td>{formatMad(inst.received)}</td>
                     <td>
                       <span className={`badge ${STATUS_BADGE[inst.status] ?? 'badge-gray'}`}>
                         {INSTALLMENT_STATUS_LABELS[inst.status] ?? inst.status}
@@ -150,7 +156,10 @@ export default function PaymentsPanel({
         />
       )}
 
-      {payments.length > 0 && (
+      {payments === null && (
+        <div className="ldm-documents-empty" style={{ marginTop: 12 }}>Impossible de charger les encaissements.</div>
+      )}
+      {payments?.length > 0 && (
         <div style={{ overflowX: 'auto', marginTop: 12 }}>
           <table className="pay-table" aria-label="Encaissements" style={{ width: '100%' }}>
             <thead>
@@ -162,7 +171,7 @@ export default function PaymentsPanel({
                 return (
                   <tr key={p.id}>
                     <td>{formatDate(p.paid_on)}</td>
-                    <td>{formatPrice(p.amount)}</td>
+                    <td>{formatMad(p.amount)}</td>
                     <td>{methodLabel(p.method)}</td>
                     <td>{p.reference || '—'}</td>
                     <td>{p.installment_id == null ? 'Premier acompte' : inst ? installmentLabel(inst) : '—'}</td>

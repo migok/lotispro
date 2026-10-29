@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { formatPrice } from '../../utils/formatters';
+import { formatMad } from '../../utils/formatters';
 import { engagementAmountsErrors, gapAmount, parseAmount } from '../../utils/engagePayload';
 
 const GAP_TIMINGS = [
@@ -46,7 +46,7 @@ export default function EngagementAmountsFields({
       <div className="msr-field-group">
         <span className="msr-label">Prix catalogue</span>
         <div className="msr-info-pill">
-          <span className="msr-info-pill-value">{cataloguePrice != null ? formatPrice(cataloguePrice) : '—'}</span>
+          <span className="msr-info-pill-value">{cataloguePrice != null ? formatMad(cataloguePrice) : '—'}</span>
         </div>
       </div>
 
@@ -61,8 +61,8 @@ export default function EngagementAmountsFields({
         {agreed != null && cataloguePrice != null && agreed !== cataloguePrice && (
           <div className={`msr-price-diff msr-price-diff--${agreed < cataloguePrice ? 'down' : 'up'}`}>
             {agreed < cataloguePrice
-              ? `${formatPrice(cataloguePrice - agreed)} sous le prix catalogue`
-              : `${formatPrice(agreed - cataloguePrice)} au-dessus du prix catalogue`}
+              ? `${formatMad(cataloguePrice - agreed)} sous le prix catalogue`
+              : `${formatMad(agreed - cataloguePrice)} au-dessus du prix catalogue`}
           </div>
         )}
         <FieldError message={errors.agreedTotalPrice} />
@@ -85,7 +85,7 @@ export default function EngagementAmountsFields({
       <div className="msr-field-group">
         <label className="msr-label" htmlFor={`${id}-gap`}>Écart à régulariser</label>
         <div className="msr-info-pill">
-          <output id={`${id}-gap`} className="msr-info-pill-value">{formatPrice(gap)}</output>
+          <output id={`${id}-gap`} className="msr-info-pill-value">{formatMad(gap)}</output>
           <span className="msr-info-pill-sub">Calculé : prix total convenu − prix figurant sur l'acte</span>
         </div>
       </div>
@@ -119,7 +119,7 @@ export default function EngagementAmountsFields({
         <label className="msr-label" htmlFor={`${id}-first`}>Premier acompte reçu</label>
         {firstPaymentReadOnly ? (
           <div className="msr-info-pill">
-            <output id={`${id}-first`} className="msr-info-pill-value">{formatPrice(firstPayment)}</output>
+            <output id={`${id}-first`} className="msr-info-pill-value">{formatMad(firstPayment)}</output>
             {firstPaymentHint && <span className="msr-info-pill-sub">{firstPaymentHint}</span>}
           </div>
         ) : (

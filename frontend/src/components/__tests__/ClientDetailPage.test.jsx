@@ -117,11 +117,11 @@ describe('ClientDetailPage - fiche client', () => {
       updated_at: '2026-10-28T10:00:00',
     }
 
-    function mockDownloads(acteStatus, summary = SUMMARY) {
+    function mockDownloads(acteStatus, summary = SUMMARY, client = WITH_RESERVATION) {
       const fetchMock = vi.fn((url, options = {}) => {
         const path = String(url).replace(/^https?:\/\/[^/]+/, '')
         const json = (body, status = 200) => Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) })
-        if (path.endsWith('/details')) return json(WITH_RESERVATION)
+        if (path.endsWith('/details')) return json(client)
         if (path.includes('/api/payments/schedules/client/')) {
           return json([{ id: 9, reservation_id: 5, lot_price: 400000, installments: [] }])
         }
@@ -178,6 +178,63 @@ describe('ClientDetailPage - fiche client', () => {
       expect(calledPaths(fetchMock)).toEqual(expect.arrayContaining(['/api/reservations/5/acte', '/api/reservations/5/certificate']))
     })
 
+    it('no longer shows an aggregate « Restant à payer »; each reservation shows its own « Reste à payer »', async () => {
+      mockDownloads(200, SUMMARY, {
+        ...WITH_RESERVATION,
+        sales_history: [{ id: 1, price: 480000, sale_date: '2026-10-20', lot_numero: 'B2', project_id: 1, project_name: 'Projet' }],
+      })
+      const user = userEvent.setup()
+      renderPage()
+
+      await screen.findByText('Résumé commercial')
+      expect(screen.queryByText(/Restant à payer/)).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Paiements' }))
+      expect((await screen.findByText('Reste à payer')).nextSibling).toHaveTextContent('400 000 MAD')
+    })
+
+    it('no longer offers to create a plan for a reservation without schedule', async () => {
+      const fetchMock = mockDownloads(200, SUMMARY, {
+        ...WITH_RESERVATION,
+        reservations_history: [
+          ...WITH_RESERVATION.reservations_history,
+          { id: 6, status: 'active', lot_numero: 'C3', lot_price: 300000, project_id: 1, project_name: 'Projet', reserved_by_user_id: 2 },
+        ],
+      })
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(await screen.findByRole('button', { name: 'Paiements' }))
+
+      await screen.findByRole('table', { name: 'Échéancier' })
+      expect(screen.queryByRole('button', { name: /Créer le plan/ })).not.toBeInTheDocument()
+      expect(screen.queryByText('Réservations sans plan de paiement')).not.toBeInTheDocument()
+      expect(fetchMock.mock.calls.some(([url, opts]) => String(url).endsWith('/api/payments/schedules') && opts?.method === 'POST')).toBe(false)
+    })
+
+    it('only offers to record a payment on an engaged reservation (gap timing set at engagement)', async () => {
+      mockDownloads(200, { ...SUMMARY, gap_due_timing: null })
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(await screen.findByRole('button', { name: 'Paiements' }))
+
+      await screen.findByRole('table', { name: 'Échéancier' })
+      expect(screen.queryByRole('button', { name: 'Enregistrer un encaissement' })).not.toBeInTheDocument()
+    })
+
+    it('shows a neutral message when the deed status cannot be loaded', async () => {
+      const fetchMock = mockDownloads(200)
+      const base = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/reservations/5/financial-summary')
+          ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ message: 'boom' }) })
+          : base(url, opts))
+      const user = userEvent.setup()
+      renderPage()
+      await user.click(await screen.findByRole('button', { name: /Réservations \(1\)/ }))
+
+      expect(await screen.findByText('Documents indisponibles.')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Télécharger/ })).not.toBeInTheDocument()
+    })
+
     it('shows the threshold message and the receipt while the deed is not available', async () => {
       mockDownloads(404, { ...SUMMARY, acte_min_paid_pct: 30, acte_threshold_amount: 150000, acte_available: false })
       const user = userEvent.setup()
@@ -185,7 +242,7 @@ describe('ClientDetailPage - fiche client', () => {
       await user.click(await screen.findByRole('button', { name: /Réservations \(1\)/ }))
 
       expect(await screen.findByText(
-        "L'acte sera disponible quand 30 % du prix total convenu aura été encaissé (100.000 MAD sur 150.000 MAD)."
+        "L'acte sera disponible quand 30 % du prix total convenu aura été encaissé (100 000 MAD sur 150 000 MAD)."
       )).toBeInTheDocument()
       expect(screen.getByText('Reçu de paiement')).toBeInTheDocument()
       expect(screen.queryByText('Acte de réservation')).not.toBeInTheDocument()
@@ -210,8 +267,8 @@ describe('ClientDetailPage - fiche client', () => {
       await user.click(await screen.findByRole('button', { name: 'Paiements' }))
 
       const schedule = await screen.findByRole('table', { name: 'Échéancier' })
-      expect(within(schedule).getByRole('row', { name: /Écart à régulariser/ })).toHaveTextContent('50.000 MAD')
-      expect(screen.getByText('Reste à payer').nextSibling).toHaveTextContent('400.000 MAD')
+      expect(within(schedule).getByRole('row', { name: /Écart à régulariser/ })).toHaveTextContent('50 000 MAD')
+      expect(screen.getByText('Reste à payer').nextSibling).toHaveTextContent('400 000 MAD')
       expect(screen.queryByText(/promotion/i)).not.toBeInTheDocument()
       await user.click(within(within(schedule).getByRole('row', { name: /Acompte 1/ })).getByRole('button', { name: 'Enregistrer un encaissement' }))
       await user.click(screen.getByRole('button', { name: "Enregistrer l'encaissement" }))

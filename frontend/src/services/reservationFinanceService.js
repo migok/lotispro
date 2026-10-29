@@ -1,5 +1,5 @@
 import { apiGet, apiPostForm } from '../utils/api';
-import { formatPrice } from '../utils/formatters';
+import { formatMad } from '../utils/formatters';
 
 /**
  * Montants, échéancier et encaissements d'une réservation engagée (E4-T5).
@@ -48,5 +48,5 @@ export function installmentLabel(installment) {
 export function acteThresholdMessage(summary) {
   const pct = String(summary.acte_min_paid_pct).replace('.', ',');
   return `L'acte sera disponible quand ${pct} % du prix total convenu aura été encaissé `
-    + `(${formatPrice(summary.total_received)} sur ${formatPrice(summary.acte_threshold_amount)}).`;
+    + `(${formatMad(summary.total_received)} sur ${formatMad(summary.acte_threshold_amount)}).`;
 }

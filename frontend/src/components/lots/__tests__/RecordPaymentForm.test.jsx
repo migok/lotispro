@@ -111,9 +111,26 @@ describe('RecordPaymentForm', () => {
     await user.type(amount, '60000')
     await user.click(screen.getByRole('button', { name: "Enregistrer l'encaissement" }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Le montant dépasse le restant dû de cette échéance (50.000 MAD).')
+    expect(screen.getByRole('alert')).toHaveTextContent('Le montant dépasse le restant dû de cette échéance (50 000 MAD).')
     expect(fetchMock).not.toHaveBeenCalled()
     expect(onSaved).not.toHaveBeenCalled()
+  })
+
+  it('shows and accepts an amount with cents (116 666,67)', async () => {
+    const fetchMock = mockFetch()
+    const user = userEvent.setup()
+    const { onSaved } = renderForm({
+      installment: { ...GAP, payment_type: 'balance', amount: 116666.67, remaining: 116666.67 },
+    })
+
+    expect(screen.getByText(/restant dû 116 666,67 MAD/)).toBeInTheDocument()
+    const amount = screen.getByLabelText('Montant')
+    await user.clear(amount)
+    await user.type(amount, '116666.67')
+    await user.click(screen.getByRole('button', { name: "Enregistrer l'encaissement" }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(fetchMock.mock.calls[0][1].body.get('amount')).toBe('116666.67')
   })
 
   it('cancels without sending anything', async () => {

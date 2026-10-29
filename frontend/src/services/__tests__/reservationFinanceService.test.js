@@ -69,9 +69,9 @@ describe('reservationFinanceService', () => {
 
   it('builds the deed threshold message from the summary', () => {
     expect(acteThresholdMessage({ acte_min_paid_pct: 10, total_received: 30000, acte_threshold_amount: 50000 }))
-      .toBe("L'acte sera disponible quand 10 % du prix total convenu aura été encaissé (30.000 MAD sur 50.000 MAD).")
+      .toBe("L'acte sera disponible quand 10 % du prix total convenu aura été encaissé (30 000 MAD sur 50 000 MAD).")
     expect(acteThresholdMessage({ acte_min_paid_pct: 12.5, total_received: 0, acte_threshold_amount: 62500 }))
-      .toBe("L'acte sera disponible quand 12,5 % du prix total convenu aura été encaissé (0 MAD sur 62.500 MAD).")
+      .toBe("L'acte sera disponible quand 12,5 % du prix total convenu aura été encaissé (0 MAD sur 62 500 MAD).")
   })
 
   it('labels installments and their computed statuses', () => {

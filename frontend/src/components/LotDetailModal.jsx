@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { apiGet, apiPost, apiPut, apiFetch, apiUploadFile, buildApiError } from '../utils/api';
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
-import { formatPrice, formatDate } from '../utils/formatters';
+import { formatPrice, formatDate, formatMad } from '../utils/formatters';
 import { ACTIVE_LOT_STATUSES, STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
 import ClientForm from './clients/ClientForm';
 import ClientPicker from './clients/ClientPicker';
@@ -632,10 +632,16 @@ function LotDetailModalContent({
   const edlOpenCount = edlCount.lotId === lot?.id ? edlCount.count : null;
   // financial-summary of the displayed lot's reservation, reported by PaymentsPanel;
   // null until loaded, so the deed alert / « Marquer soldé » wait for it.
-  const [finance, setFinance] = useState({ reservationId: null, summary: null });
-  const financeSummary = lot?.reservation_id != null && finance.reservationId === lot.reservation_id ? finance.summary : null;
+  const [finance, setFinance] = useState({ reservationId: null, summary: null, failed: false });
+  const financeCurrent = lot?.reservation_id != null && finance.reservationId === lot.reservation_id;
+  const financeSummary = financeCurrent ? finance.summary : null;
+  const financeFailed = financeCurrent && finance.failed;
   const reportFinanceSummary = useCallback(
-    (summary) => setFinance({ reservationId: lot?.reservation_id, summary }),
+    (summary) => setFinance({ reservationId: lot?.reservation_id, summary, failed: false }),
+    [lot?.reservation_id]
+  );
+  const reportFinanceError = useCallback(
+    () => setFinance({ reservationId: lot?.reservation_id, summary: null, failed: true }),
     [lot?.reservation_id]
   );
   const reportEdlOpenCount = useCallback(
@@ -1509,13 +1515,13 @@ function LotDetailModalContent({
                     <>
                       <div className="ldm-ri-row">
                         <span className="ldm-ri-key">Prix figurant sur l'acte</span>
-                        <span className="ldm-ri-val ldm-ri-val--bold">{formatPrice(reservation.sale_price)}</span>
+                        <span className="ldm-ri-val ldm-ri-val--bold">{formatMad(reservation.sale_price)}</span>
                       </div>
                       {(reservation.gap_amount ?? 0) > 0 && (
                         <div className="ldm-ri-row">
                           <span className="ldm-ri-key">Écart à régulariser</span>
                           <span className="ldm-ri-val">
-                            {formatPrice(reservation.gap_amount)}
+                            {formatMad(reservation.gap_amount)}
                             {reservation.gap_due_timing === 'date'
                               ? ` — le ${formatDate(reservation.gap_due_date)}`
                               : GAP_TIMING_TEXT[reservation.gap_due_timing] ? ` — ${GAP_TIMING_TEXT[reservation.gap_due_timing]}` : ''}
@@ -1524,7 +1530,7 @@ function LotDetailModalContent({
                       )}
                       <div className="ldm-ri-row">
                         <span className="ldm-ri-key">Premier acompte reçu</span>
-                        <span className="ldm-ri-val">{formatPrice(reservation.first_payment)}</span>
+                        <span className="ldm-ri-val">{formatMad(reservation.first_payment)}</span>
                       </div>
                     </>
                   )}
@@ -1574,7 +1580,7 @@ function LotDetailModalContent({
                     <div className="ldm-fpa-body">
                       <div className="ldm-fpa-title">Premier versement en retard</div>
                       <div className="ldm-fpa-desc">
-                        Échéance du {formatDate(firstDepositInstallment.due_date)} — restant dû {formatPrice(firstDepositInstallment.remaining)}.
+                        Échéance du {formatDate(firstDepositInstallment.due_date)} — restant dû {formatMad(firstDepositInstallment.remaining)}.
                         {canRecordPayments && ' Enregistrez l\'encaissement dans l\'échéancier.'}
                       </div>
                     </div>
@@ -1594,6 +1600,7 @@ function LotDetailModalContent({
                 canRecord={canRecordPayments}
                 showActeStatus={false}
                 onSummaryChange={reportFinanceSummary}
+                onSummaryError={reportFinanceError}
                 onPaymentRecorded={handlePaymentRecorded}
               />
             </div>
@@ -1795,7 +1802,7 @@ function LotDetailModalContent({
                       onClick={() => allPaid && handleSetMode('to_soldee')}
                       disabled={!allPaid}
                       title={!allPaid
-                        ? (financeSummary ? `Reste à payer : ${formatPrice(financeSummary.remaining)} — la réservation ne peut pas être soldée.` : "Chargement de l'échéancier…")
+                        ? (financeSummary ? `Reste à payer : ${formatMad(financeSummary.remaining)} — la réservation ne peut pas être soldée.` : financeFailed ? 'Échéancier indisponible.' : "Chargement de l'échéancier…")
                         : 'Marquer le lot comme soldé'}
                     >
                       <IcCheck /> Marquer soldé
@@ -2240,7 +2247,7 @@ function LotDetailModalContent({
                     onChange={setAmounts}
                     salePriceHint={salePriceHint}
                     firstPaymentHint={mode === 'option_engage' && validationChoice === 'deduct' && optionDeposit > 0
-                      ? `+ acompte de l'option conservé : ${formatPrice(optionDeposit)}`
+                      ? `+ acompte de l'option conservé : ${formatMad(optionDeposit)}`
                       : undefined}
                   />
                   <div className="msr-field-group">
@@ -2496,9 +2503,9 @@ function LotDetailModalContent({
                   {validationChoice === 'deduct' && (
                     <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
                       <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                        La garantie de <strong>{formatPrice(activeGuarantee)}</strong> est comptée comme premier acompte reçu.
+                        La garantie de <strong>{formatMad(activeGuarantee)}</strong> est comptée comme premier acompte reçu.
                         {engageAgreed > 0 && (
-                          <> L'échéancier portera sur le reste : <strong>{formatPrice(Math.max(0, engageAgreed - activeGuarantee))}</strong>.</>
+                          <> L'échéancier portera sur le reste : <strong>{formatMad(Math.max(0, engageAgreed - activeGuarantee))}</strong>.</>
                         )}
                       </span>
                     </div>
@@ -2514,7 +2521,7 @@ function LotDetailModalContent({
                   <span className="msr-label"><IcMoney /> Prix total convenu</span>
                   <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
                     <span className="msr-info-pill-value">
-                      {formatPrice(financeSummary?.agreed_total_price ?? reservation?.agreed_total_price ?? lot.price)}
+                      {formatMad(financeSummary?.agreed_total_price ?? reservation?.agreed_total_price ?? lot.price)}
                     </span>
                     <span className="msr-info-pill-sub">La vente est enregistrée au prix total convenu.</span>
                   </div>

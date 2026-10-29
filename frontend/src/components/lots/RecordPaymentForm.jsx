@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { useToast } from '../../contexts/toastHooks';
 import { PAYMENT_TYPES } from '../../utils/constants';
-import { formatDate, formatPrice } from '../../utils/formatters';
+import { formatDate, formatMad } from '../../utils/formatters';
 import { installmentLabel, recordPayment } from '../../services/reservationFinanceService';
 
 const toCents = (value) => Math.round(Number(value) * 100);
@@ -38,7 +38,7 @@ export default function RecordPaymentForm({ reservationId, installment, onSaved,
   const localError = () => {
     if (!(Number(amount) > 0)) return 'Le montant doit être supérieur à 0.';
     if (toCents(amount) > toCents(installment.remaining)) {
-      return `Le montant dépasse le restant dû de cette échéance (${formatPrice(installment.remaining)}).`;
+      return `Le montant dépasse le restant dû de cette échéance (${formatMad(installment.remaining)}).`;
     }
     if (!paidOn) return "Indiquez la date d'encaissement.";
     return null;
@@ -68,7 +68,7 @@ export default function RecordPaymentForm({ reservationId, installment, onSaved,
       <div style={{ fontWeight: 600, marginBottom: 8 }}>
         Encaissement — {installmentLabel(installment)}
         <span style={{ fontWeight: 400, color: 'var(--text-secondary)', fontSize: '0.8rem', marginLeft: 6 }}>
-          échéance du {formatDate(installment.due_date)}, restant dû {formatPrice(installment.remaining)}
+          échéance du {formatDate(installment.due_date)}, restant dû {formatMad(installment.remaining)}
         </span>
       </div>
       {error && (

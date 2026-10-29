@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiPut, apiFetch, buildApiError } from '../utils/api';
@@ -145,8 +145,12 @@ const OPEN_RESERVATION_STATUSES = ['active', 'validated'];
 
 /**
  * Échéancier et encaissements d'une réservation du client (spec E4-T5) : mêmes
- * montants et libellés que la fiche lot (PaymentsPanel). `canRecord` : commercial
- * auteur de la réservation ou manager, réservation non soldée.
+ * montants et libellés que la fiche lot (PaymentsPanel).
+ * « Enregistrer un encaissement » seulement sur une réservation engagée : la fiche client
+ * n'expose pas le statut du lot, donc on s'appuie sur le résumé financier — `gap_due_timing`
+ * n'est écrit qu'à l'engagement (E4-T5) et la réservation passe en `converted` au solde —
+ * plus la règle auteur / manager (`canRecordFor`). Le backend refuse de toute façon un
+ * encaissement hors réservation engagée.
  */
 function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRecorded }) {
   const res = reservations.find(r => r.id === schedule.reservation_id);
@@ -155,6 +159,8 @@ function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRe
     : `Réservation #${schedule.reservation_id}`;
   const isConverted = res?.status === 'converted';
   const [collapsed, setCollapsed] = useState(false);
+  const [engaged, setEngaged] = useState(false);
+  const reportSummary = useCallback((summary) => setEngaged(summary.gap_due_timing != null), []);
 
   return (
     <div className="pay-overview-card">
@@ -178,7 +184,8 @@ function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRe
         <div className="pay-bricks" style={{ padding: '10px 14px' }}>
           <PaymentsPanel
             reservationId={schedule.reservation_id}
-            canRecord={canRecordFor(res)}
+            canRecord={engaged && canRecordFor(res)}
+            onSummaryChange={reportSummary}
             onPaymentRecorded={onPaymentRecorded}
           />
         </div>
@@ -194,15 +201,23 @@ function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRe
  */
 function ReservationDeedActions({ reservationId, lotNumero, clientEmail, onDownloadCertificate, onDownloadReceipt, onSendEmail }) {
   const [summary, setSummary] = useState(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     getFinancialSummary(reservationId)
-      .then((data) => { if (!cancelled && data && typeof data.acte_available === 'boolean') setSummary(data); })
-      .catch(() => {});
+      .then((data) => {
+        if (cancelled) return;
+        if (data && typeof data.acte_available === 'boolean') setSummary(data);
+        else setFailed(true);
+      })
+      .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
   }, [reservationId]);
 
+  if (failed) {
+    return <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>Documents indisponibles.</span>;
+  }
   if (!summary) return null;
 
   if (summary.acte_available) {
@@ -304,24 +319,6 @@ export default function ClientDetailPage() {
       console.error('Error loading payment schedules:', err);
     } finally {
       setPaymentLoading(false);
-    }
-  };
-
-  const handleCreateDefaultSchedule = async (reservation) => {
-    if (!reservation.lot_price) { toast.warning('Prix du lot inconnu, impossible de créer un plan'); return; }
-    try {
-      await apiPost('/api/payments/schedules', {
-        reservation_id: reservation.id,
-        lot_price: reservation.lot_price,
-        deposit_pct: 50,
-        balance_delay_months: 0,
-        deposit_installments: { count: 1, periodicity_months: 1 },
-        balance_installments: { count: 1, periodicity_months: 1 },
-      });
-      await loadPaymentSchedules();
-      toast.success('Plan de paiement créé avec succès');
-    } catch (err) {
-      toast.error(err.message || 'Erreur lors de la création du plan');
     }
   };
 
@@ -437,7 +434,6 @@ export default function ClientDetailPage() {
     lots_liberes: reservations.filter(r => r.status === 'released' || r.status === 'expired').length,
   };
 
-  const remaining = stats.total_purchases - stats.total_deposit;
   const lastSale = sales[0] || null;
 
   const timelineEvents = [
@@ -584,9 +580,6 @@ export default function ClientDetailPage() {
             )}
             {lastSale && (
               <li>Dernier achat le {formatDate(lastSale.sale_date)}</li>
-            )}
-            {remaining > 0 && (
-              <li>Restant à payer : {formatPrice(remaining)}</li>
             )}
             {!stats.total_lots && !stats.active_reservations && (
               <li style={{ color: 'var(--text-muted)' }}>Aucune activité enregistrée</li>
@@ -887,36 +880,10 @@ export default function ClientDetailPage() {
           paymentLoading
             ? <div className="loading-state">Chargement des paiements…</div>
             : (() => {
-                const scheduledReservationIds = new Set(paymentSchedules.map(s => s.reservation_id));
-                const reservationsWithoutPlan = allReservations.filter(
-                  r => r.status === 'active' && !scheduledReservationIds.has(r.id) && r.lot_price
-                );
+                // Schedules are created at engagement only (the legacy « Créer le plan » was removed)
                 return (
                   <>
-                    {reservationsWithoutPlan.length > 0 && (
-                      <div className="card" style={{ marginBottom: 'var(--spacing-md)', padding: 'var(--spacing-md)' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 'var(--spacing-sm)' }}>
-                          Réservations sans plan de paiement
-                        </div>
-                        {reservationsWithoutPlan.map(res => (
-                          <div key={res.id} className="cd-list-row" style={{ alignItems: 'center' }}>
-                            <div className="cd-lot-badge cd-lot--reserved">{res.lot_numero}</div>
-                            <div className="cd-list-main">
-                              <div className="cd-list-title">Lot {res.lot_numero} — {res.project_name}</div>
-                              <div className="cd-list-sub">{formatPrice(res.lot_price)}</div>
-                            </div>
-                            <button
-                              className="btn btn-primary btn-sm"
-                              style={{ whiteSpace: 'nowrap' }}
-                              onClick={() => handleCreateDefaultSchedule(res)}
-                            >
-                              Créer le plan
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {paymentSchedules.length === 0 && reservationsWithoutPlan.length === 0 && (
+                    {paymentSchedules.length === 0 && (
                       <div className="empty-state">
                         <p>Aucun plan de paiement pour ce client.</p>
                       </div>
