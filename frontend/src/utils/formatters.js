@@ -100,3 +100,15 @@ export const formatNumber = (num, suffix = '') => {
 
   return `${Math.round(num)}${suffix ? ' ' + suffix : ''}`;
 };
+
+/**
+ * Surface in m² with at most 2 decimals and French separators — « 111,38 », « 91 ».
+ * @param {number|string|null} value
+ * @returns {string} Formatted number without unit, or '' when missing
+ */
+export const formatSurface = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(n);
+};

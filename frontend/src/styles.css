@@ -8099,6 +8099,35 @@ body {
   gap: var(--spacing-md);
   padding: var(--spacing-md) 0;
 }
+.cd-list-row--link {
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background-color 0.15s ease;
+}
+.cd-list-row--link:hover,
+.cd-list-row--link:focus-visible {
+  background: var(--bg-secondary);
+}
+.cd-list-chevron {
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.cd-legacy-note {
+  font-size: 0.73rem;
+  color: var(--color-warning, #d97706);
+}
+.cd-no-schedule {
+  margin-bottom: var(--spacing-md);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.pay-overview-card--highlight {
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary, #6366f1) 35%, transparent);
+  transition: box-shadow 0.3s ease;
+}
 .cd-list-row--sep {
   border-top: 1px solid var(--border-subtle);
 }

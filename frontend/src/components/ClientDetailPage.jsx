@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiPut, apiFetch, buildApiError } from '../utils/api';
 import { useAuth } from '../contexts/authHooks';
-import { formatPrice, formatDate } from '../utils/formatters';
+import { formatPrice, formatDate, formatSurface } from '../utils/formatters';
 import ClientForm from './clients/ClientForm';
 import NotificationHistory from './notifications/NotificationHistory';
 import PaymentsPanel from './lots/PaymentsPanel';
@@ -152,7 +152,7 @@ const OPEN_RESERVATION_STATUSES = ['active', 'validated'];
  * plus la règle auteur / manager (`canRecordFor`). Le backend refuse de toute façon un
  * encaissement hors réservation engagée.
  */
-function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRecorded }) {
+function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRecorded, highlighted }) {
   const res = reservations.find(r => r.id === schedule.reservation_id);
   const label = res
     ? `Lot ${res.lot_numero} — ${res.project_name}`
@@ -163,7 +163,10 @@ function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRe
   const reportSummary = useCallback((summary) => setEngaged(summary.gap_due_timing != null), []);
 
   return (
-    <div className="pay-overview-card">
+    <div
+      id={`pay-card-${schedule.reservation_id}`}
+      className={`pay-overview-card${highlighted ? ' pay-overview-card--highlight' : ''}`}
+    >
       <div className="pay-overview-header" onClick={() => setCollapsed(v => !v)}>
         <div className="pay-overview-label">
           {label}
@@ -194,6 +197,35 @@ function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRe
   );
 }
 
+const LEGACY_ENGAGEMENT_NOTE = 'Réservation engagée avant la nouvelle gestion des montants.';
+
+/** Télécharger / envoyer l'acte de réservation (les clics ne déclenchent pas la navigation de la ligne). */
+function DeedButtons({ reservationId, lotNumero, clientEmail, onDownloadCertificate, onSendEmail }) {
+  return (
+    <>
+      <span className="cd-cert-label">Acte de réservation</span>
+      <button
+        className="btn btn-ghost btn-sm cd-cert-btn"
+        onClick={() => onDownloadCertificate(reservationId, lotNumero)}
+        title="Télécharger l'acte de réservation en PDF"
+      >
+        <IconDownload />
+        Télécharger
+      </button>
+      {clientEmail && (
+        <button
+          className="btn btn-ghost btn-sm cd-cert-btn"
+          onClick={() => onSendEmail(reservationId)}
+          title={`Envoyer l'acte par email à ${clientEmail}`}
+        >
+          <IconSend />
+          Envoyer par email
+        </button>
+      )}
+    </>
+  );
+}
+
 /* ── Acte / reçu d'une réservation ─────────────────────────── */
 /**
  * Acte de réservation une fois le seuil d'encaissement atteint (`financial-summary`),
@@ -220,29 +252,35 @@ function ReservationDeedActions({ reservationId, lotNumero, clientEmail, onDownl
   }
   if (!summary) return null;
 
-  if (summary.acte_available) {
+  // Not engaged (e.g. an option): no deed, no threshold message. `gap_due_timing` is only written at engagement.
+  if (summary.legacy !== true && summary.gap_due_timing == null) return null;
+
+  if (summary.legacy === true) {
     return (
       <>
-        <span className="cd-cert-label">Acte de réservation</span>
-        <button
-          className="btn btn-ghost btn-sm cd-cert-btn"
-          onClick={() => onDownloadCertificate(reservationId, lotNumero)}
-          title="Télécharger l'acte de réservation en PDF"
-        >
-          <IconDownload />
-          Télécharger
-        </button>
-        {clientEmail && (
-          <button
-            className="btn btn-ghost btn-sm cd-cert-btn"
-            onClick={() => onSendEmail(reservationId)}
-            title={`Envoyer l'acte par email à ${clientEmail}`}
-          >
-            <IconSend />
-            Envoyer par email
-          </button>
+        <span className="cd-legacy-note">{LEGACY_ENGAGEMENT_NOTE}</span>
+        {summary.acte_available && (
+          <DeedButtons
+            reservationId={reservationId}
+            lotNumero={lotNumero}
+            clientEmail={clientEmail}
+            onDownloadCertificate={onDownloadCertificate}
+            onSendEmail={onSendEmail}
+          />
         )}
       </>
+    );
+  }
+
+  if (summary.acte_available) {
+    return (
+      <DeedButtons
+        reservationId={reservationId}
+        lotNumero={lotNumero}
+        clientEmail={clientEmail}
+        onDownloadCertificate={onDownloadCertificate}
+        onSendEmail={onSendEmail}
+      />
     );
   }
 
@@ -289,6 +327,25 @@ export default function ClientDetailPage() {
   // Payment data
   const [paymentSchedules, setPaymentSchedules] = useState([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
+
+  // Row → payments navigation: the target reservation, and its briefly highlighted card
+  const [focus, setFocus] = useState(null);
+  const [highlightId, setHighlightId] = useState(null);
+  const highlightTimer = useRef(null);
+  useEffect(() => () => clearTimeout(highlightTimer.current), []);
+  useEffect(() => {
+    if (!focus || activeTab !== 'payments' || paymentLoading) return;
+    const el = document.getElementById(`pay-card-${focus.id}`);
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [focus, activeTab, paymentLoading, paymentSchedules]);
+
+  const openPayments = (res) => {
+    setFocus({ id: res.id, numero: res.lot_numero });
+    setHighlightId(res.id);
+    clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlightId(null), 2000);
+    setActiveTab('payments');
+  };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- loadClient is recreated every render; reload only when clientId changes
   useEffect(() => { loadClient(); }, [clientId]);
@@ -631,7 +688,7 @@ export default function ClientDetailPage() {
           <button
             key={tab.key}
             className={`cd-tab${activeTab === tab.key ? ' active' : ''}`}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => { setFocus(null); setActiveTab(tab.key); }}
           >
             {tab.label}
           </button>
@@ -794,7 +851,7 @@ export default function ClientDetailPage() {
                       <div className="cd-list-title">Lot {sale.lot_numero} — {sale.project_name}</div>
                       <div className="cd-list-sub">
                         {[
-                          sale.lot_surface && `${sale.lot_surface} m²`,
+                          sale.lot_surface && `${formatSurface(sale.lot_surface)} m²`,
                           sale.lot_zone && `Zone ${sale.lot_zone}`,
                           sale.sold_by_name,
                         ].filter(Boolean).join(' · ')}
@@ -819,7 +876,19 @@ export default function ClientDetailPage() {
                 {reservations.map((res, i) => {
                   const st = RESERVATION_STATUS[res.status] || { label: res.status, cls: 'badge-gray' };
                   return (
-                    <div key={res.id} className={`cd-list-row${i > 0 ? ' cd-list-row--sep' : ''}`}>
+                    <div
+                      key={res.id}
+                      className={`cd-list-row cd-list-row--link${i > 0 ? ' cd-list-row--sep' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      title={`Voir les paiements du lot ${res.lot_numero}`}
+                      aria-label={`Voir les paiements du lot ${res.lot_numero}`}
+                      onClick={() => openPayments(res)}
+                      onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return;
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPayments(res); }
+                      }}
+                    >
                       <div className={`cd-lot-badge cd-lot--${res.status}`}>{res.lot_numero}</div>
                       <div className="cd-list-main">
                         <div className="cd-list-title">
@@ -828,7 +897,7 @@ export default function ClientDetailPage() {
                         </div>
                         <div className="cd-list-sub">
                           {[
-                            res.lot_surface && `${res.lot_surface} m²`,
+                            res.lot_surface && `${formatSurface(res.lot_surface)} m²`,
                             res.lot_zone && `Zone ${res.lot_zone}`,
                             res.reserved_by_name,
                           ].filter(Boolean).join(' · ')}
@@ -855,7 +924,7 @@ export default function ClientDetailPage() {
                         {res.status === 'active' && res.expiration_date && (
                           <div className="cd-list-expire">Expire {formatDate(res.expiration_date)}</div>
                         )}
-                        <div className="cd-cert-actions">
+                        <div className="cd-cert-actions" onClick={(e) => e.stopPropagation()}>
                           {['active', 'validated', 'converted'].includes(res.status) && (
                             <ReservationDeedActions
                               reservationId={res.id}
@@ -868,6 +937,7 @@ export default function ClientDetailPage() {
                           )}
                         </div>
                       </div>
+                      <span className="cd-list-chevron" aria-hidden="true">›</span>
                     </div>
                   );
                 })}
@@ -883,6 +953,9 @@ export default function ClientDetailPage() {
                 // Schedules are created at engagement only (the legacy « Créer le plan » was removed)
                 return (
                   <>
+                    {focus && !paymentSchedules.some(sc => sc.reservation_id === focus.id) && (
+                      <div className="cd-no-schedule">Aucun échéancier pour le lot {focus.numero}.</div>
+                    )}
                     {paymentSchedules.length === 0 && (
                       <div className="empty-state">
                         <p>Aucun plan de paiement pour ce client.</p>
@@ -897,6 +970,7 @@ export default function ClientDetailPage() {
                             reservations={allReservations}
                             canRecordFor={canRecordFor}
                             onPaymentRecorded={handlePaymentRecorded}
+                            highlighted={schedule.reservation_id === highlightId}
                           />
                         ))}
                       </div>

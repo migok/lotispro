@@ -260,6 +260,122 @@ describe('ClientDetailPage - fiche client', () => {
       )).toBeInTheDocument()
     })
 
+    describe('lignes de réservation cliquables', () => {
+      const TWO = {
+        ...WITH_RESERVATION,
+        reservations_history: [
+          { id: 5, status: 'active', lot_numero: 'A1', lot_surface: 111.376211083, project_id: 1, project_name: 'Projet', reserved_by_user_id: 2 },
+          { id: 6, status: 'active', lot_numero: 'C3', lot_surface: 91, project_id: 1, project_name: 'Projet', reserved_by_user_id: 2 },
+        ],
+      }
+
+      function mockRows({ schedules, summaries }) {
+        vi.stubGlobal('fetch', vi.fn((url) => {
+          const path = String(url).replace(/^https?:\/\/[^/]+/, '')
+          const json = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
+          if (path.endsWith('/details')) return json(TWO)
+          if (path.includes('/api/payments/schedules/client/')) return json(schedules)
+          const m = path.match(/\/api\/reservations\/(\d+)\/financial-summary/)
+          if (m) return json(summaries[m[1]] || SUMMARY)
+          return json([])
+        }))
+      }
+      const SCHEDULES = [
+        { id: 9, reservation_id: 5, lot_price: 400000, installments: [] },
+        { id: 10, reservation_id: 6, lot_price: 300000, installments: [] },
+      ]
+      const row = (n) => screen.findByRole('button', { name: `Voir les paiements du lot ${n}` })
+
+      it('switches to Paiements and highlights the card of the clicked row', async () => {
+        mockRows({ schedules: SCHEDULES, summaries: {} })
+        const user = userEvent.setup()
+        renderPage()
+        await user.click(await screen.findByRole('button', { name: /Réservations \(2\)/ }))
+        await user.click(await row('C3'))
+
+        const card = (await screen.findByText('Lot C3 — Projet')).closest('.pay-overview-card')
+        expect(card).toHaveClass('pay-overview-card--highlight')
+        expect(screen.getByText('Lot A1 — Projet').closest('.pay-overview-card')).not.toHaveClass('pay-overview-card--highlight')
+      })
+
+      it('activates a row with the Enter key', async () => {
+        mockRows({ schedules: SCHEDULES, summaries: {} })
+        const user = userEvent.setup()
+        renderPage()
+        await user.click(await screen.findByRole('button', { name: /Réservations \(2\)/ }))
+        const r = await row('A1')
+        r.focus()
+        await user.keyboard('{Enter}')
+
+        expect((await screen.findByText('Lot A1 — Projet')).closest('.pay-overview-card')).toHaveClass('pay-overview-card--highlight')
+      })
+
+      it('does not navigate when a deed button inside the row is clicked', async () => {
+        mockRows({ schedules: SCHEDULES, summaries: {} })
+        const user = userEvent.setup()
+        renderPage()
+        await user.click(await screen.findByRole('button', { name: /Réservations \(2\)/ }))
+        const buttons = await screen.findAllByRole('button', { name: /Télécharger/ })
+        await user.click(buttons[0])
+
+        expect(screen.getByRole('button', { name: /Réservations \(2\)/ })).toHaveClass('active')
+        expect(document.querySelector('.pay-overview-card')).toBeNull()
+      })
+
+      it('says so when the clicked reservation has no schedule', async () => {
+        mockRows({ schedules: [SCHEDULES[0]], summaries: {} })
+        const user = userEvent.setup()
+        renderPage()
+        await user.click(await screen.findByRole('button', { name: /Réservations \(2\)/ }))
+        await user.click(await row('C3'))
+
+        expect(await screen.findByText('Aucun échéancier pour le lot C3.')).toBeInTheDocument()
+      })
+
+      it('shows the threshold message only for an engaged reservation', async () => {
+        mockRows({
+          schedules: SCHEDULES,
+          summaries: {
+            5: { ...SUMMARY, acte_available: false, acte_min_paid_pct: 10, acte_threshold_amount: 50000, first_payment: 0, total_received: 0 },
+            6: { ...SUMMARY, acte_available: false, gap_due_timing: null, first_payment: 0, total_received: 0 },
+          },
+        })
+        const user = userEvent.setup()
+        renderPage()
+        await user.click(await screen.findByRole('button', { name: /Réservations \(2\)/ }))
+
+        await screen.findAllByText(/L'acte sera disponible quand/)
+        const rows = [await row('A1'), await row('C3')]
+        expect(within(rows[0]).getByText(/L'acte sera disponible quand/)).toBeInTheDocument()
+        expect(within(rows[1]).queryByText(/L'acte sera disponible quand/)).not.toBeInTheDocument()
+        expect(within(rows[1]).queryByText('Reçu de paiement')).not.toBeInTheDocument()
+      })
+
+      it('shows a legacy warning instead of the threshold message', async () => {
+        mockRows({
+          schedules: SCHEDULES,
+          summaries: { 5: { ...SUMMARY, legacy: true, gap_due_timing: null, acte_available: false, first_payment: 0 } },
+        })
+        const user = userEvent.setup()
+        renderPage()
+        await user.click(await screen.findByRole('button', { name: /Réservations \(2\)/ }))
+
+        const r = await row('A1')
+        expect(await within(r).findByText('Réservation engagée avant la nouvelle gestion des montants.')).toBeInTheDocument()
+        expect(within(r).queryByText(/L'acte sera disponible quand/)).not.toBeInTheDocument()
+      })
+
+      it('formats the surface with at most 2 decimals and French separators', async () => {
+        mockRows({ schedules: SCHEDULES, summaries: {} })
+        const user = userEvent.setup()
+        renderPage()
+        await user.click(await screen.findByRole('button', { name: /Réservations \(2\)/ }))
+
+        expect(await screen.findByText(/111,38 m²/)).toBeInTheDocument()
+        expect(screen.getByText(/91 m²/)).toBeInTheDocument()
+      })
+    })
+
     it('shows the schedule and records a payment from the payments tab, without promotion', async () => {
       const fetchMock = mockDownloads(200)
       const user = userEvent.setup()
