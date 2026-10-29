@@ -46,6 +46,7 @@ from app.infrastructure.database.repositories import (
     SaleRepository,
     UserRepository,
 )
+from app.services.payment_progress import payment_progress
 
 logger = get_logger(__name__)
 
@@ -122,6 +123,7 @@ class ProjectService:
                 geojson_file_url=p.geojson_file_url,
                 image_url=p.image_url,
                 enabled_optional_statuses=p.enabled_optional_statuses,
+                acte_min_paid_pct=p.acte_min_paid_pct,
                 enabled_statuses=enabled_statuses(p.enabled_optional_statuses),
                 created_by=p.created_by,
                 created_at=p.created_at,
@@ -193,6 +195,7 @@ class ProjectService:
             geojson_file_url=project.geojson_file_url,
             image_url=project.image_url,
             enabled_optional_statuses=project.enabled_optional_statuses,
+            acte_min_paid_pct=project.acte_min_paid_pct,
             enabled_statuses=enabled_statuses(project.enabled_optional_statuses),
             created_by=project.created_by,
             created_at=project.created_at,
@@ -240,6 +243,7 @@ class ProjectService:
             geojson_file_url=project.geojson_file_url,
             image_url=project.image_url,
             enabled_optional_statuses=project.enabled_optional_statuses,
+            acte_min_paid_pct=project.acte_min_paid_pct,
             enabled_statuses=enabled_statuses(project.enabled_optional_statuses),
             created_by=project.created_by,
             created_at=project.created_at,
@@ -296,6 +300,7 @@ class ProjectService:
             geojson_file_url=updated.geojson_file_url,
             image_url=updated.image_url,
             enabled_optional_statuses=updated.enabled_optional_statuses,
+            acte_min_paid_pct=updated.acte_min_paid_pct,
             enabled_statuses=enabled_statuses(updated.enabled_optional_statuses),
             created_by=updated.created_by,
             created_at=updated.created_at,
@@ -307,7 +312,8 @@ class ProjectService:
         project_id: int,
         data: ProjectWorkflowUpdate,
     ) -> ProjectResponse:
-        """Choose the optional lot statuses a project uses.
+        """Choose the optional lot statuses a project uses and, optionally,
+        the share of the agreed total price to collect before the deed.
 
         Raises:
             NotFoundError: If project not found
@@ -333,12 +339,15 @@ class ProjectService:
                 )
 
         await self.project_repo.update(
-            project_id, enabled_optional_statuses=new_enabled
+            project_id,
+            enabled_optional_statuses=new_enabled,
+            acte_min_paid_pct=data.acte_min_paid_pct,
         )
         logger.info(
             "Project workflow updated",
             project_id=project_id,
             enabled_optional_statuses=new_enabled,
+            acte_min_paid_pct=data.acte_min_paid_pct,
         )
         return await self._response_for(project_id)
 
@@ -479,6 +488,7 @@ class ProjectService:
             geojson_file_url=updated.geojson_file_url,
             image_url=updated.image_url,
             enabled_optional_statuses=updated.enabled_optional_statuses,
+            acte_min_paid_pct=updated.acte_min_paid_pct,
             enabled_statuses=enabled_statuses(updated.enabled_optional_statuses),
             created_by=updated.created_by,
             created_at=updated.created_at,
@@ -1642,66 +1652,13 @@ class ProjectService:
         # Get lots with details
         lots_data = await self.lot_repo.get_project_lots_with_details(project_id)
 
-        # Enrich with payment schedule data
-        from sqlalchemy import select as _select
-        from sqlalchemy.orm import selectinload as _selectinload
-
-        from app.infrastructure.database.models import (
-            PaymentScheduleModel as _PSM,
-        )
-
-        _now = datetime.now(UTC)
+        # Payment progress from the money received (first payment and gap included)
         reservation_ids = [
             lot["reservation_id"] for lot in lots_data if lot.get("reservation_id")
         ]
-        _payment_info: dict[int, dict] = {}
-        if reservation_ids:
-            _sched_q = (
-                _select(_PSM)
-                .where(_PSM.reservation_id.in_(reservation_ids))
-                .options(_selectinload(_PSM.installments))
-            )
-            _sched_res = await self.lot_repo.session.execute(_sched_q)
-            for _sched in _sched_res.scalars().all():
-                _dep_paid = sum(
-                    i.amount
-                    for i in _sched.installments
-                    if i.payment_type == "deposit" and i.status == "paid"
-                )
-                _bal_paid = sum(
-                    i.amount
-                    for i in _sched.installments
-                    if i.payment_type == "balance" and i.status == "paid"
-                )
-                _dep_pct = (
-                    round(_dep_paid / _sched.deposit_total * 100)
-                    if _sched.deposit_total > 0
-                    else 0
-                )
-                _bal_pct = (
-                    round(_bal_paid / _sched.balance_total * 100)
-                    if _sched.balance_total > 0
-                    else 0
-                )
-                _pending = sorted(
-                    [
-                        i
-                        for i in _sched.installments
-                        if i.payment_type == "deposit" and i.status == "pending"
-                    ],
-                    key=lambda i: i.due_date,
-                )
-                _first_due_days = None
-                if _pending:
-                    _due = _pending[0].due_date
-                    if _due.tzinfo is None:
-                        _due = _due.replace(tzinfo=UTC)
-                    _first_due_days = (_due - _now).days
-                _payment_info[_sched.reservation_id] = {
-                    "deposit_paid_pct": _dep_pct,
-                    "balance_paid_pct": _bal_pct,
-                    "first_deposit_days": _first_due_days,
-                }
+        _payment_info = await payment_progress(
+            self.lot_repo.session, reservation_ids, datetime.now(UTC)
+        )
 
         features = []
         for lot in lots_data:

@@ -101,8 +101,13 @@ class PaymentScheduleResponse(BaseSchema):
 
 
 class PaymentInstallmentUpdate(BaseSchema):
-    """Schema for updating an installment status."""
+    """Schema for updating an installment's notes.
 
-    status: str = Field(description="'pending' or 'paid'")
-    paid_date: datetime | None = Field(default=None)
+    The status is computed from the recorded payments (E4-T5): ``status="paid"``
+    is refused, record a payment instead.
+    """
+
+    status: str | None = Field(
+        default=None, description="Obsolète : 'paid' est refusé (encaissement)"
+    )
     notes: str | None = Field(default=None, max_length=500)

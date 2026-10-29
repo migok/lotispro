@@ -11,6 +11,7 @@ from app.core.exceptions import (
     AuthenticationError,
     AuthorizationError,
     BusinessRuleError,
+    ConflictError,
     DatabaseError,
     NotFoundError,
     RateLimitError,
@@ -114,7 +115,7 @@ async def validation_error_handler(
     )
 
     return create_error_response(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         error="VALIDATION_ERROR",
         message=exc.message,
         details=[{"field": exc.field, "message": exc.message}] if exc.field else None,
@@ -166,6 +167,17 @@ async def business_rule_error_handler(
         error="BUSINESS_RULE_VIOLATION",
         message=exc.message,
         details=[{"rule": exc.rule}] if exc.rule else None,
+    )
+
+
+async def conflict_error_handler(request: Request, exc: ConflictError) -> JSONResponse:
+    """Handle optimistic concurrency conflicts (stale data)."""
+    logger.info("Conflict", message=exc.message)
+
+    return create_error_response(
+        status_code=status.HTTP_409_CONFLICT,
+        error="CONFLICT",
+        message=exc.message,
     )
 
 
@@ -250,7 +262,7 @@ async def request_validation_handler(
         )
 
     return create_error_response(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         error="VALIDATION_ERROR",
         message="Certains champs sont invalides",
         details=details,
@@ -279,7 +291,7 @@ async def pydantic_validation_handler(
         )
 
     return create_error_response(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         error="VALIDATION_ERROR",
         message="Data validation failed",
         details=details,
@@ -314,6 +326,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AuthenticationError, authentication_error_handler)
     app.add_exception_handler(AuthorizationError, authorization_error_handler)
     app.add_exception_handler(BusinessRuleError, business_rule_error_handler)
+    app.add_exception_handler(ConflictError, conflict_error_handler)
     app.add_exception_handler(DatabaseError, database_error_handler)
     app.add_exception_handler(RateLimitError, rate_limit_error_handler)
     app.add_exception_handler(AppException, app_exception_handler)

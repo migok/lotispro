@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, select
+from sqlalchemy import Select, and_, select
 
 from app.domain.client_profile import acte_address_of
 from app.domain.schemas.reservation import ReservationFilter
@@ -14,12 +14,34 @@ from app.infrastructure.database.models import (
     UserModel,
 )
 from app.infrastructure.database.repositories.base import BaseRepository
+from app.infrastructure.database.repositories.reservation_payment_repository import (
+    ReservationPaymentRepository,
+)
+
+
+def reservation_for_update(reservation_id: int) -> Select:
+    """The reservation, row locked (``FOR UPDATE``), values re-read.
+
+    First lock of every write on an engaged reservation (payments, edit,
+    solde). Single lock order: reservation → lot → installments.
+    """
+    return (
+        select(ReservationModel)
+        .where(ReservationModel.id == reservation_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
 
 
 class ReservationRepository(BaseRepository[ReservationModel]):
     """Repository for reservation data access operations."""
 
     model = ReservationModel
+
+    async def get_for_update(self, reservation_id: int) -> ReservationModel | None:
+        """The reservation, row locked (see :func:`reservation_for_update`)."""
+        result = await self.session.execute(reservation_for_update(reservation_id))
+        return result.scalar_one_or_none()
 
     async def get_filtered(
         self,
@@ -105,6 +127,9 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             return None
 
         reservation, lot, client, reserver, project = row
+        first_payment = await ReservationPaymentRepository(
+            self.session
+        ).first_payment_total(reservation.id)
 
         return {
             "id": reservation.id,
@@ -121,10 +146,15 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             # New workflow fields
             "payment_type": reservation.payment_type,
             "guarantee_amount": reservation.guarantee_amount,
+            # Premier acompte reçu (payments without installment, E4-T5)
+            "first_payment": first_payment,
             "notaire_id": reservation.notaire_id,
             "notary_name": reservation.notary_name,
             "notary_date": reservation.notary_date,
-            # Réservation engagée — prix de vente et promotion
+            # Réservation engagée — montants (E4-T5) ; promotion_* dépréciés
+            "agreed_total_price": reservation.agreed_total_price,
+            "gap_due_timing": reservation.gap_due_timing,
+            "gap_due_date": reservation.gap_due_date,
             "sale_price": reservation.sale_price,
             "promotion_amount": reservation.promotion_amount,
             "promotion_paid_timing": reservation.promotion_paid_timing,
@@ -142,6 +172,7 @@ class ReservationRepository(BaseRepository[ReservationModel]):
             "client_address": acte_address_of(client),
             "reserved_by_name": reserver.name if reserver else None,
             "project_name": project.name,
+            "acte_min_paid_pct": project.acte_min_paid_pct,
         }
 
     async def get_active_for_lot(self, lot_id: int) -> ReservationModel | None:

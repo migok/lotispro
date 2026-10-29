@@ -16,6 +16,24 @@ export const formatPrice = (price) => {
 };
 
 /**
+ * Amount in MAD with the same format as the backend `format_mad` (E4-T5 screens):
+ * regular-space thousands separator, comma + 2 decimals only when the cents are
+ * not zero — « 400 000 MAD », « 116 666,67 MAD », « 0,40 MAD ». Rounded to the cent.
+ * @param {number|string|null} amount
+ * @returns {string} Formatted amount, or « — » when missing
+ */
+export const formatMad = (amount) => {
+  if (amount === null || amount === undefined || amount === '') return '—';
+  const cents = Math.round(Number(amount) * 100);
+  if (!Number.isFinite(cents)) return '—';
+  const abs = Math.abs(cents);
+  const units = String(Math.floor(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  const rest = abs % 100;
+  const text = rest ? `${units},${String(rest).padStart(2, '0')}` : units;
+  return `${cents < 0 ? '-' : ''}${text} MAD`;
+};
+
+/**
  * Format price with K/M suffix for compact display
  * @param {number} price - Price to format
  * @returns {string} Formatted price with suffix
@@ -81,4 +99,16 @@ export const formatNumber = (num, suffix = '') => {
   }
 
   return `${Math.round(num)}${suffix ? ' ' + suffix : ''}`;
+};
+
+/**
+ * Surface in m² with at most 2 decimals and French separators — « 111,38 », « 91 ».
+ * @param {number|string|null} value
+ * @returns {string} Formatted number without unit, or '' when missing
+ */
+export const formatSurface = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(n);
 };

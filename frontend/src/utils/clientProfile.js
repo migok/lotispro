@@ -66,7 +66,7 @@ export function effectiveActeAddress(values) {
  * demande de choisir le pays ; la longueur est contrôlée selon le pays
  * (le backend ne vérifie que le format E.164).
  */
-function phoneError(v) {
+export function phoneError(v) {
   const digits = String(v).replace(/[\s.-]/g, '');
   if (/^[0-9]+$/.test(digits) && !digits.startsWith('00')) return PHONE_DIAL_CODE_ERROR;
   const phone = normalizePhone(v);

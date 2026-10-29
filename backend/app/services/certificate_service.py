@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import importlib.util
 from datetime import date, datetime
+from pathlib import Path
 
 from fpdf import FPDF
+
+# ── Unicode font (DejaVu Sans, embedded: no system font needed) ──────────────
+FONT_FAMILY = "DejaVu"
+FONTS_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 
 # ── Static company data ──────────────────────────────────────────────────────
 COMPANY_NAME = "PYRAMIDE PROMOTION"
@@ -40,6 +46,24 @@ def _fmt_price(amount: float | None) -> str:
     return f"{formatted} DH"
 
 
+def _new_pdf() -> FPDF:
+    """A4 portrait PDF on its first page, with the DejaVu family registered.
+
+    Text shaping (joined Arabic letters, right-to-left runs) needs ``uharfbuzz``;
+    without it Arabic still renders, just unjoined.
+    """
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_margins(left=20, top=20, right=20)
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_font(FONT_FAMILY, "", str(FONTS_DIR / "DejaVuSans.ttf"))
+    pdf.add_font(FONT_FAMILY, "B", str(FONTS_DIR / "DejaVuSans-Bold.ttf"))
+    pdf.add_font(FONT_FAMILY, "I", str(FONTS_DIR / "DejaVuSans-Oblique.ttf"))
+    if importlib.util.find_spec("uharfbuzz"):
+        pdf.set_text_shaping(True)
+    pdf.add_page()
+    return pdf
+
+
 class CertificateService:
     """Generate reservation certificates as PDF bytes."""
 
@@ -58,10 +82,7 @@ class CertificateService:
         client_address: str | None,
     ) -> bytes:
         """Generate PDF Acte de Réservation and return as bytes."""
-        pdf = FPDF(orientation="P", unit="mm", format="A4")
-        pdf.set_margins(left=20, top=20, right=20)
-        pdf.set_auto_page_break(auto=True, margin=20)
-        pdf.add_page()
+        pdf = _new_pdf()
 
         balance = (lot_price or 0.0) - deposit
         price_per_m2 = (
@@ -72,20 +93,20 @@ class CertificateService:
         w = pdf.epw  # effective page width
 
         # ── Header ─────────────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "B", 16)
+        pdf.set_font(FONT_FAMILY, "B", 16)
         pdf.cell(0, 10, COMPANY_NAME, align="C", new_x="LMARGIN", new_y="NEXT")
 
-        pdf.set_font("Helvetica", "BU", 13)
+        pdf.set_font(FONT_FAMILY, "BU", 13)
         pdf.cell(0, 8, "ACTE DE RESERVATION", align="C", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(6)
 
         # ── ENTRE LES SOUSSIGNÉS ────────────────────────────────────────────
-        pdf.set_font("Helvetica", "BU", 10)
+        pdf.set_font(FONT_FAMILY, "BU", 10)
         pdf.cell(0, 6, "ENTRE LES SOUSSIGNES :", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
         # Company side
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         txt_company = (
             f"Société {COMPANY_NAME}, représentée par son gérant légal "
             f"Monsieur {COMPANY_MANAGER}, portant CIN N° {COMPANY_MANAGER_CIN},"
@@ -113,11 +134,11 @@ class CertificateService:
         pdf.ln(6)
 
         # ── IL A ETE CONVENU ────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "BU", 10)
+        pdf.set_font(FONT_FAMILY, "BU", 10)
         pdf.cell(0, 6, "IL A ETE CONVENU CE QUI SUIT :", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         txt_convenu = (
             f"La société {COMPANY_NAME} déclare réserver en s'obligeant à toutes les "
             f"garanties ordinaires de fait et de droit à Monsieur/Madame {client_name}"
@@ -127,7 +148,7 @@ class CertificateService:
         pdf.ln(4)
 
         # ── DESIGNATION ─────────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "BU", 10)
+        pdf.set_font(FONT_FAMILY, "BU", 10)
         pdf.cell(0, 6, "DESIGNATION:", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
@@ -137,16 +158,16 @@ class CertificateService:
             f"bornage de {surface_str}, provenant du lotissement en cours de réalisation"
             f" dénommé {project_name}."
         )
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         pdf.multi_cell(w, 5.5, txt_desig, align="J", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
 
         # ── PRIX ────────────────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "BU", 10)
+        pdf.set_font(FONT_FAMILY, "BU", 10)
         pdf.cell(0, 6, "PRIX :", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         if price_per_m2:
             price_m2_fmt = f"{price_per_m2:,.0f}".replace(",", " ")
             txt_prix = (
@@ -164,12 +185,12 @@ class CertificateService:
         pdf.ln(3)
 
         # Deposit line (bold)
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(FONT_FAMILY, "B", 10)
         deposit_line = f"{_fmt_price(deposit)} Versé le {_fmt_date(deposit_date)}"
         pdf.cell(0, 6, deposit_line, new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
 
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         pdf.cell(0, 5.5, "Dont quittance,", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
@@ -212,7 +233,7 @@ class CertificateService:
         pdf.ln(4)
 
         # ── Fait à ──────────────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         pdf.cell(
             0,
             6,
@@ -239,7 +260,7 @@ class CertificateService:
         pdf.ln(22)  # space for signatures
 
         # ── Footer ──────────────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "", 7.5)
+        pdf.set_font(FONT_FAMILY, "", 7.5)
         footer_lines = [
             f"Siège social : {COMPANY_ADDRESS}",
             (
@@ -270,23 +291,20 @@ class CertificateService:
         client_address: str | None,
     ) -> bytes:
         """Generate PDF Reçu de Paiement (premier acompte) and return as bytes."""
-        pdf = FPDF(orientation="P", unit="mm", format="A4")
-        pdf.set_margins(left=20, top=20, right=20)
-        pdf.set_auto_page_break(auto=True, margin=20)
-        pdf.add_page()
+        pdf = _new_pdf()
 
         w = pdf.epw
 
         # ── Header ─────────────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "B", 16)
+        pdf.set_font(FONT_FAMILY, "B", 16)
         pdf.cell(0, 10, COMPANY_NAME, align="C", new_x="LMARGIN", new_y="NEXT")
 
-        pdf.set_font("Helvetica", "BU", 13)
+        pdf.set_font(FONT_FAMILY, "BU", 13)
         pdf.cell(0, 8, "RECU DE PAIEMENT", align="C", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(6)
 
         # ── Reference line ──────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         pdf.cell(
             0,
             6,
@@ -298,7 +316,7 @@ class CertificateService:
         pdf.ln(4)
 
         # ── Reçu de ────────────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "BU", 10)
+        pdf.set_font(FONT_FAMILY, "BU", 10)
         pdf.cell(0, 6, "RECU DE :", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
@@ -308,7 +326,7 @@ class CertificateService:
             if client_address
             else "_______________________________________________"
         )
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         txt_client = (
             f"Monsieur/Madame {client_name}, portant {cin_str},"
             f" demeurant à {address_str}"
@@ -317,15 +335,15 @@ class CertificateService:
         pdf.ln(6)
 
         # ── La somme de ─────────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "BU", 10)
+        pdf.set_font(FONT_FAMILY, "BU", 10)
         pdf.cell(0, 6, "LA SOMME DE :", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
-        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_font(FONT_FAMILY, "B", 12)
         pdf.cell(0, 8, _fmt_price(deposit_amount), new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
 
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         pdf.cell(
             0,
             6,
@@ -336,12 +354,12 @@ class CertificateService:
         pdf.ln(6)
 
         # ── Au titre de ─────────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "BU", 10)
+        pdf.set_font(FONT_FAMILY, "BU", 10)
         pdf.cell(0, 6, "AU TITRE DE :", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
         surface_str = f"{lot_surface} m²" if lot_surface else "___ m²"
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         txt_titre = (
             f"Premier acompte sur réservation du lot N°{lot_numero}"
             f" d'une superficie approximative de {surface_str},"
@@ -352,7 +370,7 @@ class CertificateService:
 
         # ── Prix de vente ───────────────────────────────────────────────────
         if sale_price is not None:
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font(FONT_FAMILY, "", 10)
             pdf.cell(
                 0,
                 6,
@@ -364,7 +382,7 @@ class CertificateService:
         # ── Note promotion ─────────────────────────────────────────────────
         if promotion_amount and promotion_amount > 0:
             pdf.ln(3)
-            pdf.set_font("Helvetica", "I", 9)
+            pdf.set_font(FONT_FAMILY, "I", 9)
             pdf.multi_cell(
                 w,
                 5,
@@ -382,7 +400,7 @@ class CertificateService:
 
         # ── Signature block ──────────────────────────────────────────────────
         col_w = w / 2
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT_FAMILY, "", 10)
         pdf.cell(col_w, 5.5, f"Le réservataire ({client_name})", align="L")
         pdf.cell(
             col_w,
@@ -398,7 +416,7 @@ class CertificateService:
         pdf.ln(22)
 
         # ── Footer ──────────────────────────────────────────────────────────
-        pdf.set_font("Helvetica", "", 7.5)
+        pdf.set_font(FONT_FAMILY, "", 7.5)
         footer_lines = [
             f"Siège social : {COMPANY_ADDRESS}",
             (

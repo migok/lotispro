@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { apiGet } from '../../utils/api';
 import { CLIENT_TYPES } from '../../utils/constants';
-import { loadInternationalPhoneInput, loadedInternationalPhoneInput } from './lazyInternationalPhoneInput';
+import LazyPhoneInput from './LazyPhoneInput';
 import {
   ACQUISITION_CHANNEL_LABELS,
   acteAddressOf,
@@ -59,35 +59,6 @@ const blankToNull = (value) => {
   const trimmed = typeof value === 'string' ? value.trim() : value;
   return trimmed === '' || trimmed === undefined ? null : trimmed;
 };
-
-/**
- * Champ téléphone chargé à la demande (drapeaux + sélecteur ~100 Ko gzip hors du
- * bundle principal). En attendant : champ texte simple, la saisie « +33… » reste possible.
- */
-function PhoneInput({ id, value, onChange, disabled, error, describedBy, label }) {
-  const [Loaded, setLoaded] = useState(loadedInternationalPhoneInput);
-  useEffect(() => {
-    if (Loaded) return undefined;
-    let active = true;
-    loadInternationalPhoneInput().then(
-      (component) => { if (active) setLoaded(() => component); },
-      () => {} // échec réseau : on garde le champ simple
-    );
-    return () => { active = false; };
-  }, [Loaded]);
-
-  if (Loaded) {
-    return (
-      <Loaded id={id} label={label} value={value} onChange={onChange}
-        disabled={disabled} error={error} describedBy={describedBy} />
-    );
-  }
-  return (
-    <input id={id} type="tel" className={`field-input${error ? ' has-error' : ''}`}
-      value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}
-      placeholder="Numéro de téléphone" aria-invalid={!!error} aria-describedby={describedBy} />
-  );
-}
 
 export default function ClientForm({
   initialValues,
@@ -217,7 +188,7 @@ export default function ClientForm({
   );
 
   const phoneInput = (id, label) => (
-    <PhoneInput id={`client-${id}`} label={label}
+    <LazyPhoneInput id={`client-${id}`} label={label}
       value={id === 'whatsapp' && whatsappSame ? values.phone : values[id]}
       disabled={id === 'whatsapp' && whatsappSame} error={errors[id]} describedBy={describedBy(id)}
       onChange={(value) => set(id)({ target: { value } })} />

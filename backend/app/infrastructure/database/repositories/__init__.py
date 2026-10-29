@@ -16,11 +16,20 @@ from app.infrastructure.database.repositories.lot_repository import LotRepositor
 from app.infrastructure.database.repositories.notaire_repository import (
     NotaireRepository,
 )
+from app.infrastructure.database.repositories.notification_repository import (
+    NotificationRepository,
+)
 from app.infrastructure.database.repositories.payment_repository import (
     PaymentRepository,
 )
 from app.infrastructure.database.repositories.project_repository import (
     ProjectRepository,
+)
+from app.infrastructure.database.repositories.reservation_change_repository import (
+    ReservationChangeRepository,
+)
+from app.infrastructure.database.repositories.reservation_payment_repository import (
+    ReservationPaymentRepository,
 )
 from app.infrastructure.database.repositories.reservation_repository import (
     ReservationRepository,
@@ -37,8 +46,11 @@ __all__ = [
     "LotPricingConfigRepository",
     "LotRepository",
     "NotaireRepository",
+    "NotificationRepository",
     "PaymentRepository",
     "ProjectRepository",
+    "ReservationChangeRepository",
+    "ReservationPaymentRepository",
     "ReservationRepository",
     "SaleRepository",
     "UserRepository",

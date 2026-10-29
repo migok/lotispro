@@ -59,9 +59,10 @@ def _payload(route: str, buyer_id: int, notaire_id: int) -> dict[str, Any] | Non
             "finalization_date": _in_days(15),
         },
         "refund": {"refund_amount": 10000, "refund_date": _today()},
+        # Paid in full at engagement so that « solde » is allowed afterwards.
         "direct-engage": {
             "client_id": buyer_id,
-            "guarantee_amount": 50000,
+            "guarantee_amount": 500000,
             "payment_type": PAYMENT,
         },
         "engage": {"guarantee_action": "deduct"},

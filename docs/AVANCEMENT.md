@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-27 (E3 fusionné #51 ; téléphone international fusionné #53)_
+_Dernière mise à jour : 2026-10-29 (E4 validé en recette et fusionné, PR #54)_
 
 ## Vue d'ensemble
 
@@ -20,7 +20,7 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E1 🐛 #5 Plein écran | ✅ | 2 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | [#47](https://github.com/migok/lotispro/pull/47) |
 | E2 👤 #7 Fiche client | ✅ | 6 / 6 | [#18](https://github.com/migok/lotispro/issues/18) | [#48](https://github.com/migok/lotispro/pull/48) |
 | E3 Statuts par projet + états des lieux | ✅ | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | [#51](https://github.com/migok/lotispro/pull/51) |
-| E4 🔄 #8 Réservation | ⬜ | 0 / 5 | [#29](https://github.com/migok/lotispro/issues/29) | |
+| E4 🔄 #8 Réservation | ✅ | 6 / 6 | [#29](https://github.com/migok/lotispro/issues/29) | [#54](https://github.com/migok/lotispro/pull/54) |
 | E5 📊 #3 Vue projet | ⬜ | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | |
 | E6 📅 #4 Dashboard par période | ⬜ | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | |
 | E7 SMS / WhatsApp | ⛔ fournisseur à choisir | 0 / 3 | [#42](https://github.com/migok/lotispro/issues/42) | |
@@ -49,11 +49,12 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E3-T3 | Transition option → engagée | ✅ | [#26](https://github.com/migok/lotispro/issues/26) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-25 |
 | E3-T4 | États des lieux backend | ✅ | [#27](https://github.com/migok/lotispro/issues/27) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-26 |
 | E3-T5 | Frontend statuts + EDL | ✅ | [#28](https://github.com/migok/lotispro/issues/28) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-26 |
-| E4-T0 | Correctif PDF : police Unicode (’, arabe) | ⬜ | [#49](https://github.com/migok/lotispro/issues/49) | | |
-| E4-T1 | Acte auto à l'engagement | ⬜ | [#30](https://github.com/migok/lotispro/issues/30) | | |
-| E4-T2 | Service de notifications | ⬜ | [#31](https://github.com/migok/lotispro/issues/31) | | |
-| E4-T3 | UI notifications + historique | ⬜ | [#32](https://github.com/migok/lotispro/issues/32) | | |
-| E4-T4 | Rappels d'expiration | ⬜ | [#33](https://github.com/migok/lotispro/issues/33) | | |
+| E4-T0 | Correctif PDF : police Unicode (’, arabe) | ✅ | [#49](https://github.com/migok/lotispro/issues/49) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
+| E4-T1 | Acte auto à l'engagement | ✅ | [#30](https://github.com/migok/lotispro/issues/30) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
+| E4-T2 | Service de notifications | ✅ | [#31](https://github.com/migok/lotispro/issues/31) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
+| E4-T3 | UI notifications + historique | ✅ | [#32](https://github.com/migok/lotispro/issues/32) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
+| E4-T4 | Rappels d'expiration | ✅ | [#33](https://github.com/migok/lotispro/issues/33) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
+| E4-T5 | Modifier une réservation engagée | ✅ | [#52](https://github.com/migok/lotispro/issues/52) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
 | E5-T1 | Endpoint `lots-matrix` | ⬜ | [#35](https://github.com/migok/lotispro/issues/35) | | |
 | E5-T2 | Onglet Lots (grille + navigation) | ⬜ | [#36](https://github.com/migok/lotispro/issues/36) | | |
 | E5-T3 | Filtres persistés | ⬜ | [#37](https://github.com/migok/lotispro/issues/37) | | |
@@ -82,6 +83,13 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
   - `b237c02 feat: update Contact and Landing pages with new messaging and styling for demo booking` (touche `ContactPage.jsx`, `LandingPage.jsx`, `landing.css`, ajoute `frontend/public/launch-strategy.md`).
 - Pas de merge effectué (décision reportée).
 - `backend/railway.toml` ligne 6 : `|| alembic stamp 0001` retiré (appliqué manuellement par l'utilisateur le 2026-10-24) — un échec de migration fait désormais échouer le déploiement.
+
+### Déploiement — base partagée en avance sur `main` (E4)
+
+- Depuis le 2026-10-28, la base Supabase partagée est à la révision **0025** (migrations E4 0023-0025 appliquées pour la recette). Depuis la fusion de la PR #54 (2026-10-29), `dev` est aligné sur cette base ; `origin/main` reste à 0001.
+- Le `preDeployCommand` de Railway lance `alembic upgrade head` : déployer une branche qui ne contient pas les migrations 0023-0025 contre cette base échoue au pré-déploiement (révision 0025 inconnue du code). **Ne déployer aucune branche sans 0023-0025 contre la base partagée.**
+- Ordre de déploiement (E4 est dans `dev`) : `dev` → `main` ; ensuite déployer Railway (backend) puis Vercel (frontend) immédiatement après, pour ne pas laisser un frontend sans les écrans E4 face à l'API E4 (ou l'inverse).
+- Retour arrière : `alembic downgrade 0022` ramène la base au niveau de `dev`, mais **détruit les données E4** (tables `reservation_payments`, `reservation_changes`, `notifications` ; colonnes prix total convenu / écart des réservations, `projects.acte_min_paid_pct`, `users.phone`, `lot_documents.category`) — à n'utiliser qu'en dernier recours, après sauvegarde.
 
 ## Dette technique suivie
 
@@ -129,7 +137,7 @@ Dette relevée en fin d'E3 (revue finale, statuts optionnels et état des lieux)
 - **E2, ordre de déploiement** : déployer Railway (backend) puis Vercel (frontend) immédiatement après, car l'ancienne interface envoie `POST {name}`, qui reçoit un 422 sur le nouveau backend.
 
 Dette relevée en fin d'E2 (revue finale, 2026-10-25) :
-- **PDF d'acte / reçu en erreur 500** si une adresse, une ville, un pays ou un nom contient un caractère hors latin-1 (apostrophe typographique ’ insérée par les claviers de téléphone, écriture arabe). Préexistant, plus probable avec les nouveaux champs. Correctif : police Unicode (DejaVuSans via `pdf.add_font`) dans `certificate_service.py`, ou au minimum remplacer ’‘“” avant impression. → planifié en **E4-T0** ([#49](https://github.com/migok/lotispro/issues/49)), première tâche d'E4.
+- ~~**PDF d'acte / reçu en erreur 500** si une adresse, une ville, un pays ou un nom contient un caractère hors latin-1 (apostrophe typographique ’ insérée par les claviers de téléphone, écriture arabe). Préexistant, plus probable avec les nouveaux champs. Correctif : police Unicode (DejaVuSans via `pdf.add_font`) dans `certificate_service.py`, ou au minimum remplacer ’‘“” avant impression. → planifié en **E4-T0** ([#49](https://github.com/migok/lotispro/issues/49)), première tâche d'E4.~~ **Résolu par E4-T0** : DejaVu Sans embarquée (`app/assets/fonts/`) + mise en forme du texte arabe via `uharfbuzz`.
 - Badge « Actes » de la fiche client choisi par comparaison de chaînes (`ClientDetailPage.jsx`) : comparer la clé (`morocco`/`abroad`) serait plus robuste.
 - Adresses héritées contenant déjà la ville : la ville apparaîtra deux fois après saisie de la ville (pas de migration de découpage, décision utilisateur).
 - `pydantic_validation_handler` renvoie encore « Data validation failed » (anglais).

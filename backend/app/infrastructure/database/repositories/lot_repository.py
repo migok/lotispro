@@ -625,3 +625,20 @@ class LotRepository(BaseRepository[LotModel]):
             )
         )
         return [(row, name) for row, name in result.all()]
+
+    async def get_engaged_at(self, lot_id: int, reservation_id: int) -> datetime | None:
+        """When ``reservation_id`` last moved the lot to ``reservation_engagee``."""
+        result = await self.session.execute(
+            select(LotStatusHistoryModel.changed_at)
+            .where(
+                LotStatusHistoryModel.lot_id == lot_id,
+                LotStatusHistoryModel.reservation_id == reservation_id,
+                LotStatusHistoryModel.to_status == "reservation_engagee",
+            )
+            .order_by(
+                LotStatusHistoryModel.changed_at.desc(),
+                LotStatusHistoryModel.id.desc(),
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()

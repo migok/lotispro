@@ -109,6 +109,7 @@ class UserRepository(BaseRepository[UserModel]):
         last_name: str | None = None,
         address: str | None = None,
         company: str | None = None,
+        phone: str | None = None,
         invitation_token: str | None = None,
         invitation_expires_at: datetime | None = None,
     ) -> UserModel:
@@ -123,6 +124,7 @@ class UserRepository(BaseRepository[UserModel]):
             last_name: Optional last name
             address: Optional address
             company: Optional company
+            phone: Optional phone (E.164)
             invitation_token: Optional invitation token
             invitation_expires_at: Optional invitation expiration
 
@@ -138,6 +140,7 @@ class UserRepository(BaseRepository[UserModel]):
             last_name=last_name,
             address=address,
             company=company,
+            phone=phone,
             invitation_token=invitation_token,
             invitation_expires_at=invitation_expires_at,
         )

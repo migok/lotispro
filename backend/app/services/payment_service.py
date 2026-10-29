@@ -1,12 +1,13 @@
 """Payment service — schedule creation and installment management."""
 
 import calendar
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
+from app.domain.reservation_amounts import to_cents
 from app.domain.schemas.payment import (
     InstallmentConfig,
     PaymentInstallmentResponse,
@@ -27,6 +28,21 @@ from app.services.email_service import EmailService
 logger = get_logger(__name__)
 
 _email_service = EmailService()
+
+# Payment order (deposit installments, then balance), rule
+# ``installment_order_violation``.
+PREVIOUS_DEPOSIT_UNPAID = (
+    "Les versements précédents de l'échéancier acompte doivent être validés "
+    "avant celui-ci."
+)
+DEPOSIT_BEFORE_BALANCE = (
+    "Tous les versements de l'échéancier acompte doivent être validés avant "
+    "de commencer l'échéancier solde."
+)
+PREVIOUS_BALANCE_UNPAID = (
+    "Les versements précédents de l'échéancier solde doivent être validés "
+    "avant celui-ci."
+)
 
 
 def _add_months(dt: datetime, months: int) -> datetime:
@@ -232,88 +248,38 @@ class PaymentService:
         installment_id: int,
         data: PaymentInstallmentUpdate,
     ) -> PaymentInstallmentResponse:
-        """Update an installment status (mark paid / pending)."""
-        if data.status not in ("pending", "paid"):
+        """Update an installment's notes.
+
+        The status is computed from the payments recorded for the installment
+        (E4-T5, R6): marking it paid here is refused.
+
+        Raises:
+            BusinessRuleError: ``status="paid"`` (``use_payment_record``) or an
+                unknown status.
+            NotFoundError: Unknown installment.
+        """
+        if data.status == "paid":
+            raise BusinessRuleError(
+                message="Enregistrez un encaissement pour cette échéance.",
+                rule="use_payment_record",
+            )
+        if data.status not in (None, "pending"):
             raise BusinessRuleError(
                 message=f"Invalid installment status: {data.status}",
                 rule="invalid_installment_status",
             )
 
-        # Enforce strict payment order when marking as paid
-        if data.status == "paid":
-            inst_check = await self.payment_repo.get_installment_with_schedule(
-                installment_id
-            )
-            if inst_check:
-                all_insts = inst_check.schedule.installments
-
-                if inst_check.payment_type == "deposit":
-                    # All previous deposit installments must be paid
-                    prev_deposit = [
-                        i
-                        for i in all_insts
-                        if i.payment_type == "deposit"
-                        and i.installment_number < inst_check.installment_number
-                    ]
-                    if any(i.status != "paid" for i in prev_deposit):
-                        raise BusinessRuleError(
-                            message="Les versements précédents de l'échéancier acompte doivent être validés avant celui-ci.",
-                            rule="installment_order_violation",
-                        )
-
-                elif inst_check.payment_type == "balance":
-                    # All deposit installments must be paid first
-                    deposit_insts = [
-                        i for i in all_insts if i.payment_type == "deposit"
-                    ]
-                    if any(i.status != "paid" for i in deposit_insts):
-                        raise BusinessRuleError(
-                            message="Tous les versements de l'échéancier acompte doivent être validés avant de commencer l'échéancier solde.",
-                            rule="installment_order_violation",
-                        )
-                    # Previous balance installments must be paid
-                    prev_balance = [
-                        i
-                        for i in all_insts
-                        if i.payment_type == "balance"
-                        and i.installment_number < inst_check.installment_number
-                    ]
-                    if any(i.status != "paid" for i in prev_balance):
-                        raise BusinessRuleError(
-                            message="Les versements précédents de l'échéancier solde doivent être validés avant celui-ci.",
-                            rule="installment_order_violation",
-                        )
-
+        current = await self.payment_repo.get_installment_with_schedule(installment_id)
+        if not current:
+            raise NotFoundError("PaymentInstallment", installment_id)
         inst = await self.payment_repo.update_installment(
             installment_id=installment_id,
-            status=data.status,
-            paid_date=data.paid_date,
+            status=current.status,
             notes=data.notes,
         )
-        if not inst:
-            raise NotFoundError("PaymentInstallment", installment_id)
 
-        logger.info(
-            "Installment updated",
-            installment_id=installment_id,
-            status=data.status,
-        )
-
-        # When first deposit installment is confirmed → validate the reservation
-        if (
-            data.status == "paid"
-            and inst.payment_type == "deposit"
-            and inst.installment_number == 1
-        ):
-            await self._validate_reservation_for_installment(inst.id)
-
-        # Send email confirmation for every paid installment
-        if data.status == "paid":
-            await self._send_payment_confirmation(
-                inst.id, inst.amount, inst.paid_date, inst.payment_type
-            )
-
-        return self._installment_to_response(inst)
+        logger.info("Installment notes updated", installment_id=installment_id)
+        return self._installment_to_response(inst)  # type: ignore[arg-type]
 
     async def _validate_reservation_for_installment(self, installment_id: int) -> None:
         """Set the reservation status to 'validated' after first deposit is confirmed."""
@@ -328,16 +294,17 @@ class PaymentService:
                 reservation_id=reservation.id,
             )
 
-    async def _send_payment_confirmation(
+    async def send_payment_confirmation(
         self,
         installment_id: int,
         amount: float,
-        paid_date: object,
+        paid_date: date | None,
         payment_type: str,
     ) -> None:
-        """Load full context and send payment confirmation email for any installment."""
-        from datetime import datetime
+        """Email the client the confirmation of one payment on an installment.
 
+        Skipped (logged) when the client has no email address.
+        """
         ctx = await self.payment_repo.get_installment_with_context(installment_id)
         if not ctx:
             return
@@ -355,16 +322,11 @@ class PaymentService:
             )
             return
 
-        # Compute total installments count and schedule total for the current type
-        all_insts = ctx.schedule.installments
-        type_insts = [i for i in all_insts if i.payment_type == payment_type]
-        total_installments = len(type_insts)
-        schedule_total = (
-            ctx.schedule.deposit_total
-            if payment_type == "deposit"
-            else ctx.schedule.balance_total
-        )
-        # Find installment number for the given installment_id
+        # Installments of the same type: count, total and number of this one.
+        type_insts = [
+            i for i in ctx.schedule.installments if i.payment_type == payment_type
+        ]
+        schedule_total = sum(to_cents(i.amount) for i in type_insts) / 100
         inst_match = next((i for i in type_insts if i.id == installment_id), None)
         installment_number = inst_match.installment_number if inst_match else 1
 
@@ -372,11 +334,11 @@ class PaymentService:
             client_name=client.name,
             client_email=client.email,
             amount=amount,
-            paid_date=paid_date if isinstance(paid_date, datetime) else None,
+            paid_date=paid_date,
             lot_numero=lot.numero,
             project_name=project.name,
             payment_type=payment_type,
             installment_number=installment_number,
-            total_installments=total_installments,
+            total_installments=len(type_insts),
             schedule_total=schedule_total,
         )

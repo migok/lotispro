@@ -86,7 +86,7 @@ class TestOptionEngage:
             "option-engage",
             _engage_payload(
                 sale_price=450000,
-                promotion_paid_timing="fin",
+                gap_due_timing="fin",
                 payment_plan={"deposit_count": 1, "balance_count": 1},
             ),
         )
@@ -97,8 +97,9 @@ class TestOptionEngage:
         assert body["client_id"] == buyer.id
         assert body["guarantee_amount"] == 50000
         assert body["sale_price"] == 450000
-        assert body["promotion_amount"] == 50000
-        assert body["promotion_paid_timing"] == "fin"
+        assert body["agreed_total_price"] == 500000
+        assert body["gap_amount"] == 50000
+        assert body["gap_due_timing"] == "fin"
         await db_session.refresh(lot)
         assert lot.status == "reservation_engagee"
         assert lot.current_reservation_id == reservation_id
@@ -293,7 +294,7 @@ class TestOptionDeposit:
 
         assert response.status_code == 200, response.json()
         assert response.json()["deposit_refund_amount"] is None
-        # 450000 sale price - 100000 deposit kept
+        # 500000 agreed - 50000 first payment - 100000 option deposit kept
         assert await _schedule_total(client, headers, reservation_id) == 350000
 
     async def test_refund_records_fields_and_schedules_full_price(
@@ -322,6 +323,7 @@ class TestOptionDeposit:
         assert body["deposit_refund_amount"] == 100000
         assert body["deposit_refund_date"] == "2026-10-20"
         assert body["deposit_refund_payment_type"] == PAYMENT
+        # 500000 agreed - 50000 first payment (refunded deposit not deducted)
         assert await _schedule_total(client, headers, reservation_id) == 450000
 
     async def test_expiration_and_notes(
@@ -371,4 +373,5 @@ class TestOptionDeposit:
         )
 
         assert response.status_code == 200, response.json()
+        # 500000 agreed - 50000 first payment
         assert await _schedule_total(client, headers, reservation_id) == 450000

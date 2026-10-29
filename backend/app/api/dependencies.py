@@ -11,9 +11,9 @@ from app.core.security import security_scheme, validate_credentials
 from app.domain.schemas.user import UserResponse
 from app.infrastructure.database import get_session
 from app.services import (
+    ActeService,
     AuditService,
     AuthService,
-    CertificateService,
     ClientService,
     DashboardService,
     DocumentService,
@@ -27,6 +27,10 @@ from app.services import (
     SaleService,
     UserService,
 )
+from app.services.email_service import EmailService
+from app.services.engagement_edit_service import EngagementEditService
+from app.services.notifications.service import NotificationService
+from app.services.reservation_payment_service import ReservationPaymentService
 
 logger = get_logger(__name__)
 
@@ -177,14 +181,14 @@ def get_payment_service(session: DBSession) -> PaymentService:
     return PaymentService(session)
 
 
-def get_certificate_service() -> CertificateService:
-    """Get certificate service instance (no DB session needed)."""
-    return CertificateService()
-
-
 def get_document_service(session: DBSession) -> DocumentService:
     """Get document service instance."""
     return DocumentService(session)
+
+
+def get_acte_service(session: DBSession) -> ActeService:
+    """Get acte (reservation deed) service instance."""
+    return ActeService(session)
 
 
 def get_notaire_service(session: DBSession) -> NotaireService:
@@ -195,6 +199,21 @@ def get_notaire_service(session: DBSession) -> NotaireService:
 def get_lot_pricing_service(session: DBSession) -> LotPricingService:
     """Get lot pricing config service instance."""
     return LotPricingService(session)
+
+
+def get_reservation_payment_service(session: DBSession) -> ReservationPaymentService:
+    """Get reservation payment (encaissements) service instance."""
+    return ReservationPaymentService(session)
+
+
+def get_engagement_edit_service(session: DBSession) -> EngagementEditService:
+    """Get engaged reservation edit service instance."""
+    return EngagementEditService(session)
+
+
+def get_notification_service(session: DBSession) -> NotificationService:
+    """Get notification service instance."""
+    return NotificationService(session, EmailService())
 
 
 # Typed service dependencies
@@ -211,7 +230,16 @@ SaleServiceDep = Annotated[SaleService, Depends(get_sale_service)]
 DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
 PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
-CertificateServiceDep = Annotated[CertificateService, Depends(get_certificate_service)]
 DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
+ActeServiceDep = Annotated[ActeService, Depends(get_acte_service)]
 NotaireServiceDep = Annotated[NotaireService, Depends(get_notaire_service)]
 LotPricingServiceDep = Annotated[LotPricingService, Depends(get_lot_pricing_service)]
+ReservationPaymentServiceDep = Annotated[
+    ReservationPaymentService, Depends(get_reservation_payment_service)
+]
+EngagementEditServiceDep = Annotated[
+    EngagementEditService, Depends(get_engagement_edit_service)
+]
+NotificationServiceDep = Annotated[
+    NotificationService, Depends(get_notification_service)
+]

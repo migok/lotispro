@@ -14,6 +14,7 @@ from app.api.v1.endpoints import (
     lot_transitions,
     lots,
     notaires,
+    notifications,
     payments,
     projects,
     reservations,
@@ -75,6 +76,12 @@ api_router.include_router(
     reservations.router,
     prefix="/reservations",
     tags=["Reservations"],
+)
+
+api_router.include_router(
+    notifications.router,
+    prefix="/notifications",
+    tags=["Notifications"],
 )
 
 api_router.include_router(

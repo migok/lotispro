@@ -88,6 +88,11 @@ def _direct_engage_payload(client_id: int) -> dict[str, Any]:
     return {"client_id": client_id, "guarantee_amount": 50000, "payment_type": PAYMENT}
 
 
+def _paid_in_full_engage_payload(client_id: int) -> dict[str, Any]:
+    """Direct engagement paying the whole agreed price: « solde » is allowed."""
+    return {**_direct_engage_payload(client_id), "guarantee_amount": 500000}
+
+
 async def _reservation_of(db_session: AsyncSession, lot: LotModel) -> ReservationModel:
     """The reservation linked to ``lot`` (the only one the tests create)."""
     result = await db_session.execute(
@@ -384,7 +389,11 @@ class TestSolde:
     ) -> None:
         headers = auth_headers(commercial)
         await post_transition(
-            client, headers, lot.id, "direct-engage", _direct_engage_payload(buyer.id)
+            client,
+            headers,
+            lot.id,
+            "direct-engage",
+            _paid_in_full_engage_payload(buyer.id),
         )
 
         response = await post_transition(
@@ -413,7 +422,7 @@ class TestSolde:
             auth_headers(commercial),
             lot.id,
             "direct-engage",
-            _direct_engage_payload(buyer.id),
+            _paid_in_full_engage_payload(buyer.id),
         )
 
         response = await post_transition(
@@ -441,7 +450,11 @@ class TestNotaire:
         headers = auth_headers(commercial)
         notaire = await make_notaire(db_session)
         await post_transition(
-            client, headers, lot.id, "direct-engage", _direct_engage_payload(buyer.id)
+            client,
+            headers,
+            lot.id,
+            "direct-engage",
+            _paid_in_full_engage_payload(buyer.id),
         )
         await post_transition(client, headers, lot.id, "solde", {"price": 500000})
         # The client must first express the wish to go to the notary.
@@ -479,7 +492,11 @@ class TestNotaire:
         notaire_a = await make_notaire(db_session)
         notaire_b = await make_notaire(db_session, nom="Autre", prenom="Second")
         await post_transition(
-            client, headers, lot.id, "direct-engage", _direct_engage_payload(buyer.id)
+            client,
+            headers,
+            lot.id,
+            "direct-engage",
+            _paid_in_full_engage_payload(buyer.id),
         )
         await post_transition(client, headers, lot.id, "solde", {"price": 500000})
         await post_transition(
@@ -521,7 +538,11 @@ class TestNotaire:
         headers = auth_headers(commercial)
         notaire = await make_notaire(db_session)
         await post_transition(
-            client, headers, lot.id, "direct-engage", _direct_engage_payload(buyer.id)
+            client,
+            headers,
+            lot.id,
+            "direct-engage",
+            _paid_in_full_engage_payload(buyer.id),
         )
         await post_transition(client, headers, lot.id, "solde", {"price": 500000})
 
@@ -550,7 +571,11 @@ class TestNotaire:
         headers = auth_headers(commercial)
         notaire = await make_notaire(db_session)
         await post_transition(
-            client, headers, lot.id, "direct-engage", _direct_engage_payload(buyer.id)
+            client,
+            headers,
+            lot.id,
+            "direct-engage",
+            _paid_in_full_engage_payload(buyer.id),
         )
         await post_transition(client, headers, lot.id, "solde", {"price": 500000})
         await post_transition(

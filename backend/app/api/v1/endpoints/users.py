@@ -4,7 +4,12 @@ from fastapi import APIRouter, status
 
 from app.api.dependencies import ManagerUser, UserServiceDep
 from app.domain.schemas.common import MessageResponse
-from app.domain.schemas.user import SetPasswordRequest, UserInvite, UserResponse
+from app.domain.schemas.user import (
+    SetPasswordRequest,
+    UserInvite,
+    UserResponse,
+    UserUpdate,
+)
 
 router = APIRouter()
 
@@ -68,6 +73,22 @@ async def get_user(
 ) -> UserResponse:
     """Get user by ID. Manager only."""
     return await user_service.get_user(user_id)
+
+
+@router.patch(
+    "/{user_id}",
+    response_model=UserResponse,
+    summary="Update user",
+    description="Update a user's editable fields — currently the phone (manager only).",
+)
+async def update_user(
+    user_id: int,
+    data: UserUpdate,
+    current_user: ManagerUser,
+    user_service: UserServiceDep,
+) -> UserResponse:
+    """Update a user. Manager only."""
+    return await user_service.update_user(user_id, data)
 
 
 @router.delete(

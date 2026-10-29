@@ -12,6 +12,7 @@ import re
 import unicodedata
 
 from fastapi import UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -26,6 +27,10 @@ from app.infrastructure.database.repositories import (
 from app.infrastructure.storage.supabase_storage import get_storage_client
 
 logger = get_logger(__name__)
+
+# Documents tied to a payment (proof) or a deed: payments and deeds are never
+# deleted (spec E4-T5), so neither are these documents.
+LOCKED_CATEGORIES = {"justificatif_paiement", "acte_reservation"}
 
 ALLOWED_CONTENT_TYPES = {
     "application/pdf",
@@ -54,9 +59,44 @@ def _doc_to_response(doc: LotDocumentModel) -> LotDocumentResponse:
         reservation_id=doc.reservation_id,
         filename=doc.filename,
         content_type=doc.content_type,
+        category=doc.category,
         uploaded_by_user_id=doc.uploaded_by_user_id,
         created_at=doc.created_at,
     )
+
+
+async def read_upload(file: UploadFile) -> tuple[bytes, str]:
+    """Read an uploaded file after checking its type and size.
+
+    Returns ``(content, content_type)``.
+
+    Raises:
+        BusinessRuleError: Type not allowed (``invalid_document_type``) or file
+            too large (``file_too_large``).
+    """
+    content_type = file.content_type or "application/octet-stream"
+    if content_type == "application/octet-stream" and file.filename:
+        guessed, _ = mimetypes.guess_type(file.filename)
+        if guessed:
+            content_type = guessed
+
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        raise BusinessRuleError(
+            message=(
+                f"Type de fichier non autorisé : {content_type}. "
+                "Formats acceptés : PDF, images (JPG/PNG/WebP), Word, Excel."
+            ),
+            rule="invalid_document_type",
+        )
+
+    content = await file.read()
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(content) > max_bytes:
+        raise BusinessRuleError(
+            message=f"Fichier trop volumineux. Maximum : {settings.MAX_UPLOAD_SIZE_MB} Mo.",
+            rule="file_too_large",
+        )
+    return content, content_type
 
 
 class DocumentService:
@@ -83,67 +123,93 @@ class DocumentService:
         if lot is None:
             raise NotFoundError("Lot", lot_id)
 
-        # Resolve content-type
-        content_type = file.content_type or "application/octet-stream"
-        if content_type == "application/octet-stream" and file.filename:
-            guessed, _ = mimetypes.guess_type(file.filename)
-            if guessed:
-                content_type = guessed
+        content, content_type = await read_upload(file)
 
-        if content_type not in ALLOWED_CONTENT_TYPES:
-            raise BusinessRuleError(
-                message=(
-                    f"Type de fichier non autorisé : {content_type}. "
-                    "Formats acceptés : PDF, images (JPG/PNG/WebP), Word, Excel."
-                ),
-                rule="invalid_document_type",
-            )
+        doc = await self._store(
+            lot_id=lot_id,
+            reservation_id=lot.current_reservation_id,
+            filename=file.filename or "document",
+            content=content,
+            content_type=content_type,
+            category=None,
+            user_id=user_id,
+        )
+        response = _doc_to_response(doc)
+        await self.session.commit()
+        return response
 
-        content = await file.read()
-        max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-        if len(content) > max_bytes:
-            raise BusinessRuleError(
-                message=f"Fichier trop volumineux. Maximum : {settings.MAX_UPLOAD_SIZE_MB} Mo.",
-                rule="file_too_large",
-            )
+    async def store_generated_document(
+        self,
+        lot_id: int,
+        reservation_id: int,
+        filename: str,
+        content: bytes,
+        content_type: str,
+        category: str,
+        user_id: int | None,
+    ) -> LotDocumentResponse:
+        """Archive a document produced by the application (e.g. the deed).
 
-        original_name = file.filename or "document"
-        safe_name = _safe_filename(original_name)
+        Does not commit: the caller owns the transaction, so a storage failure
+        raised from here can be rolled back together with the new row.
+        """
+        doc = await self._store(
+            lot_id=lot_id,
+            reservation_id=reservation_id,
+            filename=filename,
+            content=content,
+            content_type=content_type,
+            category=category,
+            user_id=user_id,
+        )
+        return _doc_to_response(doc)
 
+    async def _store(
+        self,
+        *,
+        lot_id: int,
+        reservation_id: int | None,
+        filename: str,
+        content: bytes,
+        content_type: str,
+        category: str | None,
+        user_id: int | None,
+    ) -> LotDocumentModel:
+        """Insert the document row, then upload its file (no commit)."""
         # Create DB record first to get a stable ID used as filename prefix
         doc = await self.doc_repo.create(
             lot_id=lot_id,
-            reservation_id=lot.current_reservation_id,
-            filename=original_name,
+            reservation_id=reservation_id,
+            filename=filename,
             file_path="",  # updated below
             content_type=content_type,
+            category=category,
             uploaded_by_user_id=user_id,
         )
 
         # Path within the bucket: "{lot_id}/{doc_id}_{safe_name}"
-        storage_path = f"{lot_id}/{doc.id}_{safe_name}"
+        storage_path = f"{lot_id}/{doc.id}_{_safe_filename(filename)}"
 
-        get_storage_client().upload_bytes(
+        await run_in_threadpool(
+            get_storage_client().upload_bytes,
             bucket=settings.SUPABASE_DOCUMENTS_BUCKET,
             path=storage_path,
             content=content,
             content_type=content_type,
         )
 
-        await self.doc_repo.update(doc.id, file_path=storage_path)
-        await self.session.commit()
+        updated = await self.doc_repo.update(doc.id, file_path=storage_path)
 
         logger.info(
-            "Document uploaded",
+            "Document stored",
             lot_id=lot_id,
             doc_id=doc.id,
+            category=category,
             bucket=settings.SUPABASE_DOCUMENTS_BUCKET,
             path=storage_path,
             size_bytes=len(content),
         )
-
-        updated = await self.doc_repo.get_by_id(doc.id)
-        return _doc_to_response(updated)  # type: ignore[arg-type]
+        return updated  # type: ignore[return-value]
 
     async def list_documents(self, lot_id: int) -> list[LotDocumentResponse]:
         """Return all documents attached to a lot."""
@@ -184,10 +250,19 @@ class DocumentService:
 
         Raises:
             NotFoundError: Document not found or belongs to a different lot.
+            BusinessRuleError: Proof of payment or deed (``document_locked``).
         """
         doc = await self.doc_repo.get_by_id(doc_id)
         if doc is None or doc.lot_id != lot_id:
             raise NotFoundError("Document", doc_id)
+        if doc.category in LOCKED_CATEGORIES:
+            raise BusinessRuleError(
+                message=(
+                    "Ce document est rattaché à un encaissement ou à un acte et "
+                    "ne peut pas être supprimé."
+                ),
+                rule="document_locked",
+            )
 
         try:
             get_storage_client().delete_from_bucket(

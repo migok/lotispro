@@ -134,6 +134,13 @@ class BusinessRuleError(AppException):
         self.rule = rule
 
 
+class ConflictError(AppException):
+    """The resource changed since the client read it (optimistic concurrency)."""
+
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
+        super().__init__(message=message, code="CONFLICT", details=details)
+
+
 class DatabaseError(AppException):
     """Database operation failure exception."""
 

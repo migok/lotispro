@@ -4,7 +4,12 @@ Each test gets its own in-memory SQLite database, so no state can leak
 between tests (or between runs, in any order).
 """
 
+import os
 from collections.abc import AsyncGenerator, Callable
+
+# Before any ``app`` import builds the settings: the scheduler never starts in
+# tests (``backend/.env`` may point at a real database). Env vars win over .env.
+os.environ["SCHEDULER_ENABLED"] = "false"
 
 import pytest
 from fastapi import FastAPI
@@ -62,6 +67,56 @@ async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
         base_url="http://test",
     ) as http_client:
         yield http_client
+
+
+class FakeStorage:
+    """In-memory stand-in for the Supabase storage client (documents)."""
+
+    def __init__(self) -> None:
+        self.files: dict[tuple[str, str], bytes] = {}
+
+    def upload_bytes(
+        self,
+        bucket: str,
+        path: str,
+        content: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> None:
+        self.files[(bucket, path)] = content
+
+    def download_bytes(self, bucket: str, path: str) -> bytes:
+        return self.files[(bucket, path)]
+
+    def delete_from_bucket(self, bucket: str, path: str) -> None:
+        self.files.pop((bucket, path), None)
+
+
+@pytest.fixture(autouse=True)
+def fake_storage(monkeypatch: pytest.MonkeyPatch) -> FakeStorage:
+    """Documents never reach Supabase in tests.
+
+    Every engagement now archives the reservation deed, so without this a
+    developer ``.env`` would upload test PDFs to the real bucket.
+    """
+    storage = FakeStorage()
+    monkeypatch.setattr(
+        "app.services.document_service.get_storage_client", lambda: storage
+    )
+    return storage
+
+
+@pytest.fixture(autouse=True)
+def no_resend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Emails never reach Resend in tests (``backend/.env`` may hold a real key).
+
+    A module may still patch ``resend.Emails.send`` itself: its monkeypatch
+    runs after this one and wins.
+    """
+
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Resend must not be called in tests")
+
+    monkeypatch.setattr("resend.Emails.send", _refuse)
 
 
 @pytest.fixture

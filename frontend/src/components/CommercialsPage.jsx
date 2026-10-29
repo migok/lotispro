@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiDelete } from '../utils/api';
 import { formatDate, formatPrice, formatCompactPrice } from '../utils/formatters';
+import CommercialPhone from './commercials/CommercialPhone';
 
 /* ── Icons ─────────────────────────────────────────────── */
 const IconSearch = () => (
@@ -218,7 +219,7 @@ function MonthlyBarChart({ data, metric }) {
 
 /* ── Component ─────────────────────────────────────────────── */
 export default function CommercialsPage() {
-  const { token } = useAuth();
+  const { token, isManager } = useAuth();
   const toast = useToast();
 
   /* Data */
@@ -534,6 +535,11 @@ export default function CommercialsPage() {
                           }
                         </div>
                         <span className="identity-email">{c.email}</span>
+                        <CommercialPhone
+                          commercial={c}
+                          canEdit={isManager()}
+                          onSaved={(saved) => setCommercials(prev => prev.map(x => (x.id === saved.id ? { ...x, phone: saved.phone } : x)))}
+                        />
                         {c.created_at && (
                           <span className="identity-meta">Depuis {formatDate(c.created_at)}</span>
                         )}

@@ -1,5 +1,6 @@
 """Service layer - Application use cases and business logic orchestration."""
 
+from app.services.acte_service import ActeService
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.certificate_service import CertificateService
@@ -18,6 +19,7 @@ from app.services.sale_service import SaleService
 from app.services.user_service import UserService
 
 __all__ = [
+    "ActeService",
     "AuditService",
     "AuthService",
     "CertificateService",

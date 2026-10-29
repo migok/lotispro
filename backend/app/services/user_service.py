@@ -20,6 +20,7 @@ from app.domain.schemas.user import (
     UserCreate,
     UserInvite,
     UserResponse,
+    UserUpdate,
 )
 from app.infrastructure.database.repositories import UserRepository
 from app.services.email_service import EmailService
@@ -37,6 +38,7 @@ def _to_response(user: object) -> UserResponse:
         last_name=user.last_name,
         address=user.address,
         company=user.company,
+        phone=user.phone,
         role=user.role,
         is_pending=user.invitation_token is not None,
         invitation_token=user.invitation_token,  # visible tant que pending (pour debug / dev sans email)
@@ -64,6 +66,20 @@ class UserService:
         user = await self.user_repo.get_by_id(user_id)
         if not user:
             raise NotFoundError("User", user_id)
+        return _to_response(user)
+
+    async def update_user(self, user_id: int, data: UserUpdate) -> UserResponse:
+        """Update the fields sent in ``data`` (``None`` clears the phone)."""
+        user = await self.user_repo.get_by_id(user_id)
+        if not user:
+            raise NotFoundError("User", user_id)
+        for field in data.model_fields_set:
+            setattr(user, field, getattr(data, field))
+        await self.session.flush()
+        await self.session.refresh(user)
+        logger.info(
+            "User updated", user_id=user_id, fields=sorted(data.model_fields_set)
+        )
         return _to_response(user)
 
     async def delete_user(self, user_id: int, current_user_id: int) -> None:
@@ -108,6 +124,7 @@ class UserService:
             last_name=data.last_name,
             address=data.address,
             company=data.company,
+            phone=data.phone,
             invitation_token=token,
             invitation_expires_at=expires_at,
         )

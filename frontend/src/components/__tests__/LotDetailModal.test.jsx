@@ -1,4 +1,5 @@
-import { screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../test/renderWithProviders'
 import LotDetailModal from '../LotDetailModal'
@@ -34,11 +35,24 @@ function renderModal(lot, enabledOptionalStatuses, user = MANAGER) {
   )
 }
 
+/** Keys of a request body that still talk about the removed « promotion ». */
+const promotionKeys = (body) => Object.keys(body).filter((key) => key.startsWith('promotion'))
+
 function postedBody(fetchMock, pathEnd) {
   const call = fetchMock.mock.calls.find(
     ([url, options]) => String(url).endsWith(pathEnd) && options?.method === 'POST'
   )
   return call ? JSON.parse(call[1].body) : undefined
+}
+
+const LEGACY_FINANCE_TEXT = 'Réservation engagée avant la nouvelle gestion des montants : les montants ne peuvent pas être affichés ici.'
+
+/** Multipart body of the payment POST (FormData), if any. */
+function postedForm(fetchMock) {
+  const call = fetchMock.mock.calls.find(
+    ([url, options]) => String(url).endsWith('/api/reservations/11/payments') && options?.method === 'POST'
+  )
+  return call ? call[1].body : undefined
 }
 
 describe('LotDetailModal', () => {
@@ -154,18 +168,881 @@ describe('LotDetailModal', () => {
     renderModal({ id: 8, numero: 'H8', status: 'available', price: 500000 })
 
     await user.click(screen.getByRole('button', { name: /Résa\. engagée/ }))
-    await screen.findByRole('option', { name: /Fatima Benali/ })
-    await user.selectOptions(screen.getByDisplayValue('Sélectionner un client'), '7')
+    await user.type(await screen.findByPlaceholderText(/Rechercher par nom, CIN/), 'fatima')
+    await user.click(await screen.findByRole('option', { name: /Fatima Benali/ }))
     await user.type(screen.getByPlaceholderText('Montant reçu'), '30000')
     await user.selectOptions(screen.getByDisplayValue('Espèces'), 'transfer')
     await user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
 
     await waitFor(() => expect(postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')).toBeDefined())
-    expect(postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')).toMatchObject({
+    const body = postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')
+    expect(body).toMatchObject({
       client_id: 7,
       guarantee_amount: 30000,
       payment_type: 'transfer',
+      agreed_total_price: 500000,
       sale_price: 500000,
+    })
+    expect(promotionKeys(body)).toEqual([])
+  })
+
+  describe('engagement amounts (E4-T5)', () => {
+    it('sends the agreed price, the deed price and the gap date on a direct engagement', async () => {
+      const fetchMock = mockFetch({ '/api/clients': [{ id: 7, name: 'Fatima Benali' }] })
+      const user = userEvent.setup()
+      renderModal({ id: 8, numero: 'H8', status: 'available', price: 500000 })
+
+      await user.click(screen.getByRole('button', { name: /Résa\. engagée/ }))
+      await user.type(await screen.findByPlaceholderText(/Rechercher par nom, CIN/), 'fatima')
+      await user.click(await screen.findByRole('option', { name: /Fatima Benali/ }))
+      expect(screen.getByLabelText('Prix total convenu')).toHaveValue(500000)
+      await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
+      await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '450000')
+      expect(screen.getByLabelText('Écart à régulariser')).toHaveTextContent('50 000 MAD')
+      await user.click(screen.getByRole('button', { name: /^À une date/ }))
+      await user.type(screen.getByLabelText("Date de l'écart"), '2027-06-30')
+      await user.type(screen.getByLabelText('Premier acompte reçu'), '100000')
+      await user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+      await waitFor(() => expect(postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')).toBeDefined())
+      const body = postedBody(fetchMock, '/api/lots/8/transitions/direct-engage')
+      expect(body).toMatchObject({
+        guarantee_amount: 100000,
+        agreed_total_price: 500000,
+        sale_price: 450000,
+        gap_due_timing: 'date',
+        gap_due_date: '2027-06-30',
+      })
+      expect(promotionKeys(body)).toEqual([])
+    })
+
+    it('sends the amounts on an option engagement', async () => {
+      const fetchMock = mockFetch()
+      const user = userEvent.setup()
+      renderModal({ id: 3, numero: 'C3', status: 'option', price: 500000, client_name: 'Fatima Benali' }, ['option'])
+
+      await user.click(screen.getByRole('button', { name: /Engager/ }))
+      await user.clear(screen.getByLabelText('Prix total convenu'))
+      await user.type(screen.getByLabelText('Prix total convenu'), '520000')
+      await user.type(screen.getByLabelText('Premier acompte reçu'), '20000')
+      await user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+      await waitFor(() => expect(postedBody(fetchMock, '/api/lots/3/transitions/option-engage')).toBeDefined())
+      const body = postedBody(fetchMock, '/api/lots/3/transitions/option-engage')
+      expect(body).toMatchObject({ guarantee_amount: 20000, agreed_total_price: 520000, sale_price: 500000, gap_due_timing: 'fin' })
+      expect(body.gap_due_date).toBeUndefined()
+      expect(promotionKeys(body)).toEqual([])
+    })
+
+    it('sends the amounts when engaging a reservation to finalise, the kept guarantee as first payment', async () => {
+      const fetchMock = mockFetch()
+      const user = userEvent.setup()
+      renderModal(
+        { id: 6, numero: 'F6', status: 'reservation_a_finaliser', price: 500000, reservation_id: 41, client_name: 'Fatima Benali', guarantee_amount: 20000 },
+        ['option', 'reservation_a_finaliser']
+      )
+
+      await user.click(screen.getByRole('button', { name: /Valider/ }))
+      await user.click(screen.getByRole('button', { name: /Déduire la garantie/ }))
+      expect(screen.getByLabelText('Premier acompte reçu')).toHaveTextContent('20 000 MAD')
+      await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
+      await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '480000')
+      await user.click(screen.getByRole('button', { name: /^Au début/ }))
+      await user.click(screen.getByRole('button', { name: /Confirmer l'engagement/ }))
+
+      await waitFor(() => expect(postedBody(fetchMock, '/api/lots/6/transitions/engage')).toBeDefined())
+      const body = postedBody(fetchMock, '/api/lots/6/transitions/engage')
+      expect(body).toMatchObject({ guarantee_action: 'deduct', agreed_total_price: 500000, sale_price: 480000, gap_due_timing: 'debut' })
+      expect(promotionKeys(body)).toEqual([])
+    })
+
+    it('blocks the engagement while the deed price is above the agreed total price', async () => {
+      const fetchMock = mockFetch()
+      const user = userEvent.setup()
+      renderModal({ id: 3, numero: 'C3', status: 'option', price: 500000, client_name: 'Fatima Benali' }, ['option'])
+
+      await user.click(screen.getByRole('button', { name: /Engager/ }))
+      await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
+      await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '550000')
+      await user.type(screen.getByLabelText('Premier acompte reçu'), '20000')
+      await user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+      expect(screen.getAllByText("Le prix figurant sur l'acte ne peut pas dépasser le prix total convenu.").length).toBeGreaterThan(0)
+      expect(postedBody(fetchMock, '/api/lots/3/transitions/option-engage')).toBeUndefined()
+    })
+
+    it.each([
+      ['direct', { id: 8, numero: 'H8', status: 'available', price: 500000 }, /Résa\. engagée/, undefined],
+      ['option', { id: 3, numero: 'C3', status: 'option', price: 500000, client_name: 'Fatima Benali' }, /Engager/, ['option']],
+      ['finalise', { id: 6, numero: 'F6', status: 'reservation_a_finaliser', price: 500000, reservation_id: 41, client_name: 'F B', guarantee_amount: 20000 }, /Valider/, ['option', 'reservation_a_finaliser']],
+    ])('no longer shows any promotion field in the %s engagement form', async (_name, lot, open, enabled) => {
+      mockFetch()
+      const user = userEvent.setup()
+      renderModal(lot, enabled)
+
+      await user.click(screen.getByRole('button', { name: open }))
+      await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
+      await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '450000')
+
+      expect(screen.queryByText(/promotion/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Premier acompte \(ND\)/)).not.toBeInTheDocument()
+      expect(screen.getByText('Prix catalogue', { selector: '.msr-label' })).toBeInTheDocument()
+    })
+  })
+
+  describe('client selection in the reservation flows', () => {
+    const FLOWS = [
+      ['option', /^Option$/, /Confirmer l'option/],
+      ['résa à finaliser', /Résa\. à finaliser/, /Créer la réservation/],
+      ['résa engagée', /Résa\. engagée/, /Engager la réservation/],
+    ]
+
+    it.each(FLOWS)('disables the submit button of the %s flow until a client is chosen', async (_name, open, submit) => {
+      mockFetch({ '/api/clients': [{ id: 7, name: 'Fatima Benali', cin: 'AB123456', phone: '+212612345678' }] })
+      const user = userEvent.setup()
+      renderModal({ id: 8, numero: 'H8', status: 'available', price: 500000 })
+
+      await user.click(screen.getByRole('button', { name: open }))
+      const button = screen.getByRole('button', { name: submit })
+      expect(button).toBeDisabled()
+
+      await user.type(await screen.findByPlaceholderText(/Rechercher par nom, CIN/), '0612345678')
+      await user.click(await screen.findByRole('option', { name: /Fatima Benali/ }))
+
+      expect(screen.getByRole('button', { name: submit })).toBeEnabled()
+    })
+  })
+
+  describe('archived reservation deed', () => {
+    const ENGAGED = { id: 5, numero: 'E5', status: 'reservation_engagee', price: 500000, reservation_id: 11, client_name: 'Fatima Benali' }
+    const ACTE = { id: 1, lot_id: 5, reservation_id: 11, filename: 'acte_reservation_11_lotE5.pdf', category: 'acte_reservation' }
+    const RESERVATION = { id: 11, sale_price: 450000, agreed_total_price: 500000, gap_amount: 50000, gap_due_timing: 'fin', first_payment: 100000 }
+    const SUMMARY = {
+      catalogue_price: 500000, agreed_total_price: 500000, acte_price: 450000, gap_amount: 50000,
+      gap_due_timing: 'fin', gap_due_date: null, first_payment: 100000, total_received: 100000, remaining: 400000,
+      acte_min_paid_pct: 10, acte_threshold_amount: 50000, acte_available: true,
+      installments: [
+        { id: 1, payment_type: 'deposit', installment_number: 1, amount: 150000, due_date: '2030-01-01T00:00:00', received: 0, remaining: 150000, status: 'pending' },
+        { id: 4, payment_type: 'gap', installment_number: 1, amount: 50000, due_date: '2030-06-01T00:00:00', received: 0, remaining: 50000, status: 'pending' },
+      ],
+      updated_at: '2026-10-28T10:00:00',
+    }
+    const BELOW_THRESHOLD = { ...SUMMARY, acte_min_paid_pct: 30, acte_threshold_amount: 150000, acte_available: false }
+    const SCHEDULE = { '/api/reservations/11/financial-summary': SUMMARY }
+
+    it('shows the "Acte de réservation" badge when a deed is archived', async () => {
+      mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [ACTE] })
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText('Acte de réservation')).toBeInTheDocument()
+      expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
+    })
+
+    it('alerts when no deed is archived and regenerates it on demand', async () => {
+      const fetchMock = mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText("L'acte n'a pas été généré.")).toBeInTheDocument()
+      const documentLoads = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/api/lots/5/documents')).length
+      const before = documentLoads()
+      await user.click(screen.getByRole('button', { name: 'Régénérer' }))
+
+      await waitFor(() => expect(postedBody(fetchMock, '/api/reservations/11/acte')).toBeDefined())
+      await waitFor(() => expect(documentLoads()).toBeGreaterThan(before))
+    })
+
+    it('shows the threshold message, not the regenerate alert, while the deed threshold is not reached', async () => {
+      mockFetch({
+        '/api/reservations/11/financial-summary': BELOW_THRESHOLD,
+        '/api/reservations/11': RESERVATION,
+        '/api/lots/5/documents': [],
+      })
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText(
+        "L'acte sera disponible quand 30 % du prix total convenu aura été encaissé (100 000 MAD sur 150 000 MAD)."
+      )).toBeInTheDocument()
+      expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Régénérer' })).not.toBeInTheDocument()
+    })
+
+    it('waits for the financial summary before offering to regenerate', async () => {
+      mockFetch({ '/api/reservations/11/financial-summary': PENDING, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      renderModal(ENGAGED)
+
+      await screen.findByText("Chargement de l'échéancier…")
+      expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Régénérer' })).not.toBeInTheDocument()
+    })
+
+    it('shows the engaged amounts with the spec labels, without any promotion', async () => {
+      mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      renderModal(ENGAGED)
+
+      const acte = await screen.findByText("Prix figurant sur l'acte")
+      expect(acte.nextSibling).toHaveTextContent('450 000 MAD')
+      expect(screen.getByText('Écart à régulariser', { selector: '.ldm-ri-key' }).nextSibling).toHaveTextContent('50 000 MAD — à la fin')
+      expect(screen.getByText('Premier acompte reçu').nextSibling).toHaveTextContent('100 000 MAD')
+      expect(screen.queryByText(/promotion/i)).not.toBeInTheDocument()
+    })
+
+    it('records a payment on an installment instead of marking it paid', async () => {
+      const fetchMock = mockFetch({
+        ...SCHEDULE,
+        '/api/reservations/11/financial-summary': {
+          ...SUMMARY,
+          installments: [{ ...SUMMARY.installments[0], due_date: '2020-01-01T00:00:00' }, SUMMARY.installments[1]],
+        },
+        '/api/reservations/11': RESERVATION,
+        '/api/lots/5/documents': [],
+      })
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText('Premier versement en retard')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Confirmer le paiement/ })).not.toBeInTheDocument()
+      await user.click(await screen.findByRole('button', { name: "Voir l'échéancier" }))
+      const schedule = await within(document.querySelector('.modal-pay-panel')).findByRole('table', { name: 'Échéancier' })
+      await user.click(within(within(schedule).getByRole('row', { name: /Acompte 1/ })).getByRole('button', { name: 'Enregistrer un encaissement' }))
+      await user.click(within(document.querySelector('.modal-split-right')).getByRole('button', { name: "Enregistrer l'encaissement" }))
+
+      await waitFor(() => expect(fetchMock.mock.calls.some(
+        ([url, options]) => String(url).endsWith('/api/reservations/11/payments') && options?.method === 'POST'
+      )).toBe(true))
+      const [, options] = fetchMock.mock.calls.find(
+        ([url, opts]) => String(url).endsWith('/api/reservations/11/payments') && opts?.method === 'POST'
+      )
+      expect(options.body.get('installment_id')).toBe('1')
+      expect(options.body.get('amount')).toBe('150000')
+      expect(fetchMock.mock.calls.some(([url, opts]) => String(url).includes('/api/payments/installments/') && opts?.method === 'PATCH')).toBe(false)
+    })
+
+    it('offers the deed once available and the receipt otherwise', async () => {
+      mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      renderModal(ENGAGED)
+
+      expect(await screen.findByRole('button', { name: /^Acte de réservation$/ })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Reçu de paiement/ })).not.toBeInTheDocument()
+    })
+
+    it('offers the receipt while the deed threshold is not reached', async () => {
+      mockFetch({ '/api/reservations/11/financial-summary': BELOW_THRESHOLD, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      renderModal(ENGAGED)
+
+      expect(await screen.findByRole('button', { name: /Reçu de paiement/ })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^Acte de réservation$/ })).not.toBeInTheDocument()
+    })
+
+    it('shows the API message when the deed download is refused (400 message)', async () => {
+      const message = "L'acte sera disponible quand 10 % du prix total convenu aura été encaissé (0 MAD sur 50 000 MAD)."
+      const fetchMock = mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      const base = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/reservations/11/certificate')
+          ? Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ error: 'BUSINESS_RULE_VIOLATION', message }) })
+          : base(url, opts))
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: /^Acte de réservation$/ }))
+
+      expect(await screen.findByText(message)).toBeInTheDocument()
+    })
+
+    it('only lets the lot be marked sold once nothing is left to pay', async () => {
+      mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      renderModal(ENGAGED)
+
+      await screen.findByRole('group', { name: 'Montants' })
+      expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeDisabled()
+    })
+
+    it('explains the refusal with the exact amount left, cents included', async () => {
+      mockFetch({
+        '/api/reservations/11/financial-summary': { ...SUMMARY, total_received: 499999.6, remaining: 0.4 },
+        '/api/reservations/11': RESERVATION,
+        '/api/lots/5/documents': [],
+      })
+      renderModal(ENGAGED)
+
+      await screen.findByRole('group', { name: 'Montants' })
+      await waitFor(() => expect(screen.getByRole('button', { name: /Marquer soldé/ }))
+        .toHaveAttribute('title', 'Reste à payer : 0,40 MAD — la réservation ne peut pas être soldée.'))
+      expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeDisabled()
+    })
+
+    it('says the schedule is unavailable on « Marquer soldé » when the summary fails', async () => {
+      const fetchMock = mockFetch({ '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      const base = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/reservations/11/financial-summary')
+          ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ message: 'boom' }) })
+          : base(url, opts))
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText('Échéancier indisponible.', { selector: '.ldm-documents-empty' })).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByRole('button', { name: /Marquer soldé/ })).toHaveAttribute('title', 'Échéancier indisponible.'))
+      expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeDisabled()
+    })
+
+    it('sells at the agreed total price without asking for a price', async () => {
+      const paid = { ...SUMMARY, total_received: 500000, remaining: 0, installments: SUMMARY.installments.map((i) => ({ ...i, received: i.amount, remaining: 0, status: 'paid' })) }
+      const fetchMock = mockFetch({ '/api/reservations/11/financial-summary': paid, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await screen.findByRole('group', { name: 'Montants' })
+      await waitFor(() => expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeEnabled())
+      await user.click(screen.getByRole('button', { name: /Marquer soldé/ }))
+      expect(screen.queryByText(/Prix final de vente/)).not.toBeInTheDocument()
+      expect(screen.getByText('Prix total convenu', { selector: '.msr-label' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /Confirmer la vente/ }))
+
+      await waitFor(() => expect(postedBody(fetchMock, '/api/lots/5/transitions/solde')).toBeDefined())
+      expect(postedBody(fetchMock, '/api/lots/5/transitions/solde')).not.toHaveProperty('price')
+    })
+
+    it('downloads the latest archived deed from the badge', async () => {
+      const routes = {
+        ...SCHEDULE,
+        '/api/reservations/11': RESERVATION,
+        '/api/lots/5/documents': [
+          { ...ACTE, id: 1, created_at: '2026-10-01T10:00:00' },
+          { ...ACTE, id: 2, created_at: '2026-10-02T10:00:00' },
+        ],
+      }
+      const fetchMock = mockFetch(routes)
+      const base = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/lots/5/documents/2')
+          ? Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(['%PDF'])) })
+          : base(url, opts))
+      URL.createObjectURL = vi.fn(() => 'blob:x')
+      URL.revokeObjectURL = vi.fn()
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: 'Télécharger' }))
+
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/lots/5/documents/2'))).toBe(true))
+    })
+
+    it('shows a neutral message, not the "not generated" alert, when documents fail to load', async () => {
+      const fetchMock = mockFetch({ ...SCHEDULE, '/api/reservations/11': RESERVATION })
+      const base = fetchMock.getMockImplementation()
+      fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/lots/5/documents') ? Promise.reject(new Error('réseau')) : base(url, opts))
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText('Documents indisponibles.')).toBeInTheDocument()
+      expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Régénérer' })).not.toBeInTheDocument()
+    })
+  })
+
+  describe('edit an engaged reservation (E4-T5)', () => {
+    const OWNER = { id: 2, role: 'commercial' }
+    const OTHER_COMMERCIAL = { id: 3, role: 'commercial' }
+    const ENGAGED = {
+      id: 5, numero: 'E5', status: 'reservation_engagee', price: 500000, reservation_id: 11,
+      client_name: 'Fatima Benali', reserved_by_user_id: OWNER.id,
+    }
+    const RESERVATION = {
+      id: 11, reserved_by_user_id: OWNER.id, notes: 'Client fidèle', sale_price: 450000,
+      agreed_total_price: 500000, gap_amount: 50000, gap_due_timing: 'fin', first_payment: 100000,
+    }
+    /** Consistent schedule: 150 000 + 200 000 + gap 50 000 = 500 000 − 100 000. */
+    const SUMMARY = {
+      catalogue_price: 500000, agreed_total_price: 500000, acte_price: 450000, gap_amount: 50000,
+      gap_due_timing: 'fin', gap_due_date: null, first_payment: 100000, total_received: 100000, remaining: 400000,
+      acte_min_paid_pct: 10, acte_threshold_amount: 50000, acte_available: true,
+      installments: [
+        { id: 1, payment_type: 'deposit', installment_number: 1, amount: 150000, due_date: '2030-01-01T00:00:00', received: 0, remaining: 150000, status: 'pending' },
+        { id: 2, payment_type: 'balance', installment_number: 1, amount: 200000, due_date: '2030-03-01T00:00:00', received: 0, remaining: 200000, status: 'pending' },
+        { id: 4, payment_type: 'gap', installment_number: 1, amount: 50000, due_date: '2030-03-01T00:00:00', received: 0, remaining: 50000, status: 'pending' },
+      ],
+      updated_at: '2026-10-28T10:00:00',
+    }
+    const ACTE = { id: 1, lot_id: 5, reservation_id: 11, filename: 'acte_reservation_11_lotE5.pdf', category: 'acte_reservation', created_at: '2026-10-28T10:00:00' }
+    const CHANGE = {
+      id: 1, user_id: 1, user_name: 'Test Manager', changed_at: '2026-10-28T21:50:12', reason: 'Remise accordée',
+      before: { agreed_total_price: 480000 }, after: { agreed_total_price: 500000 },
+    }
+    const routes = (extra = {}) => ({
+      '/api/reservations/11/financial-summary': SUMMARY,
+      '/api/reservations/11': RESERVATION,
+      '/api/reservations/11/changes': [CHANGE],
+      '/api/lots/5/documents': [ACTE],
+      ...extra,
+    })
+    const gets = (fetchMock, path) =>
+      fetchMock.mock.calls.filter(([url, options]) => String(url).endsWith(path) && !options?.method).length
+    const puts = (fetchMock) => fetchMock.mock.calls.filter(([, options]) => options?.method === 'PUT')
+
+    it('lets a manager open the edit form and cancel it without any request', async () => {
+      const fetchMock = mockFetch(routes())
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: 'Modifier la réservation' }))
+      expect(screen.getByLabelText('Motif de la modification')).toBeInTheDocument()
+      expect(screen.getByLabelText('Notes')).toHaveValue('Client fidèle')
+      await user.click(screen.getByRole('button', { name: 'Annuler' }))
+
+      expect(screen.queryByLabelText('Motif de la modification')).not.toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: 'Modifier la réservation' })).toBeInTheDocument()
+      expect(puts(fetchMock)).toEqual([])
+    })
+
+    it('opens the edit in the wide 3-column layout, then « Annuler » returns to the lot card', async () => {
+      const fetchMock = mockFetch(routes())
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: 'Modifier la réservation' }))
+
+      const modal = document.querySelector('.modal--3col')
+      expect(modal).not.toBeNull()
+      expect(modal.querySelector('.modal-split-left')).toHaveTextContent('E5')
+      const center = modal.querySelector('.modal-split-right')
+      expect(within(center).getByRole('heading', { name: 'Modifier la réservation' })).toBeInTheDocument()
+      expect(within(center).getByText('Lot E5')).toBeInTheDocument()
+      expect(within(center).getByLabelText('Prix total convenu')).toHaveValue(500000)
+      expect(within(center).getByLabelText('Premier acompte reçu')).toHaveTextContent('100 000 MAD')
+      expect(within(center).getByLabelText('Motif de la modification')).toBeInTheDocument()
+      const panel = modal.querySelector('.modal-pay-panel')
+      expect(panel).not.toBeNull()
+      expect(within(panel).getByText('Échéancier')).toBeInTheDocument()
+      expect(panel.querySelector('.mpp-total')).toHaveTextContent('400 000 MAD')
+      expect(within(panel).getByRole('table', { name: 'Échéances' })).toBeInTheDocument()
+      expect(within(panel).getByLabelText('Montant (Acompte 1)')).toHaveValue(150000)
+      expect(within(panel).getByText('Total des échéances : 400 000 MAD / attendu 400 000 MAD')).toBeInTheDocument()
+      // the live total follows the amounts typed in the center column
+      await user.clear(within(center).getByLabelText('Prix total convenu'))
+      await user.type(within(center).getByLabelText('Prix total convenu'), '510000')
+      await user.clear(within(center).getByLabelText("Prix figurant sur l'acte"))
+      await user.type(within(center).getByLabelText("Prix figurant sur l'acte"), '510000')
+      expect(within(panel).getByText('Total des échéances : 350 000 MAD / attendu 410 000 MAD')).toBeInTheDocument()
+
+      await user.click(within(center).getByRole('button', { name: 'Annuler' }))
+
+      expect(document.querySelector('.modal--3col')).toBeNull()
+      expect(await screen.findByRole('button', { name: 'Modifier la réservation' })).toBeInTheDocument()
+      expect(await screen.findByRole('group', { name: 'Montants' })).toBeInTheDocument()
+      expect(puts(fetchMock)).toEqual([])
+    })
+
+    it('offers the edit to the commercial who made the reservation', async () => {
+      mockFetch(routes())
+      renderModal(ENGAGED, undefined, OWNER)
+
+      expect(await screen.findByRole('button', { name: 'Modifier la réservation' })).toBeInTheDocument()
+    })
+
+    it('waits for the reservation notes before offering the edit (notes are fully replaced)', async () => {
+      mockFetch(routes({ '/api/reservations/11': PENDING }))
+      renderModal(ENGAGED)
+
+      // footer deed button: the modal has the summary
+      await screen.findByRole('button', { name: /Acte de réservation/ })
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+    })
+
+    it("hides the edit from another commercial", async () => {
+      mockFetch(routes())
+      renderModal(ENGAGED, undefined, OTHER_COMMERCIAL)
+
+      await screen.findByRole('button', { name: /Acte de réservation/ })
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+    })
+
+    it('hides the edit once the reservation is no longer engaged', async () => {
+      mockFetch(routes())
+      renderModal({ ...ENGAGED, status: 'reservation_soldee' })
+
+      await screen.findByRole('group', { name: 'Montants' })
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+    })
+
+    it('shows the change history in the lot card', async () => {
+      mockFetch(routes())
+      renderModal({ ...ENGAGED, status: 'reservation_soldee' })
+
+      expect(await screen.findByText('Historique des modifications')).toBeInTheDocument()
+      expect(await screen.findByText('Remise accordée')).toBeInTheDocument()
+      expect(screen.getByText('Prix total convenu : 480 000 MAD → 500 000 MAD')).toBeInTheDocument()
+    })
+
+    it('after saving, reloads the lot, the amounts, the documents and the history, and offers to regenerate a failed deed', async () => {
+      const fetchMock = mockFetch(routes({
+        '/api/reservations/11/engagement': { ...SUMMARY, updated_at: '2026-10-28T11:00:00', acte_status: 'failed' },
+      }))
+      const onRefresh = vi.fn()
+      const user = userEvent.setup()
+      renderWithProviders(<LotDetailModal lot={ENGAGED} onClose={() => {}} onRefresh={onRefresh} />, { user: MANAGER })
+
+      await user.click(await screen.findByRole('button', { name: 'Modifier la réservation' }))
+      // a deed exists: no regenerate alert before the edit
+      expect(screen.queryByRole('button', { name: 'Régénérer' })).not.toBeInTheDocument()
+      const before = {
+        summary: gets(fetchMock, '/api/reservations/11/financial-summary'),
+        reservation: gets(fetchMock, '/api/reservations/11'),
+        documents: gets(fetchMock, '/api/lots/5/documents'),
+        changes: gets(fetchMock, '/api/reservations/11/changes'),
+      }
+      await user.type(screen.getByLabelText('Motif de la modification'), 'Correction des notes')
+      expect(document.querySelector('.modal--3col')).not.toBeNull()
+      await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }))
+
+      expect(await screen.findByText("La réservation est enregistrée, mais l'acte n'a pas pu être régénéré.")).toBeInTheDocument()
+      expect(puts(fetchMock)).toHaveLength(1)
+      await waitFor(() => expect(screen.queryByLabelText('Motif de la modification')).not.toBeInTheDocument())
+      // back to the lot card
+      expect(document.querySelector('.modal--3col')).toBeNull()
+      expect(await screen.findByRole('button', { name: 'Modifier la réservation' })).toBeInTheDocument()
+      await waitFor(() => expect(gets(fetchMock, '/api/reservations/11/financial-summary')).toBeGreaterThan(before.summary))
+      await waitFor(() => expect(gets(fetchMock, '/api/reservations/11')).toBeGreaterThan(before.reservation))
+      await waitFor(() => expect(gets(fetchMock, '/api/lots/5/documents')).toBeGreaterThan(before.documents))
+      await waitFor(() => expect(gets(fetchMock, '/api/reservations/11/changes')).toBeGreaterThan(before.changes))
+      expect(onRefresh).toHaveBeenCalled()
+      // the older deed is still there, and the regeneration stays available
+      expect(await screen.findByRole('button', { name: 'Régénérer' })).toBeInTheDocument()
+      expect(screen.getByText('Acte de réservation', { selector: '.badge' })).toBeInTheDocument()
+    })
+
+    it('after saving, offers the edit again only once the fresh summary has arrived', async () => {
+      const fresh = { ...SUMMARY, agreed_total_price: 510000, updated_at: '2026-10-28T11:00:00' }
+      const fetchMock = mockFetch(routes({ '/api/reservations/11/engagement': { ...SUMMARY, acte_status: null } }))
+      const base = fetchMock.getMockImplementation()
+      let saved = false
+      let answerSummary
+      fetchMock.mockImplementation((url, opts) => {
+        if (opts?.method === 'PUT') saved = true
+        if (saved && !opts?.method && String(url).endsWith('/api/reservations/11/financial-summary')) {
+          return new Promise((resolve) => {
+            answerSummary = () => resolve({ ok: true, status: 200, json: () => Promise.resolve(fresh) })
+          })
+        }
+        return base(url, opts)
+      })
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: 'Modifier la réservation' }))
+      await user.type(screen.getByLabelText('Motif de la modification'), 'Correction')
+      await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }))
+
+      await waitFor(() => expect(answerSummary).toBeDefined())
+      expect(document.querySelector('.modal--3col')).toBeNull()
+      // the previous summary is stale: no edit until the fresh one is loaded
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+
+      answerSummary()
+      expect(await screen.findByRole('button', { name: 'Modifier la réservation' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Modifier la réservation' }))
+      expect(screen.getByLabelText('Prix total convenu')).toHaveValue(510000)
+    })
+  })
+
+  describe('payment schedule in the wide reservation modal (E4-T5)', () => {
+    const OWNER = { id: 2, role: 'commercial' }
+    const OTHER_COMMERCIAL = { id: 3, role: 'commercial' }
+    const ENGAGED = {
+      id: 5, numero: 'E5', status: 'reservation_engagee', price: 500000, reservation_id: 11,
+      client_name: 'Fatima Benali', reserved_by_user_id: OWNER.id,
+    }
+    const RESERVATION = {
+      id: 11, reserved_by_user_id: OWNER.id, notes: null, sale_price: 450000,
+      agreed_total_price: 500000, gap_amount: 50000, gap_due_timing: 'fin', first_payment: 100000,
+    }
+    const SUMMARY = {
+      legacy: false, catalogue_price: 500000, agreed_total_price: 500000, acte_price: 450000, gap_amount: 50000,
+      gap_due_timing: 'fin', gap_due_date: null, first_payment: 100000, total_received: 100000, remaining: 400000,
+      acte_min_paid_pct: 10, acte_threshold_amount: 50000, acte_available: true,
+      installments: [
+        { id: 1, payment_type: 'deposit', installment_number: 1, amount: 150000, due_date: '2030-01-01T00:00:00', received: 0, remaining: 150000, status: 'pending' },
+        { id: 2, payment_type: 'balance', installment_number: 1, amount: 200000, due_date: '2030-03-01T00:00:00', received: 0, remaining: 200000, status: 'pending' },
+        { id: 4, payment_type: 'gap', installment_number: 1, amount: 50000, due_date: '2030-03-01T00:00:00', received: 0, remaining: 50000, status: 'pending' },
+      ],
+      updated_at: '2026-10-28T10:00:00',
+    }
+    const PAYMENTS = [
+      { id: 1, amount: 100000, paid_on: '2026-10-28', method: 'cash', reference: null, installment_id: null, document_id: null, recorded_by_name: 'Test Commercial' },
+    ]
+    const routes = (extra = {}) => ({
+      '/api/reservations/11/financial-summary': SUMMARY,
+      '/api/reservations/11/payments': PAYMENTS,
+      '/api/reservations/11': RESERVATION,
+      '/api/lots/5/documents': [],
+      ...extra,
+    })
+    const gets = (fetchMock, path) =>
+      fetchMock.mock.calls.filter(([url, options]) => String(url).endsWith(path) && !options?.method).length
+    const center = () => document.querySelector('.modal--3col .modal-split-right')
+    const panel = () => document.querySelector('.modal--3col .modal-pay-panel')
+
+    it('shows the three totals in the lot card, with « Voir l\'échéancier » next to « Modifier la réservation »', async () => {
+      mockFetch(routes())
+      renderModal(ENGAGED)
+
+      const totals = await screen.findByRole('group', { name: 'Montants' })
+      expect(within(totals).getByText('Prix total convenu').nextSibling).toHaveTextContent('500 000 MAD')
+      expect(within(totals).getByText('Total encaissé').nextSibling).toHaveTextContent('100 000 MAD')
+      expect(within(totals).getByText('Reste à payer').nextSibling).toHaveTextContent('400 000 MAD')
+      const see = screen.getByRole('button', { name: "Voir l'échéancier" })
+      const edit = await screen.findByRole('button', { name: 'Modifier la réservation' })
+      expect(see.parentElement).toBe(edit.parentElement)
+      // the cramped inline schedule is gone from the lot card
+      expect(screen.queryByRole('table', { name: 'Échéancier' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Enregistrer un encaissement' })).not.toBeInTheDocument()
+    })
+
+    it('opens the schedule in the wide 3-column layout', async () => {
+      mockFetch(routes())
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: "Voir l'échéancier" }))
+
+      const modal = document.querySelector('.modal--3col')
+      expect(modal).not.toBeNull()
+      expect(modal.querySelector('.modal-split-left')).toHaveTextContent('E5')
+      expect(within(center()).getByRole('heading', { name: 'Échéancier et encaissements' })).toBeInTheDocument()
+      expect(within(center()).getByText('Lot E5')).toBeInTheDocument()
+      const amounts = await within(center()).findByRole('group', { name: 'Montants' })
+      expect(within(amounts).getByText('Prix catalogue').nextSibling).toHaveTextContent('500 000 MAD')
+      expect(within(amounts).getByText("Prix figurant sur l'acte").nextSibling).toHaveTextContent('450 000 MAD')
+      expect(within(amounts).getByText('Écart à régulariser').nextSibling).toHaveTextContent('50 000 MAD — à la fin')
+      expect(within(amounts).getByText('Premier acompte reçu').nextSibling).toHaveTextContent('100 000 MAD')
+      expect(within(amounts).getByText('Reste à payer').nextSibling).toHaveTextContent('400 000 MAD')
+      expect(within(center()).getByText('Acte disponible')).toBeInTheDocument()
+      expect(await within(center()).findByRole('table', { name: 'Encaissements' })).toHaveTextContent('Premier acompte')
+      expect(within(panel()).getByText('Échéancier')).toBeInTheDocument()
+      expect(panel().querySelector('.mpp-total')).toHaveTextContent('400 000 MAD')
+      const schedule = within(panel()).getByRole('table', { name: 'Échéancier' })
+      expect(within(schedule).getByRole('row', { name: /Solde 1/ })).toHaveTextContent('200 000 MAD')
+      expect(within(schedule).getByRole('row', { name: /Écart à régulariser/ })).toHaveTextContent('À recevoir')
+    })
+
+    it('records a payment from a schedule row: form in the center, then the same reloads as before', async () => {
+      const fetchMock = mockFetch(routes())
+      const onRefresh = vi.fn()
+      const user = userEvent.setup()
+      renderWithProviders(<LotDetailModal lot={ENGAGED} onClose={() => {}} onRefresh={onRefresh} />, { user: MANAGER })
+
+      await user.click(await screen.findByRole('button', { name: "Voir l'échéancier" }))
+      const schedule = await within(panel()).findByRole('table', { name: 'Échéancier' })
+      const before = {
+        summary: gets(fetchMock, '/api/reservations/11/financial-summary'),
+        documents: gets(fetchMock, '/api/lots/5/documents'),
+      }
+      await user.click(within(within(schedule).getByRole('row', { name: /Solde 1/ })).getByRole('button', { name: 'Enregistrer un encaissement' }))
+
+      const form = center().querySelector('.record-payment-form')
+      expect(form).not.toBeNull()
+      expect(within(form).getByLabelText('Montant')).toHaveValue(200000)
+      await user.click(within(form).getByRole('button', { name: "Enregistrer l'encaissement" }))
+
+      await waitFor(() => expect(postedForm(fetchMock)).toBeDefined())
+      expect(postedForm(fetchMock).get('installment_id')).toBe('2')
+      expect(postedForm(fetchMock).get('amount')).toBe('200000')
+      await waitFor(() => expect(gets(fetchMock, '/api/reservations/11/financial-summary')).toBeGreaterThan(before.summary))
+      await waitFor(() => expect(gets(fetchMock, '/api/lots/5/documents')).toBeGreaterThan(before.documents))
+      expect(onRefresh).toHaveBeenCalled()
+      // still in the wide view, form closed
+      expect(document.querySelector('.modal--3col')).not.toBeNull()
+      await waitFor(() => expect(center().querySelector('.record-payment-form')).toBeNull())
+    })
+
+    it('« Fermer » returns to the lot card', async () => {
+      mockFetch(routes())
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: "Voir l'échéancier" }))
+      await within(panel()).findByRole('table', { name: 'Échéancier' })
+      await user.click(within(center()).getByRole('button', { name: 'Fermer' }))
+
+      expect(document.querySelector('.modal--3col')).toBeNull()
+      expect(await screen.findByRole('group', { name: 'Montants' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: "Voir l'échéancier" })).toBeInTheDocument()
+    })
+
+    it('switches to « Modifier la réservation » from the wide view', async () => {
+      mockFetch(routes())
+      const user = userEvent.setup()
+      renderModal(ENGAGED, undefined, OWNER)
+
+      await user.click(await screen.findByRole('button', { name: "Voir l'échéancier" }))
+      await within(panel()).findByRole('table', { name: 'Échéancier' })
+      await user.click(await within(center()).findByRole('button', { name: 'Modifier la réservation' }))
+
+      expect(within(center()).getByRole('heading', { name: 'Modifier la réservation' })).toBeInTheDocument()
+      expect(within(center()).getByLabelText('Motif de la modification')).toBeInTheDocument()
+    })
+
+    it('keeps the wide view read-only for another commercial', async () => {
+      mockFetch(routes())
+      const user = userEvent.setup()
+      renderModal(ENGAGED, undefined, OTHER_COMMERCIAL)
+
+      await user.click(await screen.findByRole('button', { name: "Voir l'échéancier" }))
+      await within(panel()).findByRole('table', { name: 'Échéancier' })
+      expect(screen.queryByRole('button', { name: 'Enregistrer un encaissement' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+      expect(within(center()).getByRole('button', { name: 'Fermer' })).toBeInTheDocument()
+    })
+
+    it('shows the legacy warning and no action in the wide view either', async () => {
+      const legacySummary = {
+        ...SUMMARY, legacy: true, agreed_total_price: null, acte_price: null, gap_amount: null, gap_due_timing: null,
+        first_payment: null, total_received: null, remaining: null, acte_threshold_amount: null, acte_available: false,
+      }
+      mockFetch(routes({
+        '/api/reservations/11/financial-summary': legacySummary,
+        '/api/reservations/11/payments': [],
+        '/api/reservations/11': { ...RESERVATION, agreed_total_price: null },
+      }))
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText(LEGACY_FINANCE_TEXT)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: "Voir l'échéancier" }))
+
+      expect(await within(center()).findByText(LEGACY_FINANCE_TEXT)).toBeInTheDocument()
+      expect(within(center()).queryByRole('group', { name: 'Montants' })).not.toBeInTheDocument()
+      expect(within(panel()).getByRole('row', { name: /Acompte 1/ })).not.toHaveTextContent('MAD')
+      expect(panel().querySelector('.mpp-total')).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Enregistrer un encaissement' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+    })
+  })
+
+  describe('legacy reservation, engaged before the new amounts (E4-T5)', () => {
+    const LEGACY_TEXT = 'Réservation engagée avant la nouvelle gestion des montants : les montants ne peuvent pas être affichés ici.'
+    const ENGAGED = {
+      id: 5, numero: '3', status: 'reservation_engagee', price: 399000, reservation_id: 11,
+      client_name: 'Fatima Benali', reserved_by_user_id: 2,
+    }
+    const RESERVATION = {
+      id: 11, reserved_by_user_id: 2, notes: null, sale_price: 399000, agreed_total_price: null,
+      gap_amount: 0, gap_due_timing: null, first_payment: 0,
+    }
+    const SUMMARY = {
+      legacy: true, catalogue_price: 399000, agreed_total_price: null, acte_price: null, gap_amount: null,
+      gap_due_timing: null, gap_due_date: null, first_payment: null, total_received: null, remaining: null,
+      acte_min_paid_pct: 10, acte_threshold_amount: null, acte_available: false,
+      installments: [
+        { id: 1, payment_type: 'deposit', installment_number: 1, amount: 0, due_date: '2020-01-01T00:00:00', received: 0, remaining: 0, status: 'pending' },
+      ],
+      updated_at: '2026-10-28T10:00:00',
+    }
+    const routes = {
+      '/api/reservations/11/financial-summary': SUMMARY,
+      '/api/reservations/11': RESERVATION,
+      '/api/lots/5/documents': [],
+    }
+
+    it('shows the warning instead of wrong amounts, and no edit nor payment action', async () => {
+      mockFetch(routes)
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText(LEGACY_TEXT)).toBeInTheDocument()
+      // the deed footer button shows the modal has the summary and the reservation
+      await screen.findByRole('button', { name: /Marquer soldé/ })
+      await waitFor(() => expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeDisabled())
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Enregistrer un encaissement' })).not.toBeInTheDocument()
+      expect(screen.queryByText('Reste à payer')).not.toBeInTheDocument()
+      expect(screen.queryByText('Premier versement en retard')).not.toBeInTheDocument()
+      expect(screen.queryByText('Premier acompte reçu')).not.toBeInTheDocument()
+      expect(screen.queryByText(/sur — /)).not.toBeInTheDocument()
+      expect(screen.getByText('Réservation engagée avant la nouvelle gestion des montants.')).toBeInTheDocument()
+      expect(screen.queryByText(/L'acte sera disponible quand/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('payment plan preview of an engagement (E4 final review)', () => {
+    it('shows the engagement schedule amounts at the cent, in the MAD format of the E4 screens', async () => {
+      mockFetch({ '/api/clients': [{ id: 7, name: 'Fatima Benali' }] })
+      const user = userEvent.setup()
+      renderModal({ id: 8, numero: 'H8', status: 'available', price: 500000 })
+
+      await user.click(screen.getByRole('button', { name: /Résa\. engagée/ }))
+      await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
+      await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '453217.5')
+      await user.type(screen.getByLabelText('Premier acompte reçu'), '100000')
+
+      const panel = document.querySelector('.modal-pay-panel')
+      expect(panel).not.toBeNull()
+      expect(panel.querySelector('.mpp-total')).toHaveTextContent('400 000 MAD')
+      expect(within(panel).getByText(/Écart à régulariser : 46 782,50 MAD/)).toBeInTheDocument()
+      expect(within(panel).getAllByText('46 782,50 MAD').length).toBeGreaterThan(0)
+      expect(panel).not.toHaveTextContent('400.000')
+      expect(panel).not.toHaveTextContent('46.783')
+    })
+  })
+
+  describe('documents of the previous lot (E4 final review)', () => {
+    it('ignores a documents response that arrives after the lot changed', async () => {
+      const DEED_A = { id: 1, lot_id: 6, reservation_id: 12, filename: 'acte_reservation_12_lotN6.pdf', category: 'acte_reservation' }
+      let answerLotA
+      const fetchMock = vi.fn((url) => {
+        const path = String(url).replace(/^https?:\/\/[^/]+/, '').split('?')[0]
+        if (path === '/api/lots/6/documents') {
+          return new Promise((resolve) => {
+            answerLotA = () => resolve({ ok: true, status: 200, json: () => Promise.resolve([DEED_A]) })
+          })
+        }
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const LOT_A = { id: 6, numero: 'N6', status: 'chez_notaire', price: 500000, reservation_id: 12, client_name: 'Fatima Benali' }
+      const LOT_B = { id: 7, numero: 'N7', status: 'chez_notaire', price: 500000, reservation_id: 13, client_name: 'Karim Idrissi' }
+      function Switcher() {
+        const [lot, setLot] = useState(LOT_A)
+        return (
+          <>
+            <button type="button" onClick={() => setLot(LOT_B)}>Lot suivant</button>
+            <LotDetailModal lot={lot} onClose={() => {}} onRefresh={() => {}} />
+          </>
+        )
+      }
+      const user = userEvent.setup()
+      renderWithProviders(<Switcher />, { user: MANAGER })
+      await waitFor(() => expect(answerLotA).toBeDefined())
+
+      await user.click(screen.getByRole('button', { name: 'Lot suivant' }))
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/lots/7/documents'))).toBe(true))
+      await act(async () => { answerLotA() })
+
+      expect(screen.queryByText(DEED_A.filename)).not.toBeInTheDocument()
+      expect(await screen.findByText('Aucun document')).toBeInTheDocument()
+    })
+  })
+
+  describe('archived deed at the notary stage', () => {
+    const NOTARY = { id: 6, numero: 'N6', status: 'chez_notaire', price: 500000, reservation_id: 12, client_name: 'Fatima Benali' }
+    const DEED = { id: 1, lot_id: 6, reservation_id: 12, filename: 'acte_reservation_12_lotN6.pdf', category: 'acte_reservation' }
+
+    it('lists the deed without a delete button', async () => {
+      mockFetch({ '/api/lots/6/documents': [DEED] })
+      renderModal(NOTARY)
+
+      expect(await screen.findByText(DEED.filename)).toBeInTheDocument()
+      expect(screen.queryByTitle('Supprimer')).not.toBeInTheDocument()
+    })
+
+    it('still warns "Aucun document joint" when only the deed is attached', async () => {
+      mockFetch({ '/api/lots/6/documents': [DEED] })
+      const user = userEvent.setup()
+      renderModal(NOTARY)
+      await screen.findByText(DEED.filename)
+
+      await user.click(screen.getByRole('button', { name: /Confirmer acte/ }))
+
+      expect(screen.getByText(/Aucun document joint/)).toBeInTheDocument()
     })
   })
 
@@ -221,6 +1098,176 @@ describe('LotDetailModal', () => {
       renderModal(othersOption, ['option'])
 
       expect(screen.getByRole('button', { name: /Engager/ })).toBeEnabled()
+    })
+  })
+
+  describe('notification panel after a reservation step', () => {
+    const CLIENT = { id: 7, name: 'Fatima Benali', notification_channels: ['email'] }
+    const NOTIFY_ROWS = [{ id: 1, channel: 'email', status: 'sent', error: null }]
+
+    /** Mounts the modal with spies and the client / notify routes; `routes` adds the transition answer. */
+    function setup(lot, routes, enabled) {
+      const onClose = vi.fn()
+      const onRefresh = vi.fn()
+      const fetchMock = mockFetch({
+        '/api/clients': [CLIENT],
+        '/api/clients/7': CLIENT,
+        '/api/reservations/41/notify': NOTIFY_ROWS,
+        ...routes,
+      })
+      renderWithProviders(
+        <LotDetailModal lot={lot} onClose={onClose} onRefresh={onRefresh} enabledOptionalStatuses={enabled} />,
+        { user: MANAGER }
+      )
+      return { fetchMock, onClose, onRefresh, user: userEvent.setup() }
+    }
+
+    async function pickClient(user) {
+      await user.type(await screen.findByPlaceholderText(/Rechercher par nom, CIN/), 'fatima')
+      await user.click(await screen.findByRole('option', { name: /Fatima Benali/ }))
+    }
+
+    /** The panel is open with `label`; sending posts the notification of `kind` and closes the modal. */
+    async function expectPanelAndSend({ fetchMock, onClose, onRefresh, user }, label, kind) {
+      const panel = await screen.findByRole('dialog', { name: 'Notifier le client' })
+      expect(within(panel).getByText(new RegExp(label))).toBeInTheDocument()
+      expect(onClose).not.toHaveBeenCalled()
+      expect(onRefresh).toHaveBeenCalled()
+      await user.click(within(panel).getByRole('button', { name: 'Envoyer' }))
+      await waitFor(() => expect(postedBody(fetchMock, '/api/reservations/41/notify')).toEqual({
+        channels: ['email'],
+        kind,
+      }))
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    }
+
+    it('opens after start-option with kind option_confirmee', async () => {
+      const ctx = setup(
+        { id: 1, numero: 'A1', status: 'available', price: 500000 },
+        { '/api/lots/1/transitions/start-option': { id: 41, client_id: 7 } }
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /^Option$/ }))
+      await pickClient(ctx.user)
+      await ctx.user.click(screen.getByRole('button', { name: /Confirmer l'option/ }))
+
+      await expectPanelAndSend(ctx, 'Option confirmée', 'option_confirmee')
+    })
+
+    it('opens after direct-reservation with kind reservation_a_finaliser', async () => {
+      const ctx = setup(
+        { id: 2, numero: 'B2', status: 'available', price: 500000 },
+        { '/api/lots/2/transitions/direct-reservation': { id: 41, client_id: 7 } }
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /Résa\. à finaliser/ }))
+      await pickClient(ctx.user)
+      await ctx.user.type(screen.getByPlaceholderText('Montant reçu'), '20000')
+      await ctx.user.type(document.querySelector('input[type="date"]'), '2030-01-15')
+      await ctx.user.click(screen.getByRole('button', { name: /Créer la réservation/ }))
+
+      await expectPanelAndSend(ctx, 'Réservation à finaliser', 'reservation_a_finaliser')
+    })
+
+    it('opens after to-reservation with kind reservation_a_finaliser', async () => {
+      const ctx = setup(
+        { id: 3, numero: 'C3', status: 'option', price: 500000, client_id: 7, client_name: 'Fatima Benali' },
+        { '/api/lots/3/transitions/to-reservation': { id: 41, client_id: 7 } },
+        ['option', 'reservation_a_finaliser']
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /Passer à réservation à finaliser/ }))
+      await ctx.user.type(screen.getByPlaceholderText('Montant reçu'), '20000')
+      await ctx.user.type(document.querySelector('input[type="date"]'), '2030-01-15')
+      await ctx.user.click(screen.getByRole('button', { name: /Confirmer la réservation/ }))
+
+      await expectPanelAndSend(ctx, 'Réservation à finaliser', 'reservation_a_finaliser')
+    })
+
+    it('opens after direct-engage with kind reservation_engagee', async () => {
+      const ctx = setup(
+        { id: 4, numero: 'D4', status: 'available', price: 500000 },
+        { '/api/lots/4/transitions/direct-engage': { id: 41, client_id: 7 } }
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /Résa\. engagée/ }))
+      await pickClient(ctx.user)
+      await ctx.user.type(screen.getByPlaceholderText('Montant reçu'), '30000')
+      await ctx.user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+      await expectPanelAndSend(ctx, 'Réservation engagée', 'reservation_engagee')
+    })
+
+    it('opens after option-engage with kind reservation_engagee', async () => {
+      const ctx = setup(
+        { id: 5, numero: 'E5', status: 'option', price: 500000, client_id: 7, client_name: 'Fatima Benali', deposit: 5000 },
+        { '/api/lots/5/transitions/option-engage': { id: 41, client_id: 7 } },
+        ['option']
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /Engager/ }))
+      await ctx.user.type(screen.getByPlaceholderText('Montant reçu'), '20000')
+      await ctx.user.click(screen.getByRole('button', { name: /Déduire l'acompte/ }))
+      await ctx.user.click(screen.getByRole('button', { name: /Engager la réservation/ }))
+
+      await expectPanelAndSend(ctx, 'Réservation engagée', 'reservation_engagee')
+    })
+
+    it('opens after engage of a reservation to finalise, using the lot reservation', async () => {
+      const ctx = setup(
+        {
+          id: 6, numero: 'F6', status: 'reservation_a_finaliser', price: 500000,
+          reservation_id: 41, client_id: 7, client_name: 'Fatima Benali', guarantee_amount: 20000,
+        },
+        { '/api/lots/6/transitions/engage': { id: 6, current_reservation_id: 41 } },
+        ['option', 'reservation_a_finaliser']
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /Valider/ }))
+      await ctx.user.click(screen.getByRole('button', { name: /Déduire la garantie/ }))
+      await ctx.user.click(screen.getByRole('button', { name: /Confirmer l'engagement/ }))
+
+      await expectPanelAndSend(ctx, 'Réservation engagée', 'reservation_engagee')
+    })
+
+    it('closes the modal without sending anything when the panel is dismissed', async () => {
+      const ctx = setup(
+        { id: 1, numero: 'A1', status: 'available', price: 500000 },
+        { '/api/lots/1/transitions/start-option': { id: 41, client_id: 7 } }
+      )
+      await ctx.user.click(screen.getByRole('button', { name: /^Option$/ }))
+      await pickClient(ctx.user)
+      await ctx.user.click(screen.getByRole('button', { name: /Confirmer l'option/ }))
+
+      const panel = await screen.findByRole('dialog', { name: 'Notifier le client' })
+      await ctx.user.click(within(panel).getByRole('button', { name: 'Fermer' }))
+
+      expect(ctx.onClose).toHaveBeenCalledTimes(1)
+      expect(postedBody(ctx.fetchMock, '/api/reservations/41/notify')).toBeUndefined()
+    })
+
+    it('still opens (email by default) when the client cannot be loaded', async () => {
+      const ctx = setup(
+        { id: 1, numero: 'A1', status: 'available', price: 500000 },
+        { '/api/lots/1/transitions/start-option': { id: 41, client_id: 7 } }
+      )
+      const base = ctx.fetchMock.getMockImplementation()
+      ctx.fetchMock.mockImplementation((url, opts) =>
+        String(url).endsWith('/api/clients/7')
+          ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ message: 'boom' }) })
+          : base(url, opts))
+      await ctx.user.click(screen.getByRole('button', { name: /^Option$/ }))
+      await pickClient(ctx.user)
+      await ctx.user.click(screen.getByRole('button', { name: /Confirmer l'option/ }))
+
+      const panel = await screen.findByRole('dialog', { name: 'Notifier le client' })
+      expect(within(panel).getByRole('checkbox', { name: /Email/ })).toBeChecked()
+    })
+
+    it('shows the notification history of the lot', async () => {
+      const fetchMock = mockFetch({
+        '/api/notifications': [
+          { id: 1, kind: 'option_confirmee', channel: 'email', recipient: 'client', status: 'sent', error: null, sent_at: '2026-10-28T09:12:00Z', sent_by_user_id: 2 },
+        ],
+      })
+      renderModal({ id: 9, numero: 'I9', status: 'available', price: 500000 })
+
+      expect(await screen.findByText('Option confirmée')).toBeInTheDocument()
+      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/notifications?lot_id=9'))).toBe(true)
     })
   })
 })

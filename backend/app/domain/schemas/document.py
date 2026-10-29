@@ -13,5 +13,6 @@ class LotDocumentResponse(BaseSchema):
     reservation_id: int | None = None
     filename: str
     content_type: str
+    category: str | None = None
     uploaded_by_user_id: int | None = None
     created_at: datetime

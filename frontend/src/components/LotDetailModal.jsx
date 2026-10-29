@@ -1,16 +1,25 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { apiGet, apiPost, apiPatch, apiPut, apiFetch, apiUploadFile } from '../utils/api';
+import { apiGet, apiPost, apiPut, apiFetch, apiUploadFile, buildApiError } from '../utils/api';
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
-import { formatPrice, formatDate } from '../utils/formatters';
+import { formatPrice, formatDate, formatMad } from '../utils/formatters';
 import { ACTIVE_LOT_STATUSES, STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
 import ClientForm from './clients/ClientForm';
+import ClientPicker from './clients/ClientPicker';
 import { shouldToastClientError } from '../utils/clientProfile';
 import { DEFAULT_ENABLED_OPTIONAL, EDL_STATUSES, allowedTransitions, openEdlActionsLabel } from '../utils/lotWorkflow';
 import EdlPanel from './lots/EdlPanel';
 import EdlTransitionForm from './lots/EdlTransitionForm';
 import DepositDecisionFields from './lots/DepositDecisionFields';
-import { buildEngagePayload, refundFields } from '../utils/engagePayload';
+import { buildEngagePayload, firstAmountsError, gapAmount, parseAmount, refundFields } from '../utils/engagePayload';
+import EngagementAmountsFields from './lots/EngagementAmountsFields';
+import PaymentsPanel from './lots/PaymentsPanel';
+import ReservationFinanceView from './lots/ReservationFinanceView';
+import EditEngagementForm from './lots/EditEngagementForm';
+import ReservationChangesHistory from './lots/ReservationChangesHistory';
+import { acteThresholdMessage, LEGACY_FINANCE_MESSAGE } from '../services/reservationFinanceService';
+import NotifyClientPanel from './notifications/NotifyClientPanel';
+import NotificationHistory from './notifications/NotificationHistory';
 
 /* ── Default payment plan ─────────────────────────────────── */
 const DEFAULT_PAYMENT_PLAN = {
@@ -22,6 +31,14 @@ const DEFAULT_PAYMENT_PLAN = {
   balance_count: 1,
   balance_periodicity: 1,
 };
+
+// Statuts où l'acte de réservation est archivé (engagement et au-delà)
+const ACTE_CATEGORY = 'acte_reservation';
+const ACTE_STATUSES = ['reservation_engagee', 'reservation_soldee', ...EDL_STATUSES, 'chez_notaire', 'chez_proprietaire'];
+
+// Montants d'un engagement (EngagementAmountsFields) avant préremplissage
+const EMPTY_AMOUNTS = { agreedTotalPrice: '', salePrice: '', gapDueTiming: 'fin', gapDueDate: '', firstPayment: '' };
+const GAP_TIMING_TEXT = { debut: 'au début', fin: 'à la fin' };
 
 const PERIODICITY_OPTIONS = [
   { value: 1, label: 'Mensuel' },
@@ -60,14 +77,32 @@ function splitAmount(total, count) {
   amounts[count - 1] = Math.round((total - base * (count - 1)) * 100) / 100;
   return amounts;
 }
-function computePreview(salePrice, plan, promotionAmount = 0) {
+const toCents = (v) => Math.round((v || 0) * 100);
+/**
+ * Preview of a schedule covering `total`. With `engage` ({ agreed, firstPayment, gap,
+ * gapTiming, gapDate }) it mirrors the engagement schedule (spec E4-T5, R1/R2): it covers
+ * agreed − first payment; the deposit part is what remains of agreed × deposit % once the
+ * first payment (and the gap when due at the start) are counted; the gap is its own row.
+ */
+function computePreview(total, plan, engage = null) {
   const depPct = Math.min(100, Math.max(0, parseFloat(plan.deposit_pct) || 50));
-  const promo = Math.max(0, promotionAmount || 0);
-  // Deposit % applies to catalogue price (salePrice + promo); promotion is then deducted
-  const catalogueForPlan = salePrice + promo;
-  const depositGross = Math.round(catalogueForPlan * depPct) / 100;
-  const depositTotal = Math.max(0, Math.round((depositGross - promo) * 100) / 100);
-  const balanceTotal = Math.max(0, Math.round((salePrice - depositTotal) * 100) / 100);
+  let depositTotal;
+  let balanceTotal;
+  let gapTotal = 0;
+  if (engage) {
+    const agreed = toCents(engage.agreed);
+    const first = toCents(engage.firstPayment);
+    const gap = toCents(engage.gap);
+    const left = Math.max(0, agreed - first - gap);
+    const gapAtStart = engage.gapTiming === 'debut' ? gap : 0;
+    const deposit = Math.min(left, Math.max(0, Math.round(agreed * depPct / 100) - first - gapAtStart));
+    depositTotal = deposit / 100;
+    balanceTotal = (left - deposit) / 100;
+    gapTotal = Math.min(gap, Math.max(0, agreed - first)) / 100;
+  } else {
+    depositTotal = Math.round(total * depPct) / 100;
+    balanceTotal = Math.max(0, Math.round((total - depositTotal) * 100) / 100);
+  }
   const depositStart = plan.deposit_start_date ? new Date(plan.deposit_start_date) : new Date();
   const depCount = Math.max(1, parseInt(plan.deposit_count) || 1);
   const depPeriod = Math.max(1, parseInt(plan.deposit_periodicity) || 1);
@@ -82,21 +117,34 @@ function computePreview(salePrice, plan, promotionAmount = 0) {
   const balanceAmounts = splitAmount(balanceTotal, balCount);
   const depositRows = depositDates.map((d, i) => ({ type: 'deposit', number: i + 1, date: d, amount: depositAmounts[i] }));
   const balanceRows = balanceDates.map((d, i) => ({ type: 'balance', number: i + 1, date: d, amount: balanceAmounts[i] }));
-  const allRows = [...depositRows, ...balanceRows].sort((a, b) => a.date - b.date);
-  return { depositTotal, depositGross, balanceTotal, depositRows, balanceRows, allRows, balanceStart };
+  const planRows = [...depositRows, ...balanceRows];
+  const gapRows = [];
+  if (gapTotal > 0) {
+    const lastDate = planRows.reduce((last, r) => (r.date > last ? r.date : last), depositStart);
+    const gapDate = engage.gapTiming === 'debut' ? new Date()
+      : engage.gapTiming === 'date' && engage.gapDate ? new Date(engage.gapDate)
+      : lastDate;
+    gapRows.push({ type: 'gap', number: 1, date: gapDate, amount: gapTotal });
+  }
+  const allRows = [...planRows.filter((r) => r.amount > 0), ...gapRows].sort((a, b) => a.date - b.date);
+  return { depositTotal, balanceTotal, gapTotal, depositRows, balanceRows, allRows, balanceStart };
+}
+function previewRowLabel(row) {
+  if (row.type === 'gap') return 'Écart à régulariser';
+  return `${row.type === 'deposit' ? 'Acompte' : 'Solde'} ${row.number}`;
 }
 function fmtShort(date) {
   return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 /* ── Payment timeline (panel view) ───────────────────────── */
-function PaymentTimeline({ rows, total }) {
+function PaymentTimeline({ rows, total, format = formatPrice }) {
   if (!rows.length) return null;
   return (
     <div className="pay-timeline">
       <div className="pay-timeline-header">
         <span className="pay-timeline-title">Échéancier prévisionnel</span>
-        <span className="pay-timeline-total">{formatPrice(total)}</span>
+        <span className="pay-timeline-total">{format(total)}</span>
       </div>
       <div className="pay-timeline-list">
         {rows.map((row, i) => (
@@ -108,17 +156,17 @@ function PaymentTimeline({ rows, total }) {
             <div className="pay-tl-content">
               <div className="pay-tl-top">
                 <span className={`pay-tl-badge pay-tl-badge--${row.type}`}>
-                  {row.type === 'deposit' ? 'Acompte' : 'Solde'} {row.number}
+                  {previewRowLabel(row)}
                 </span>
                 <span className="pay-tl-date">{fmtShort(row.date)}</span>
               </div>
-              <div className="pay-tl-amount">{formatPrice(row.amount)}</div>
+              <div className="pay-tl-amount">{format(row.amount)}</div>
             </div>
           </div>
         ))}
         <div className="pay-tl-footer">
           <span className="pay-tl-footer-label">Total</span>
-          <span className="pay-tl-footer-amount">{formatPrice(total)}</span>
+          <span className="pay-tl-footer-amount">{format(total)}</span>
         </div>
       </div>
     </div>
@@ -272,11 +320,12 @@ function ExpiredAlert({ status, expirationDate }) {
 }
 
 /* ── Payment plan configurator ────────────────────────────── */
-function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, promotionAmount = 0 }) {
+function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, engage = null }) {
+  // Engagement flows (E4-T5): exact amounts at the cent, as on the payment screens
+  const fmt = engage ? formatMad : formatPrice;
   const depPct = parseFloat(plan.deposit_pct) || 50;
   const balPct = Math.round((100 - depPct) * 100) / 100;
-  const promo = Math.max(0, promotionAmount || 0);
-  const preview = useMemo(() => computePreview(lotPrice, plan, promo), [lotPrice, plan, promo]);
+  const preview = useMemo(() => computePreview(lotPrice, plan, engage), [lotPrice, plan, engage]);
   const [showPreview, setShowPreview] = useState(false);
 
   return (
@@ -284,7 +333,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
       <div className="pay-plan-split">
         <div className="pay-plan-split-header">
           <span className="pay-plan-split-label">Répartition du paiement</span>
-          <span className="pay-plan-split-hint">Total = {formatPrice(lotPrice)}</span>
+          <span className="pay-plan-split-hint">Total = {fmt(lotPrice)}</span>
         </div>
         <div className="pay-plan-split-row">
           <div className="pay-plan-tranche">
@@ -295,12 +344,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
                 onChange={e => onChange({ ...plan, deposit_pct: e.target.value })} />
               <span className="pay-plan-pct-sym">%</span>
             </div>
-            <div className="pay-plan-tranche-amount">{formatPrice(preview.depositTotal)}</div>
-            {promo > 0 && (
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                {formatPrice(preview.depositGross)} brut − {formatPrice(promo)} promo
-              </div>
-            )}
+            <div className="pay-plan-tranche-amount">{fmt(preview.depositTotal)}</div>
           </div>
           <div className="pay-plan-divider">+</div>
           <div className="pay-plan-tranche">
@@ -309,13 +353,18 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
               <span className="pay-plan-pct-val">{balPct}</span>
               <span className="pay-plan-pct-sym">%</span>
             </div>
-            <div className="pay-plan-tranche-amount">{formatPrice(preview.balanceTotal)}</div>
+            <div className="pay-plan-tranche-amount">{fmt(preview.balanceTotal)}</div>
           </div>
         </div>
         <div className="pay-plan-bar">
           <div className="pay-plan-bar-deposit" style={{ width: `${depPct}%` }} />
           <div className="pay-plan-bar-balance" style={{ width: `${balPct}%` }} />
         </div>
+        {preview.gapTotal > 0 && (
+          <div className="pay-plan-split-hint" style={{ marginTop: 6 }}>
+            + Écart à régulariser : {fmt(preview.gapTotal)} (échéance distincte)
+          </div>
+        )}
       </div>
 
       <div className="pay-plan-dates">
@@ -333,14 +382,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
         <div className="pay-plan-section pay-plan-section--deposit">
           <div className="pay-plan-section-title pay-plan-section-title--deposit">
             <span>Étalement acompte</span>
-            <span className="pay-plan-section-total">
-              {formatPrice(preview.depositTotal)}
-              {promo > 0 && (
-                <span style={{ fontSize: '0.7rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
-                  ({formatPrice(preview.depositGross)} brut)
-                </span>
-              )}
-            </span>
+            <span className="pay-plan-section-total">{fmt(preview.depositTotal)}</span>
           </div>
           <div className="pay-plan-section-row">
             <div className="pay-plan-field">
@@ -360,7 +402,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
           <div className="pay-plan-per-installment pay-plan-per-installment--deposit">
             <span className="pay-plan-per-label">Par versement</span>
             <span className="pay-plan-per-amount">
-              {formatPrice(preview.depositTotal / Math.max(1, parseInt(plan.deposit_count) || 1))}
+              {fmt(preview.depositTotal / Math.max(1, parseInt(plan.deposit_count) || 1))}
             </span>
           </div>
           {preview.depositRows.length > 0 && (
@@ -374,7 +416,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
         <div className="pay-plan-section pay-plan-section--balance">
           <div className="pay-plan-section-title pay-plan-section-title--balance">
             <span>Étalement solde</span>
-            <span className="pay-plan-section-total">{formatPrice(preview.balanceTotal)}</span>
+            <span className="pay-plan-section-total">{fmt(preview.balanceTotal)}</span>
           </div>
           <div className="pay-plan-field">
             <label className="pay-plan-field-label">Délai avant le 1er versement solde</label>
@@ -401,7 +443,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
           <div className="pay-plan-per-installment pay-plan-per-installment--balance">
             <span className="pay-plan-per-label">Par versement</span>
             <span className="pay-plan-per-amount pay-plan-per-amount--balance">
-              {formatPrice(preview.balanceTotal / Math.max(1, parseInt(plan.balance_count) || 1))}
+              {fmt(preview.balanceTotal / Math.max(1, parseInt(plan.balance_count) || 1))}
             </span>
           </div>
           <div className="pay-plan-last-date pay-plan-last-date--balance">
@@ -412,7 +454,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
 
       {/* Panel mode: always-visible timeline / Inline mode: toggle + table */}
       {panel ? (
-        <PaymentTimeline rows={preview.allRows} total={lotPrice} />
+        <PaymentTimeline rows={preview.allRows} total={lotPrice} format={fmt} />
       ) : (
         <>
           <div className="pay-plan-preview-row">
@@ -427,7 +469,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
             <div className="pay-plan-preview">
               <div className="pay-plan-preview-header">
                 <span className="pay-plan-preview-title">Récapitulatif prévisionnel</span>
-                <span className="pay-plan-preview-total">Total : {formatPrice(lotPrice)}</span>
+                <span className="pay-plan-preview-total">Total : {fmt(lotPrice)}</span>
               </div>
               <table className="pay-preview-table">
                 <thead>
@@ -437,16 +479,16 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, prom
                   {preview.allRows.map((row, i) => (
                     <tr key={i} className={`pay-preview-row pay-preview-row--${row.type}`}>
                       <td className="pay-preview-num">{i + 1}</td>
-                      <td><span className={`pay-preview-badge pay-preview-badge--${row.type}`}>{row.type === 'deposit' ? 'Acompte' : 'Solde'} {row.number}</span></td>
+                      <td><span className={`pay-preview-badge pay-preview-badge--${row.type}`}>{previewRowLabel(row)}</span></td>
                       <td className="pay-preview-date">{fmtShort(row.date)}</td>
-                      <td className="pay-preview-amount">{formatPrice(row.amount)}</td>
+                      <td className="pay-preview-amount">{fmt(row.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="pay-preview-footer">
                     <td colSpan="3">Total</td>
-                    <td className="pay-preview-amount">{formatPrice(lotPrice)}</td>
+                    <td className="pay-preview-amount">{fmt(lotPrice)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -515,10 +557,35 @@ function AddClientPanel({ onSubmit, onCancel }) {
 }
 
 /* ════════════════════════════════════════════════════════════ */
-export default function LotDetailModal({
+/**
+ * Fiche lot. Après une étape de réservation réussie, le panneau « Notifier le
+ * client » remplace la fiche ; le fermer (avec ou sans envoi) ferme la fiche.
+ */
+export default function LotDetailModal(props) {
+  const { onClose, onRefresh } = props;
+  const [notify, setNotify] = useState(null);
+
+  const handleStepDone = async ({ kind, reservationId, clientId }) => {
+    if (onRefresh) onRefresh();
+    if (!reservationId) { onClose(); return; }
+    let client = null;
+    try {
+      client = clientId ? await apiGet(`/api/clients/${clientId}`) : null;
+    } catch {
+      // préférences inconnues : le panneau retombe sur l'email
+    }
+    setNotify({ kind, reservationId, client });
+  };
+
+  if (notify) return <NotifyClientPanel {...notify} onClose={onClose} />;
+  return <LotDetailModalContent {...props} onStepDone={handleStepDone} />;
+}
+
+function LotDetailModalContent({
   lot,
   onClose,
   onRefresh,
+  onStepDone,
   initialMode = null,
   enabledOptionalStatuses = DEFAULT_ENABLED_OPTIONAL,
 }) {
@@ -538,8 +605,6 @@ export default function LotDetailModal({
   const [lotPricingConfig, setLotPricingConfig] = useState(null); // prix_m2_acte from project pricing grid
   const [showAddClient, setShowAddClient] = useState(false);
   const [releaseData, setReleaseData] = useState({ deposit_refund_amount: '', deposit_refund_date: new Date().toISOString().split('T')[0], release_reason: '' });
-  const [paymentSchedule, setPaymentSchedule] = useState(null);
-  const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [reservation, setReservation] = useState(null); // full reservation details from API
   const [validationChoice, setValidationChoice] = useState(null); // 'refund' | 'deduct' | null
   // New transition state
@@ -553,22 +618,42 @@ export default function LotDetailModal({
   const [newNotaire, setNewNotaire] = useState({ nom: '', prenom: '', telephone: '', email: '', ville: '', adresse: '' });
   const [savingNotaire, setSavingNotaire] = useState(false);
   const [blockReason, setBlockReason] = useState('');
-  const [finalSalePrice, setFinalSalePrice] = useState('');
   const [editForm, setEditForm] = useState({ price_per_sqm: '', price_per_sqm_acte: '', surface: '', zone: '', type_lot: '', emplacement: '', type_maison: '' });
   const [extendDays, setExtendDays] = useState(7);
-  // Réservation engagée — prix de vente et promotion
-  const [salePriceEngaged, setSalePriceEngaged] = useState('');
-  const [promotionTiming, setPromotionTiming] = useState('debut');
-  const [markingPromotion, setMarkingPromotion] = useState(false);
+  // Réservation engagée — montants (prix total convenu, prix sur l'acte, écart, premier acompte)
+  const [amounts, setAmounts] = useState(EMPTY_AMOUNTS);
   const [downloadingDoc, setDownloadingDoc] = useState(false);
   const [settingNotaireIntent, setSettingNotaireIntent] = useState(false);
   const [documents, setDocuments] = useState([]);
+  const [documentsLoaded, setDocumentsLoaded] = useState(false);
+  const [documentsError, setDocumentsError] = useState(false);
+  const documentsLotId = useRef(null);
+  const [regeneratingActe, setRegeneratingActe] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const docFileInputRef = useRef(null);
   // Open EDL actions of the displayed lot, reported by the EDL panel once
   // loaded; unknown (null) until then, so « Finaliser » stays disabled.
   const [edlCount, setEdlCount] = useState({ lotId: null, count: null });
   const edlOpenCount = edlCount.lotId === lot?.id ? edlCount.count : null;
+  // financial-summary of the displayed lot's reservation, reported by PaymentsPanel;
+  // null until loaded, so the deed alert / « Marquer soldé » wait for it.
+  const [finance, setFinance] = useState({ reservationId: null, summary: null, failed: false });
+  const financeCurrent = lot?.reservation_id != null && finance.reservationId === lot.reservation_id;
+  const financeSummary = financeCurrent ? finance.summary : null;
+  const financeFailed = financeCurrent && finance.failed;
+  const reportFinanceSummary = useCallback(
+    (summary) => setFinance({ reservationId: lot?.reservation_id, summary, failed: false }),
+    [lot?.reservation_id]
+  );
+  const reportFinanceError = useCallback(
+    () => setFinance({ reservationId: lot?.reservation_id, summary: null, failed: true }),
+    [lot?.reservation_id]
+  );
+  // « Modifier la réservation » (E4-T5, mode `edit_engagement`): open for this reservation id; finance views are
+  // remounted (reloaded) after a save; deed regeneration failed on the last save.
+  const [editingFor, setEditingFor] = useState(null);
+  const [financeVersion, setFinanceVersion] = useState(0);
+  const [acteFailedFor, setActeFailedFor] = useState(null);
   const reportEdlOpenCount = useCallback(
     (count) => setEdlCount({ lotId: lot?.id, count }),
     [lot?.id]
@@ -578,15 +663,23 @@ export default function LotDetailModal({
     loadClients();
     loadNotaires();
     if (lot?.reservation_id) {
-      loadPaymentSchedule(lot.reservation_id);
       loadReservation(lot.reservation_id);
     } else {
       setReservation(null);
     }
-    if (lot?.id && ['chez_notaire', 'chez_proprietaire'].includes(lot.status)) {
+    if (documentsLotId.current !== lot?.id) {
+      // autre lot : ne jamais montrer l'état des documents du lot précédent
+      documentsLotId.current = lot?.id ?? null;
+      setDocuments([]);
+      setDocumentsLoaded(false);
+      setDocumentsError(false);
+    }
+    if (lot?.id && (['chez_notaire', 'chez_proprietaire'].includes(lot.status) || (lot.reservation_id && ACTE_STATUSES.includes(lot.status)))) {
       loadDocuments();
     } else {
       setDocuments([]);
+      setDocumentsLoaded(false);
+      setDocumentsError(false);
     }
     if (lot?.project_id) {
       loadProjectFinancingPlan(lot.project_id);
@@ -600,7 +693,7 @@ export default function LotDetailModal({
     if (!lotPricingConfig?.sale_price_computed) return;
     if (!['direct_engage', 'finaliser_engage', 'option_engage'].includes(mode)) return;
     if (lot?.price_per_sqm_acte) return; // already set on lot directly
-    setSalePriceEngaged(String(lotPricingConfig.sale_price_computed));
+    setAmounts((a) => ({ ...a, salePrice: String(lotPricingConfig.sale_price_computed) }));
   // eslint-disable-next-line react-hooks/exhaustive-deps -- re-applying auto-calc on mode change would overwrite the price the user typed; only run when the pricing config loads
   }, [lotPricingConfig]);
 
@@ -710,10 +803,38 @@ export default function LotDetailModal({
 
   const loadDocuments = async () => {
     if (!lot?.id) return;
+    const lotId = lot.id;
     try {
-      const data = await apiGet(`/api/lots/${lot.id}/documents`);
+      const data = await apiGet(`/api/lots/${lotId}/documents`);
+      // réponse arrivée après un changement de lot : ignorée
+      if (documentsLotId.current !== lotId) return;
       setDocuments(data);
-    } catch { setDocuments([]); }
+      setDocumentsError(false);
+      setDocumentsLoaded(true);
+    } catch {
+      if (documentsLotId.current !== lotId) return;
+      // ne pas conclure "acte absent" sur un échec de chargement
+      setDocuments([]);
+      setDocumentsLoaded(false);
+      setDocumentsError(true);
+    }
+  };
+
+  const latestActe = documents
+    .filter(d => d.category === ACTE_CATEGORY)
+    .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')) || b.id - a.id)[0];
+  const notaryDocuments = documents.filter(d => d.category !== ACTE_CATEGORY);
+
+  const handleRegenerateActe = async () => {
+    setRegeneratingActe(true);
+    try {
+      await apiPost(`/api/reservations/${lot.reservation_id}/acte`, {});
+      toast.success('Acte régénéré');
+      setActeFailedFor(null);
+      await loadDocuments();
+    } catch (err) {
+      toast.error(err.message || "Erreur lors de la génération de l'acte");
+    } finally { setRegeneratingActe(false); }
   };
 
   const handleUploadDocument = async (e) => {
@@ -762,32 +883,47 @@ export default function LotDetailModal({
     }
   };
 
-  const loadPaymentSchedule = async (reservationId) => {
-    try {
-      const schedule = await apiGet(`/api/payments/schedules/reservation/${reservationId}`);
-      setPaymentSchedule(schedule);
-    } catch {
-      setPaymentSchedule(null); // no schedule yet
-    }
+  // A payment may archive the deed (threshold crossed): reload documents and the lot list
+  const handlePaymentRecorded = () => {
+    loadDocuments();
+    if (onRefresh) onRefresh();
   };
 
-  const handleConfirmFirstPayment = async () => {
-    const firstDeposit = paymentSchedule?.installments
-      ?.filter(i => i.payment_type === 'deposit')
-      .sort((a, b) => a.installment_number - b.installment_number)[0];
-    if (!firstDeposit) return;
-    setConfirmingPayment(true);
-    try {
-      await apiPatch(`/api/payments/installments/${firstDeposit.id}`, {
-        status: 'paid',
-        paid_date: new Date().toISOString(),
-      });
-      toast.success('Premier versement confirmé — réservation validée');
-      await loadPaymentSchedule(lot.reservation_id);
-      if (onRefresh) onRefresh();
-    } catch (error) {
-      toast.error(error.message || 'Erreur lors de la confirmation');
-    } finally { setConfirmingPayment(false); }
+  // « Voir l'échéancier » (mode `finance_view`): schedule and payments in the wide modal
+  const openFinanceView = () => handleSetMode('finance_view');
+  const closeFinanceView = () => setMode(null);
+  // Proof of a payment: a lot document (its archived name when the list has it)
+  const handleDownloadProof = (payment) => {
+    const doc = documents.find((d) => d.id === payment.document_id)
+      ?? { id: payment.document_id, filename: `justificatif_${payment.id}` };
+    handleDownloadDocument(doc);
+  };
+
+  const openEngagementEdit = () => {
+    handleSetMode('edit_engagement');
+    setEditingFor(lot.reservation_id);
+  };
+  const closeEngagementEdit = () => {
+    setEditingFor(null);
+    setMode(null);
+  };
+
+  // After an edit: reload the reservation, amounts, schedule, history, documents and the lot list.
+  // The summary is dropped so the edit stays hidden until PaymentsPanel reports the fresh one.
+  const handleEngagementSaved = (result) => {
+    closeEngagementEdit();
+    setFinance({ reservationId: null, summary: null, failed: false });
+    setActeFailedFor(result?.acte_status === 'failed' ? lot.reservation_id : null);
+    setFinanceVersion((v) => v + 1);
+    loadReservation(lot.reservation_id);
+    loadDocuments();
+    if (onRefresh) onRefresh();
+  };
+
+  // After « Recharger » (409): the form reloaded itself; refresh the lot card too
+  const handleEngagementReloaded = () => {
+    loadReservation(lot.reservation_id);
+    if (onRefresh) onRefresh();
   };
 
   const handleCreateClient = async (payload) => {
@@ -825,18 +961,15 @@ export default function LotDetailModal({
     setPaymentType('cash');
     setNotaryDate('');
     setBlockReason('');
-    setFinalSalePrice('');
     setEditForm({ price_per_sqm: '', price_per_sqm_acte: '', surface: '', zone: '', type_lot: '', emplacement: '', type_maison: '' });
     setExtendDays(7);
     setValidationChoice(null);
-    setSalePriceEngaged('');
-    setPromotionTiming('debut');
+    setAmounts(EMPTY_AMOUNTS);
   };
 
   const handleSetMode = (newMode) => {
     resetFormState();
     setMode(newMode);
-    if (newMode === 'to_soldee' && lot?.price) setFinalSalePrice(lot.price.toString());
     if (newMode === 'finaliser_refund' || newMode === 'finaliser_engage') {
       const gAmount = reservation?.guarantee_amount ?? lot?.guarantee_amount ?? 0;
       const gPayType = reservation?.payment_type ?? lot?.payment_type ?? 'cash';
@@ -858,13 +991,15 @@ export default function LotDetailModal({
     }
     if (newMode === 'finaliser_engage' || newMode === 'direct_engage' || newMode === 'option_engage') {
       setEnablePaymentPlan(true);
+      // Prix total convenu = prix catalogue ; prix sur l'acte = grille de prix, sinon convenu
+      const agreed = lot?.price ? String(lot.price) : '';
+      let acte = agreed;
       if (lot?.price_per_sqm_acte && lot?.surface && lot.surface > 0) {
-        setSalePriceEngaged(String(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100));
+        acte = String(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100);
       } else if (lotPricingConfig?.sale_price_computed) {
-        setSalePriceEngaged(String(lotPricingConfig.sale_price_computed));
-      } else if (lot?.price) {
-        setSalePriceEngaged(lot.price.toString());
+        acte = String(lotPricingConfig.sale_price_computed);
       }
+      setAmounts({ ...EMPTY_AMOUNTS, agreedTotalPrice: agreed, salePrice: acte });
     }
     if (newMode === 'update_notaire') {
       setNotaryDate(lot?.notary_date || '');
@@ -936,13 +1071,13 @@ export default function LotDetailModal({
     expDate.setDate(expDate.getDate() + days);
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/start-option`, {
+      const res = await apiPost(`/api/lots/${lot.id}/transitions/start-option`, {
         client_id: selectedClient.id,
         expiration_date: expDate.toISOString(),
         notes: notes || undefined,
       });
       toast.success('Option démarrée avec succès');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'option_confirmee', reservationId: res.id, clientId: res.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -966,7 +1101,7 @@ export default function LotDetailModal({
     if (!finalizationDate) { toast.warning('La date de finalisation est requise'); return; }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/direct-reservation`, {
+      const res = await apiPost(`/api/lots/${lot.id}/transitions/direct-reservation`, {
         client_id: selectedClient.id,
         guarantee_amount: parseFloat(guaranteeAmount),
         payment_type: paymentType,
@@ -974,33 +1109,33 @@ export default function LotDetailModal({
         notes: notes || undefined,
       });
       toast.success('Réservation à finaliser créée');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_a_finaliser', reservationId: res.id, clientId: res.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
 
   const handleDirectEngage = async () => {
     if (!selectedClient) { toast.warning('Veuillez sélectionner un client'); return; }
-    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
-    if (!guaranteeAmount || parseFloat(guaranteeAmount) <= 0) { toast.warning('Le montant du premier acompte (ND) est requis'); return; }
+    const amountsError = typedFirstPaymentError();
+    if (amountsError) { toast.warning(amountsError); return; }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/direct-engage`, engageBody({
+      const res = await apiPost(`/api/lots/${lot.id}/transitions/direct-engage`, engageBody({
         client_id: selectedClient.id,
-        guarantee_amount: parseFloat(guaranteeAmount),
+        guarantee_amount: parseAmount(amounts.firstPayment),
         payment_type: paymentType,
         notes: notes || undefined,
       }));
       toast.success('Réservation engagée créée');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_engagee', reservationId: res.id, clientId: res.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
 
   // option → reservation_engagee (project without « réservation à finaliser »)
   const handleOptionEngage = async () => {
-    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
-    if (!guaranteeAmount || parseFloat(guaranteeAmount) <= 0) { toast.warning('Le montant du premier acompte (ND) est requis'); return; }
+    const amountsError = typedFirstPaymentError();
+    if (amountsError) { toast.warning(amountsError); return; }
     const optionDeposit = reservation?.deposit ?? lot?.deposit ?? 0;
     let depositFields = {};
     if (optionDeposit > 0) {
@@ -1014,14 +1149,14 @@ export default function LotDetailModal({
     }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/option-engage`, engageBody({
-        guarantee_amount: parseFloat(guaranteeAmount),
+      const res = await apiPost(`/api/lots/${lot.id}/transitions/option-engage`, engageBody({
+        guarantee_amount: parseAmount(amounts.firstPayment),
         payment_type: paymentType,
         notes: notes || undefined,
         ...depositFields,
       }));
       toast.success('Réservation engagée');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_engagee', reservationId: res.id, clientId: res.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -1053,14 +1188,14 @@ export default function LotDetailModal({
     if (!finalizationDate) { toast.warning('La date de finalisation est requise'); return; }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/to-reservation`, {
+      const res = await apiPost(`/api/lots/${lot.id}/transitions/to-reservation`, {
         guarantee_amount: parseFloat(guaranteeAmount),
         finalization_date: new Date(finalizationDate).toISOString(),
         payment_type: paymentType,
         notes: notes || undefined,
       });
       toast.success('Réservation à finaliser');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_a_finaliser', reservationId: res.id, clientId: res.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -1096,15 +1231,17 @@ export default function LotDetailModal({
     };
   };
 
-  // Body of an engagement: `fields` + sale price, promotion and payment plan from the form
+  // Body of an engagement: `fields` + agreed price, deed price, gap timing and payment plan
   function engageBody(fields) {
-    return buildEngagePayload({
-      lotPrice: lot?.price,
-      salePrice: salePriceEngaged ? parseFloat(salePriceEngaged) : undefined,
-      promotionTiming,
-      paymentPlan: _buildPaymentPlanPayload(),
-      ...fields,
-    });
+    return buildEngagePayload({ amounts, paymentPlan: _buildPaymentPlanPayload(), ...fields });
+  }
+
+  // Amounts error of a direct / option engagement (typed first payment, required), else null
+  function typedFirstPaymentError() {
+    const error = firstAmountsError(amounts);
+    if (error) return error;
+    if (!(parseAmount(amounts.firstPayment) > 0)) return 'Le premier acompte reçu est requis';
+    return null;
   }
 
   // Warning for an incomplete refund form (guarantee or option deposit), else null
@@ -1116,12 +1253,13 @@ export default function LotDetailModal({
   }
 
   const handleFinaliserEngage = async () => {
-    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
+    const amountsError = firstAmountsError(amounts, { firstPayment: activeGuaranteeAmount() });
+    if (amountsError) { toast.warning(amountsError); return; }
     setLoading(true);
     try {
       await apiPost(`/api/lots/${lot.id}/transitions/engage`, engageBody({ guarantee_action: 'deduct' }));
       toast.success('Réservation engagée — garantie déduite');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_engagee', reservationId: lot.reservation_id, clientId: lot.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
@@ -1129,7 +1267,8 @@ export default function LotDetailModal({
   const handleFinaliserEngageWithRefund = async () => {
     const refundError = refundFormError();
     if (refundError) { toast.warning(refundError); return; }
-    if (!salePriceEngaged || parseFloat(salePriceEngaged) <= 0) { toast.warning('Le prix de vente est requis'); return; }
+    const amountsError = firstAmountsError(amounts, { firstPayment: 0 });
+    if (amountsError) { toast.warning(amountsError); return; }
     setLoading(true);
     try {
       await apiPost(`/api/lots/${lot.id}/transitions/engage`, engageBody({
@@ -1137,22 +1276,15 @@ export default function LotDetailModal({
         ...refundFields(releaseData),
       }));
       toast.success('Garantie rendue au client — réservation engagée');
-      onClose(); if (onRefresh) onRefresh();
+      await onStepDone({ kind: 'reservation_engagee', reservationId: lot.reservation_id, clientId: lot.client_id });
     } catch (error) { toast.error(error.message || 'Erreur'); }
     finally { setLoading(false); }
   };
 
-  const handleMarkPromotionReceived = async () => {
-    if (!lot?.reservation_id) return;
-    setMarkingPromotion(true);
-    try {
-      const updatedRes = await apiPost(`/api/reservations/${lot.reservation_id}/mark-promotion-received`, {});
-      setReservation(updatedRes);
-      toast.success('Montant de la promotion marqué comme reçu — acte de réservation disponible');
-      if (onRefresh) onRefresh();
-    } catch (error) { toast.error(error.message || 'Erreur'); }
-    finally { setMarkingPromotion(false); }
-  };
+  // Guarantee kept as first payment when engaging a reservation to finalise
+  function activeGuaranteeAmount() {
+    return reservation?.guarantee_amount ?? lot?.guarantee_amount ?? 0;
+  }
 
   const handleSetNotaireIntent = async (wantsNotaire) => {
     if (!lot?.id) return;
@@ -1176,8 +1308,8 @@ export default function LotDetailModal({
     try {
       const response = await apiFetch(`/api/reservations/${lot.reservation_id}/certificate`);
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || `Erreur ${response.status}`);
+        // threshold refusal: 400 `message`; other errors may carry `detail`
+        throw buildApiError(await response.json().catch(() => ({})), response.status);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -1196,8 +1328,7 @@ export default function LotDetailModal({
     try {
       const response = await apiFetch(`/api/reservations/${lot.reservation_id}/receipt`);
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.detail || `Erreur ${response.status}`);
+        throw buildApiError(await response.json().catch(() => ({})), response.status);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -1210,12 +1341,11 @@ export default function LotDetailModal({
     finally { setDownloadingDoc(false); }
   };
 
+  // The sale is recorded at the agreed total price (backend); no price is typed any more
   const handleToSoldee = async () => {
-    const price = finalSalePrice ? parseFloat(finalSalePrice) : lot.price;
-    if (!price || price <= 0) { toast.warning('Le prix final est requis'); return; }
     setLoading(true);
     try {
-      await apiPost(`/api/lots/${lot.id}/transitions/solde`, { price, notes: notes || undefined });
+      await apiPost(`/api/lots/${lot.id}/transitions/solde`, { notes: notes || undefined });
       toast.success('Lot soldé — vente enregistrée');
       onClose(); if (onRefresh) onRefresh();
     } catch (error) { toast.error(error.message || 'Erreur'); }
@@ -1283,13 +1413,6 @@ export default function LotDetailModal({
     finally { setLoading(false); }
   };
 
-  // Preview row count for panel header subtitle (based on remaining balance).
-  // Must be called before the `if (!lot) return null` below (rules of hooks), hence the lot?.price guard.
-  const previewRowCount = useMemo(() => {
-    const balance = lot?.price ? Math.max(0, lot.price - (parseFloat(depositAmount) || 0)) : 0;
-    return balance > 0 && enablePaymentPlan ? computePreview(balance, paymentPlan).allRows.length : 0;
-  }, [lot?.price, depositAmount, enablePaymentPlan, paymentPlan]);
-
   if (!lot) return null;
 
   // Actions offered = transitions allowed for this status by the project settings
@@ -1314,12 +1437,23 @@ export default function LotDetailModal({
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   })();
 
-  // First deposit installment — for alert logic
-  const firstDepositInstallment = paymentSchedule?.installments
+  // Engaged before E4-T5 (no agreed total price): amounts unknown, no edit nor payment
+  const financeLegacy = financeSummary?.legacy === true;
+  // First deposit installment (financial summary) — for the overdue alert
+  const firstDepositInstallment = financeLegacy ? null : financeSummary?.installments
     ?.filter(i => i.payment_type === 'deposit')
     .sort((a, b) => a.installment_number - b.installment_number)[0] ?? null;
-  const firstPaymentIsOverdue = firstDepositInstallment?.status === 'pending'
+  const firstPaymentIsOverdue = firstDepositInstallment != null && firstDepositInstallment.status !== 'paid'
     && new Date(firstDepositInstallment.due_date) < new Date();
+  // Payments are recorded on an engaged reservation, by its commercial or a manager
+  const canRecordPayments = lot.status === 'reservation_engagee'
+    && (isManager || (lot.reserved_by_user_id != null && lot.reserved_by_user_id === user?.id));
+  const showFinance = ACTE_STATUSES.includes(lot.status) && !!lot.reservation_id;
+  // Same rule as payments (backend: 403 / 400 otherwise). The form needs the loaded summary and
+  // the reservation's notes (the edit replaces them: never open it with unknown notes).
+  const canEditEngagement = canRecordPayments && financeSummary != null && !financeLegacy
+    && reservation?.id === lot.reservation_id;
+  const editingEngagement = mode === 'edit_engagement' && canEditEngagement && editingFor === lot.reservation_id;
   const lotStats = [
     lot.surface && { icon: <IcSurface />, value: `${lot.surface} m²`, label: 'Surface' },
     (lot.price_per_sqm || (lot.price && lot.surface && lot.surface > 0)) && {
@@ -1339,8 +1473,93 @@ export default function LotDetailModal({
     lot.type_maison && { icon: <IcHome />, value: lot.type_maison, label: 'Type maison' },
   ].filter(Boolean);
 
+  // Lot summary: left column of the wide modal (transition forms, reservation edit)
+  const lotSummaryPanel = (
+    <div className="modal-split-left">
+      <div className="msl-eyebrow">Lot</div>
+      <div className="msl-num">{lot.numero}</div>
+      {lot.zone && <div className="msl-zone">Zone {lot.zone}{lot.type_lot ? ` · ${lot.type_lot}` : ''}</div>}
+      <div className="msl-price">{formatPrice(lot.price)}</div>
+      {lot.price_per_sqm
+        ? <div className="msl-price-m2">{lot.price_per_sqm.toLocaleString('fr-FR')} MAD/m² <span className="lot-price-tag">catalogue</span></div>
+        : (lot.surface && lot.price && lot.surface > 0)
+          ? <div className="msl-price-m2">{formatPrice(lot.price / lot.surface)}/m² <span className="lot-price-tag">catalogue</span></div>
+          : null
+      }
+      {lot.price_per_sqm_acte && lot.surface && (
+        <div className="msl-price-m2 lot-price-acte">
+          {formatPrice(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100)} <span className="lot-price-tag">acte</span>
+        </div>
+      )}
+      <span className={`status-badge ${lot.status}`} style={{ display: 'inline-flex', fontSize: '0.78rem', padding: '5px 11px', margin: '14px 0 18px' }}>
+        <span className="status-dot"></span>{STATUS_LABELS[lot.status]}
+      </span>
+      <div className="msl-stats">
+        {lotStats.map((s, i) => (
+          <div key={i} className="msl-stat">
+            <span className="msl-stat-icon">{s.icon}</span>
+            <span className="msl-stat-text">
+              <span className="msl-stat-value">{s.value}</span>
+              <span className="msl-stat-label">{s.label}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      {lot.client_name && (
+        <div className="msl-reservation-tag"><IcUser /><span>{lot.client_name}</span></div>
+      )}
+    </div>
+  );
+
+  /* ── EDIT AN ENGAGED RESERVATION (E4-T5): wide 3-column layout ─ */
+  if (editingEngagement) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal modal--3col" onClick={e => e.stopPropagation()}>
+          {lotSummaryPanel}
+          <EditEngagementForm
+            reservationId={lot.reservation_id}
+            summary={financeSummary}
+            notes={reservation?.notes}
+            lotNumero={lot.numero}
+            onSaved={handleEngagementSaved}
+            onCancel={closeEngagementEdit}
+            onReloaded={handleEngagementReloaded}
+            closeButton={<button className="modal-close" onClick={onClose}><IcClose /></button>}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  /* ── SCHEDULE AND PAYMENTS (E4-T5): wide 3-column layout ─── */
+  if (mode === 'finance_view' && showFinance) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal modal--3col" onClick={e => e.stopPropagation()}>
+          {lotSummaryPanel}
+          <ReservationFinanceView
+            key={`${lot.reservation_id}-${financeVersion}`}
+            reservationId={lot.reservation_id}
+            lotNumero={lot.numero}
+            canRecord={canRecordPayments}
+            canEdit={canEditEngagement}
+            onEdit={openEngagementEdit}
+            onClose={closeFinanceView}
+            onSummaryChange={reportFinanceSummary}
+            onSummaryError={reportFinanceError}
+            onPaymentRecorded={handlePaymentRecorded}
+            onDownloadProof={handleDownloadProof}
+            closeButton={<button className="modal-close" onClick={onClose}><IcClose /></button>}
+          />
+        </div>
+      </div>
+    );
+  }
+
   /* ── DETAIL VIEW ─────────────────────────────────────────── */
-  if (!mode) {
+  // (an edit or a schedule left open on another reservation falls back to the lot card)
+  if (!mode || mode === 'edit_engagement' || mode === 'finance_view') {
     return (
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal ldm-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
@@ -1435,70 +1654,72 @@ export default function LotDetailModal({
                       </span>
                     </div>
                   )}
-                  {firstDepositInstallment && (
-                    <div className="ldm-ri-row">
-                      <span className="ldm-ri-key">1er versement plan</span>
-                      <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {formatPrice(firstDepositInstallment.amount)}
-                        {firstDepositInstallment.status === 'paid'
-                          ? <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Payé</span>
-                          : <span className="badge badge-red" style={{ fontSize: '0.65rem' }}>En attente</span>
-                        }
-                      </span>
-                    </div>
-                  )}
-                  {/* Bloc promotion — visible uniquement en réservation engagée et au-delà */}
-                  {['reservation_engagee','reservation_soldee',...EDL_STATUSES,'chez_notaire','chez_proprietaire'].includes(lot.status) && reservation?.sale_price != null && (
+                  {/* Montants de la réservation engagée (spec E4-T5) */}
+                  {ACTE_STATUSES.includes(lot.status) && reservation?.sale_price != null && !financeLegacy && (
                     <>
-                      {reservation.sale_price !== lot.price && (
+                      <div className="ldm-ri-row">
+                        <span className="ldm-ri-key">Prix figurant sur l'acte</span>
+                        <span className="ldm-ri-val ldm-ri-val--bold">{formatMad(reservation.sale_price)}</span>
+                      </div>
+                      {(reservation.gap_amount ?? 0) > 0 && (
                         <div className="ldm-ri-row">
-                          <span className="ldm-ri-key">Prix de vente</span>
-                          <span className="ldm-ri-val ldm-ri-val--bold">{formatPrice(reservation.sale_price)}</span>
+                          <span className="ldm-ri-key">Écart à régulariser</span>
+                          <span className="ldm-ri-val">
+                            {formatMad(reservation.gap_amount)}
+                            {reservation.gap_due_timing === 'date'
+                              ? ` — le ${formatDate(reservation.gap_due_date)}`
+                              : GAP_TIMING_TEXT[reservation.gap_due_timing] ? ` — ${GAP_TIMING_TEXT[reservation.gap_due_timing]}` : ''}
+                          </span>
                         </div>
                       )}
-                      {(reservation.promotion_amount ?? 0) > 0 && (
-                        <>
-                          <div className="ldm-ri-row">
-                            <span className="ldm-ri-key">Promotion</span>
-                            <span className="ldm-ri-val" style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
-                              {formatPrice(reservation.promotion_amount)}
-                            </span>
-                          </div>
-                          <div className="ldm-ri-row">
-                            <span className="ldm-ri-key">Paiement promotion</span>
-                            <span className="ldm-ri-val">
-                              {reservation.promotion_paid_timing === 'debut' ? 'Au début' : reservation.promotion_paid_timing === 'fin' ? 'À la fin' : '—'}
-                            </span>
-                          </div>
-                          <div className="ldm-ri-row">
-                            <span className="ldm-ri-key">Promotion reçue</span>
-                            <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {reservation.promotion_received
-                                ? <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Reçue</span>
-                                : <span className="badge badge-red" style={{ fontSize: '0.65rem' }}>Non reçue</span>
-                              }
-                            </span>
-                          </div>
-                        </>
-                      )}
+                      <div className="ldm-ri-row">
+                        <span className="ldm-ri-key">Premier acompte reçu</span>
+                        <span className="ldm-ri-val">{formatMad(reservation.first_payment)}</span>
+                      </div>
                     </>
                   )}
-                  {/* Montant restant à payer */}
-                  {lot.status === 'reservation_engagee' && paymentSchedule && (() => {
-                    const unpaidTotal = paymentSchedule.installments
-                      ?.filter(i => i.status === 'pending')
-                      .reduce((s, i) => s + i.amount, 0) ?? 0;
-                    const promoRemaining = (reservation?.promotion_amount ?? 0) > 0 && !reservation?.promotion_received
-                      ? (reservation.promotion_paid_timing === 'fin' ? reservation.promotion_amount : 0)
-                      : 0;
-                    const remaining = unpaidTotal + promoRemaining;
-                    if (remaining <= 0) return null;
+                  {/* Acte de réservation archivé */}
+                  {ACTE_STATUSES.includes(lot.status) && documentsError && (
+                    <div className="ldm-ri-row">
+                      <span className="ldm-ri-key">Documents indisponibles.</span>
+                    </div>
+                  )}
+                  {ACTE_STATUSES.includes(lot.status) && documentsLoaded && (() => {
+                    const acte = latestActe;
+                    if (acte) {
+                      return (
+                        <div className="ldm-ri-row">
+                          <span className="ldm-ri-key">Acte</span>
+                          <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Acte de réservation</span>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleDownloadDocument(acte)}>
+                              Télécharger
+                            </button>
+                            {acteFailedFor === lot.reservation_id && (
+                              <button type="button" className="btn btn-ghost btn-sm" onClick={handleRegenerateActe} disabled={regeneratingActe}
+                                title="La nouvelle version de l'acte n'a pas pu être générée">
+                                {regeneratingActe ? 'Génération...' : 'Régénérer'}
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    }
+                    // No deed yet: legitimately waiting for the paid threshold, or a failed generation
+                    if (!financeSummary) return null;
+                    if (!financeSummary.acte_available) {
+                      return (
+                        <div className="ldm-ri-row">
+                          <span className="ldm-ri-key" style={{ color: 'var(--color-warning)' }}>{acteThresholdMessage(financeSummary)}</span>
+                        </div>
+                      );
+                    }
                     return (
-                      <div className="ldm-ri-row" style={{ marginTop: 4, borderTop: '1px solid var(--bg-surface)', paddingTop: 6 }}>
-                        <span className="ldm-ri-key" style={{ fontWeight: 600 }}>Restant à payer</span>
-                        <span className="ldm-ri-val ldm-ri-val--bold" style={{ color: 'var(--color-primary)' }}>
-                          {formatPrice(remaining)}
-                        </span>
+                      <div className="ldm-ri-row">
+                        <span className="ldm-ri-key" style={{ color: 'var(--color-warning)' }}>L'acte n'a pas été généré.</span>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={handleRegenerateActe} disabled={regeneratingActe}>
+                          {regeneratingActe ? 'Génération...' : 'Régénérer'}
+                        </button>
                       </div>
                     );
                   })()}
@@ -1509,18 +1730,58 @@ export default function LotDetailModal({
                     <div className="ldm-fpa-body">
                       <div className="ldm-fpa-title">Premier versement en retard</div>
                       <div className="ldm-fpa-desc">
-                        Échéance du {formatDate(firstDepositInstallment.due_date)} — {formatPrice(firstDepositInstallment.amount)}
+                        Échéance du {formatDate(firstDepositInstallment.due_date)} — restant dû {formatMad(firstDepositInstallment.remaining)}.
+                        {canRecordPayments && ' Enregistrez l\'encaissement dans l\'échéancier.'}
                       </div>
                     </div>
-                    <button className="btn btn-primary btn-sm"
-                      onClick={handleConfirmFirstPayment} disabled={confirmingPayment}
-                      style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      <IcCheck />{confirmingPayment ? 'Confirmation...' : 'Confirmer le paiement'}
-                    </button>
                   </div>
                 )}
               </div>
             )}
+          </div>
+
+          {/* ── Échéancier et encaissements (réservation engagée et au-delà) ── */}
+          {showFinance && (
+            <div className="ldm-documents-section">
+              <div className="ldm-documents-header">
+                <div className="ldm-section-label" style={{ margin: 0 }}>Échéancier et encaissements</div>
+                <div className="ldm-finance-actions">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={openFinanceView}>
+                    Voir l'échéancier
+                  </button>
+                  {canEditEngagement && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={openEngagementEdit}>
+                      Modifier la réservation
+                    </button>
+                  )}
+                </div>
+              </div>
+              <PaymentsPanel
+                key={`${lot.reservation_id}-${financeVersion}`}
+                reservationId={lot.reservation_id}
+                compact
+                showActeStatus={false}
+                onSummaryChange={reportFinanceSummary}
+                onSummaryError={reportFinanceError}
+                onPaymentRecorded={handlePaymentRecorded}
+              />
+            </div>
+          )}
+          {showFinance && (
+            <div className="ldm-documents-section">
+              <div className="ldm-section-label">Historique des modifications</div>
+              <ReservationChangesHistory
+                key={`${lot.reservation_id}-${financeVersion}`}
+                reservationId={lot.reservation_id}
+                installments={financeSummary?.installments}
+              />
+            </div>
+          )}
+
+          {/* ── Notifications ── */}
+          <div className="ldm-documents-section">
+            <div className="ldm-section-label">Notifications</div>
+            <NotificationHistory lotId={lot.id} />
           </div>
 
           {/* ── Documents notariés ── */}
@@ -1569,7 +1830,7 @@ export default function LotDetailModal({
                         >
                           <IcDownload />
                         </button>
-                        {lot.status === 'chez_notaire' && (
+                        {lot.status === 'chez_notaire' && doc.category !== ACTE_CATEGORY && (
                           <button
                             className="ldm-doc-btn ldm-doc-btn--danger"
                             onClick={() => handleDeleteDocument(doc.id)}
@@ -1689,36 +1950,33 @@ export default function LotDetailModal({
             })()}
             {lot.status === 'reservation_engagee' && (
               <>
-                {(reservation?.promotion_amount ?? 0) > 0 && !reservation?.promotion_received && (
-                  <button className="btn btn-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    onClick={handleMarkPromotionReceived} disabled={markingPromotion}
-                    title="Marquer le montant de la promotion comme reçu">
-                    <IcTag /> {markingPromotion ? 'En cours...' : 'Promotion reçue'}
-                  </button>
-                )}
-                {/* Document : reçu si promotion en attente, acte si promotion reçue (ou pas de promotion) */}
-                {(reservation?.promotion_received || !(reservation?.promotion_amount > 0)) ? (
+                {/* Document : acte une fois le seuil d'encaissement atteint, reçu dès le premier acompte */}
+                {financeSummary?.acte_available ? (
                   <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     onClick={handleDownloadCertificate} disabled={downloadingDoc}
                     title="Télécharger l'acte de réservation PDF">
                     <IcDownload /> {downloadingDoc ? 'Génération...' : 'Acte de réservation'}
                   </button>
-                ) : (
+                ) : (financeSummary?.first_payment ?? 0) > 0 && (
                   <button className="btn btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                     onClick={handleDownloadReceipt} disabled={downloadingDoc}
-                    title="Télécharger le reçu de paiement (promotion non encore reçue)">
+                    title="Télécharger le reçu de paiement (acte pas encore disponible)">
                     <IcDownload /> {downloadingDoc ? 'Génération...' : 'Reçu de paiement'}
                   </button>
                 )}
                 {can('solde') && (() => {
-                  const allPaid = !paymentSchedule || paymentSchedule.installments.every(i => i.status === 'paid');
+                  // Soldable only once nothing is left to pay (gap included) — checked again by the backend
+                  // (a legacy reservation has no known amount left: never offered here)
+                  const allPaid = financeSummary != null && !financeLegacy && financeSummary.remaining <= 0;
                   return (
                     <button
                       className="btn btn-success"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, ...(!allPaid ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
                       onClick={() => allPaid && handleSetMode('to_soldee')}
                       disabled={!allPaid}
-                      title={!allPaid ? 'Tous les versements doivent être encaissés avant de marquer soldé' : 'Marquer le lot comme soldé'}
+                      title={!allPaid
+                        ? (financeLegacy ? LEGACY_FINANCE_MESSAGE : financeSummary ? `Reste à payer : ${formatMad(financeSummary.remaining)} — la réservation ne peut pas être soldée.` : financeFailed ? 'Échéancier indisponible.' : "Chargement de l'échéancier…")
+                        : 'Marquer le lot comme soldé'}
                     >
                       <IcCheck /> Marquer soldé
                     </button>
@@ -1858,57 +2116,35 @@ export default function LotDetailModal({
   const isEngageMode = mode === 'direct_engage' || mode === 'finaliser_engage' || mode === 'option_engage';
   const isEdlMode = ['edl_schedule', 'edl_reschedule', 'edl_done'].includes(mode);
   const showThirdPanel = (isStartOption || isEngageMode) && enablePaymentPlan && lot.price;
-  // Price to use in the third panel for engage modes (sale price if set, else catalogue)
-  const engagePlanPrice = salePriceEngaged ? parseFloat(salePriceEngaged) : (lot?.price || 0);
-  // When finaliser_engage + deduct: guarantee already paid → subtract from plan base
-  // Same for option_engage + deduct: the option deposit is subtracted
-  const finaliserDeductOffset = validationChoice !== 'deduct' ? 0
-    : mode === 'finaliser_engage' ? activeGuarantee
-    : mode === 'option_engage' ? optionDeposit
-    : 0;
-  const thirdPanelPrice = isEngageMode ? Math.max(0, engagePlanPrice - finaliserDeductOffset) : remainingBalance;
-  // Promotion = catalogue − prix de vente (si engage mode, sinon 0)
-  const engagePromoAmount = isEngageMode ? Math.max(0, (lot?.price || 0) - engagePlanPrice) : 0;
+  // Premier acompte reçu à l'engagement : saisi (direct / option, + acompte de l'option déduit),
+  // ou la garantie conservée (réservation à finaliser), 0 si elle est rendue
+  const finaliserFirstPayment = validationChoice === 'deduct' ? activeGuarantee : 0;
+  const engageFirstPayment = mode === 'finaliser_engage'
+    ? finaliserFirstPayment
+    : (parseAmount(amounts.firstPayment) ?? 0) + (mode === 'option_engage' && validationChoice === 'deduct' ? optionDeposit : 0);
+  const engageAgreed = parseAmount(amounts.agreedTotalPrice) ?? 0;
+  // The schedule covers agreed − first payment, the gap on its own installment (spec E4-T5)
+  const engagePreview = isEngageMode ? {
+    agreed: engageAgreed,
+    firstPayment: engageFirstPayment,
+    gap: gapAmount(amounts.agreedTotalPrice, amounts.salePrice),
+    gapTiming: amounts.gapDueTiming,
+    gapDate: amounts.gapDueDate,
+  } : null;
+  const thirdPanelPrice = isEngageMode ? Math.max(0, engageAgreed - engageFirstPayment) : remainingBalance;
+  const previewRowCount = showThirdPanel && thirdPanelPrice > 0
+    ? computePreview(thirdPanelPrice, paymentPlan, engagePreview).allRows.length : 0;
+  // Deed price hint: deed price per m² × surface
+  const salePriceHint = lot?.surface && lot.surface > 0 && (lot?.price_per_sqm_acte || lotPricingConfig?.prix_m2_acte)
+    ? `${Number(lot?.price_per_sqm_acte || lotPricingConfig.prix_m2_acte).toLocaleString('fr-FR')} MAD/m² acte × ${lot.surface} m²`
+    : null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className={`modal ${showThirdPanel ? 'modal--3col' : 'modal--split'}`} onClick={e => e.stopPropagation()}>
 
         {/* ── LEFT: Lot summary ── */}
-        <div className="modal-split-left">
-          <div className="msl-eyebrow">Lot</div>
-          <div className="msl-num">{lot.numero}</div>
-          {lot.zone && <div className="msl-zone">Zone {lot.zone}{lot.type_lot ? ` · ${lot.type_lot}` : ''}</div>}
-          <div className="msl-price">{formatPrice(lot.price)}</div>
-          {lot.price_per_sqm
-            ? <div className="msl-price-m2">{lot.price_per_sqm.toLocaleString('fr-FR')} MAD/m² <span className="lot-price-tag">catalogue</span></div>
-            : (lot.surface && lot.price && lot.surface > 0)
-              ? <div className="msl-price-m2">{formatPrice(lot.price / lot.surface)}/m² <span className="lot-price-tag">catalogue</span></div>
-              : null
-          }
-          {lot.price_per_sqm_acte && lot.surface && (
-            <div className="msl-price-m2 lot-price-acte">
-              {formatPrice(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100)} <span className="lot-price-tag">acte</span>
-            </div>
-          )}
-          <span className={`status-badge ${lot.status}`} style={{ display: 'inline-flex', fontSize: '0.78rem', padding: '5px 11px', margin: '14px 0 18px' }}>
-            <span className="status-dot"></span>{STATUS_LABELS[lot.status]}
-          </span>
-          <div className="msl-stats">
-            {lotStats.map((s, i) => (
-              <div key={i} className="msl-stat">
-                <span className="msl-stat-icon">{s.icon}</span>
-                <span className="msl-stat-text">
-                  <span className="msl-stat-value">{s.value}</span>
-                  <span className="msl-stat-label">{s.label}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-          {lot.client_name && (
-            <div className="msl-reservation-tag"><IcUser /><span>{lot.client_name}</span></div>
-          )}
-        </div>
+        {lotSummaryPanel}
 
         {/* ── RIGHT: Form ── */}
         <div className="modal-split-right">
@@ -1920,7 +2156,7 @@ export default function LotDetailModal({
             <button className="modal-close" onClick={onClose}><IcClose /></button>
           </div>
 
-          {lot.price && (
+          {lot.price && !isEngageMode && (
             <div className="msr-price-pill">
               <span className="msr-price-pill-label">Prix catalogue</span>
               <span className="msr-price-pill-value">{formatPrice(lot.price)}</span>
@@ -1928,7 +2164,7 @@ export default function LotDetailModal({
           )}
           {['direct_engage', 'finaliser_engage', 'option_engage'].includes(mode) && !lot.price_per_sqm_acte && lotPricingConfig?.sale_price_computed && Math.abs(lotPricingConfig.sale_price_computed - lot.price) > 1 && (
             <div className="msr-price-pill" style={{ background: 'rgba(139,92,246,0.08)', borderColor: 'rgba(139,92,246,0.25)' }}>
-              <span className="msr-price-pill-label">Prix acte</span>
+              <span className="msr-price-pill-label">Grille de prix (acte)</span>
               <span className="msr-price-pill-value" style={{ color: '#8b5cf6' }}>{formatPrice(lotPricingConfig.sale_price_computed)}</span>
             </div>
           )}
@@ -2037,12 +2273,7 @@ export default function LotDetailModal({
                 <div className="msr-field-group">
                   <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
                   <div className="msr-client-row">
-                    <select className="msr-select"
-                      value={selectedClient?.id || ''}
-                      onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
-                      <option value="">Sélectionner un client</option>
-                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
-                    </select>
+                    <ClientPicker clients={clients} value={selectedClient} onChange={setSelectedClient} />
                     <button type="button" className="msr-btn-add-client"
                       onClick={() => setShowAddClient(!showAddClient)}>
                       {showAddClient ? <IcClose /> : <IcPlus />}
@@ -2082,12 +2313,7 @@ export default function LotDetailModal({
                 <div className="msr-field-group">
                   <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
                   <div className="msr-client-row">
-                    <select className="msr-select"
-                      value={selectedClient?.id || ''}
-                      onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
-                      <option value="">Sélectionner un client</option>
-                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
-                    </select>
+                    <ClientPicker clients={clients} value={selectedClient} onChange={setSelectedClient} />
                     <button type="button" className="msr-btn-add-client"
                       onClick={() => setShowAddClient(!showAddClient)}>
                       {showAddClient ? <IcClose /> : <IcPlus />}
@@ -2126,8 +2352,6 @@ export default function LotDetailModal({
 
             {/* ── direct_engage (available → engagée) / option_engage (option → engagée) form ── */}
             {(mode === 'direct_engage' || mode === 'option_engage') && (() => {
-              const salePrice = salePriceEngaged ? parseFloat(salePriceEngaged) : null;
-              const promoAmt = (salePrice != null && lot?.price != null) ? Math.max(0, lot.price - salePrice) : 0;
               return (
                 <>
                   {/* Client — choisi en direct, celui de l'option sinon */}
@@ -2135,12 +2359,7 @@ export default function LotDetailModal({
                     <div className="msr-field-group">
                       <label className="msr-label"><IcUser /> Client <span className="msr-required">*</span></label>
                       <div className="msr-client-row">
-                        <select className="msr-select"
-                          value={selectedClient?.id || ''}
-                          onChange={e => { const c = clients.find(c => c.id === parseInt(e.target.value)); setSelectedClient(c); }}>
-                          <option value="">Sélectionner un client</option>
-                          {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ''}</option>)}
-                        </select>
+                        <ClientPicker clients={clients} value={selectedClient} onChange={setSelectedClient} />
                         <button type="button" className="msr-btn-add-client"
                           onClick={() => setShowAddClient(!showAddClient)}>
                           {showAddClient ? <IcClose /> : <IcPlus />}
@@ -2161,99 +2380,22 @@ export default function LotDetailModal({
                     </div>
                   )}
 
-                  {/* Premier acompte (ND) — requis par l'engagement */}
-                  <div className="msr-field-group">
-                    <label className="msr-label"><IcMoney /> Premier acompte (ND) <span className="msr-required">*</span></label>
-                    <div className="msr-price-input-wrap">
-                      <input type="number" className="msr-price-input" placeholder="Montant reçu"
-                        min="0" step="1000" value={guaranteeAmount} onChange={e => setGuaranteeAmount(e.target.value)} />
-                      <span className="msr-price-input-currency">MAD</span>
-                    </div>
-                  </div>
+                  {/* Montants : prix total convenu, prix sur l'acte, écart, premier acompte reçu */}
+                  <EngagementAmountsFields
+                    cataloguePrice={lot.price ?? null}
+                    value={amounts}
+                    onChange={setAmounts}
+                    salePriceHint={salePriceHint}
+                    firstPaymentHint={mode === 'option_engage' && validationChoice === 'deduct' && optionDeposit > 0
+                      ? `+ acompte de l'option conservé : ${formatMad(optionDeposit)}`
+                      : undefined}
+                  />
                   <div className="msr-field-group">
                     <label className="msr-label"><IcPayments /> Mode de paiement <span className="msr-required">*</span></label>
                     <select className="msr-select" value={paymentType} onChange={e => setPaymentType(e.target.value)}>
                       {PAYMENT_TYPES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                     </select>
                   </div>
-
-                  {/* Prix de vente (acte) — calculé automatiquement si prix/m² acte défini */}
-                  <div className="msr-field-group">
-                    <label className="msr-label"><IcTag /> Prix de vente (acte) <span className="msr-required">*</span></label>
-                    <div className="msr-price-input-wrap">
-                      <input type="number" className="msr-price-input"
-                        placeholder={lot?.price_per_sqm_acte && lot?.surface ? 'Calculé automatiquement' : "Prix indiqué sur l'acte"}
-                        min="0" step="1000"
-                        value={salePriceEngaged}
-                        onChange={e => setSalePriceEngaged(e.target.value)} />
-                      <span className="msr-price-input-currency">MAD</span>
-                    </div>
-                    {lot?.surface && lot.surface > 0 && (lot?.price_per_sqm_acte || lotPricingConfig?.prix_m2_acte) && (
-                      <div className="msr-price-diff msr-price-diff--eq" style={{ opacity: 0.7 }}>
-                        {Number(lot?.price_per_sqm_acte || lotPricingConfig.prix_m2_acte).toLocaleString('fr-FR')} MAD/m² acte × {lot.surface} m²
-                      </div>
-                    )}
-                    {lot?.price && salePriceEngaged && (
-                      <div className={`msr-price-diff msr-price-diff--${parseFloat(salePriceEngaged) < lot.price ? 'down' : parseFloat(salePriceEngaged) > lot.price ? 'up' : 'eq'}`}>
-                        {(() => {
-                          const diff = lot.price - parseFloat(salePriceEngaged);
-                          const pct = (Math.abs(diff) / lot.price * 100).toFixed(1);
-                          return diff > 0
-                            ? `Promotion : ${formatPrice(diff)} (−${pct}% du catalogue)`
-                            : diff < 0
-                              ? `Au-dessus du catalogue : +${formatPrice(Math.abs(diff))}`
-                              : 'Identique au prix catalogue — aucune promotion';
-                        })()}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Montant promotion — calculé automatiquement */}
-                  {lot?.price != null && (
-                    <div className="msr-field-group">
-                      <label className="msr-label"><IcTag /> Montant promotion <span className="msr-optional">(calculé)</span></label>
-                      <div className="msr-price-input-wrap">
-                        <input type="number" className="msr-price-input" placeholder="0"
-                          min="0" step="1000"
-                          value={salePriceEngaged ? String(Math.max(0, Math.round((lot.price - parseFloat(salePriceEngaged)) * 100) / 100)) : ''}
-                          onChange={e => {
-                            const p = parseFloat(e.target.value) || 0;
-                            setSalePriceEngaged(String(lot.price - p));
-                          }} />
-                        <span className="msr-price-input-currency">MAD</span>
-                      </div>
-                    </div>
-                  )}
-                  {promoAmt > 0 && (
-                    <>
-                      <div className="msr-field-group">
-                        <label className="msr-label">Paiement promotion <span className="msr-required">*</span></label>
-                        <div className="msr-validation-choice" style={{ flexDirection: 'row', gap: 8 }}>
-                          <button type="button"
-                            className={`msr-vc-btn${promotionTiming === 'debut' ? ' msr-vc-btn--deduct-active' : ''}`}
-                            style={{ flex: 1 }}
-                            onClick={() => setPromotionTiming('debut')}>
-                            <IcCalendar />
-                            <span className="msr-vc-label">Au début</span>
-                            <span className="msr-vc-desc">Avec le 1er acompte</span>
-                          </button>
-                          <button type="button"
-                            className={`msr-vc-btn${promotionTiming === 'fin' ? ' msr-vc-btn--deduct-active' : ''}`}
-                            style={{ flex: 1 }}
-                            onClick={() => setPromotionTiming('fin')}>
-                            <IcCalendar />
-                            <span className="msr-vc-label">À la fin</span>
-                            <span className="msr-vc-desc">Avec le solde</span>
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: 4, fontSize: '0.8rem', color: promotionTiming === 'debut' ? 'var(--color-success)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {promotionTiming === 'debut'
-                          ? <><IcCheck /> Promotion encaissée maintenant — avant validation de l'engagement.</>
-                          : 'Promotion encaissée avec le solde final.'}
-                      </div>
-                    </>
-                  )}
 
                   {/* Échéancier de paiement */}
                   <div className="pay-plan-toggle-row">
@@ -2433,8 +2575,6 @@ export default function LotDetailModal({
 
             {/* ── finaliser_engage — écran de décision (rembourser ou déduire) ── */}
             {mode === 'finaliser_engage' && (() => {
-              const salePrice = salePriceEngaged ? parseFloat(salePriceEngaged) : null;
-              const promoAmt = (salePrice != null && lot?.price != null) ? Math.max(0, lot.price - salePrice) : 0;
               return (
                 <>
                   {lot.client_name && (
@@ -2458,83 +2598,17 @@ export default function LotDetailModal({
                     </div>
                   )}
 
-                  {/* Prix de vente (acte) — calculé automatiquement si prix/m² acte défini */}
-                  <div className="msr-field-group">
-                    <label className="msr-label"><IcTag /> Prix de vente (acte) <span className="msr-required">*</span></label>
-                    <div className="msr-price-input-wrap">
-                      <input type="number" className="msr-price-input"
-                        placeholder={lot?.price_per_sqm_acte && lot?.surface ? 'Calculé automatiquement' : "Prix indiqué sur l'acte"}
-                        min="0" step="1000"
-                        value={salePriceEngaged}
-                        onChange={e => setSalePriceEngaged(e.target.value)} />
-                      <span className="msr-price-input-currency">MAD</span>
-                    </div>
-                    {lot?.surface && lot.surface > 0 && (lot?.price_per_sqm_acte || lotPricingConfig?.prix_m2_acte) && (
-                      <div className="msr-price-diff msr-price-diff--eq" style={{ opacity: 0.7 }}>
-                        {Number(lot?.price_per_sqm_acte || lotPricingConfig.prix_m2_acte).toLocaleString('fr-FR')} MAD/m² acte × {lot.surface} m²
-                      </div>
-                    )}
-                    {lot?.price && salePriceEngaged && (
-                      <div className={`msr-price-diff msr-price-diff--${parseFloat(salePriceEngaged) < lot.price ? 'down' : parseFloat(salePriceEngaged) > lot.price ? 'up' : 'eq'}`}>
-                        {(() => {
-                          const diff = lot.price - parseFloat(salePriceEngaged);
-                          const pct = (Math.abs(diff) / lot.price * 100).toFixed(1);
-                          return diff > 0
-                            ? `Promotion : ${formatPrice(diff)} (−${pct}% du catalogue)`
-                            : diff < 0
-                              ? `Au-dessus du catalogue : +${formatPrice(Math.abs(diff))}`
-                              : 'Identique au prix catalogue — aucune promotion';
-                        })()}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Montant promotion — calculé automatiquement */}
-                  {lot?.price != null && (
-                    <div className="msr-field-group">
-                      <label className="msr-label"><IcTag /> Montant promotion <span className="msr-optional">(calculé)</span></label>
-                      <div className="msr-price-input-wrap">
-                        <input type="number" className="msr-price-input" placeholder="0"
-                          min="0" step="1000"
-                          value={salePriceEngaged ? String(Math.max(0, Math.round((lot.price - parseFloat(salePriceEngaged)) * 100) / 100)) : ''}
-                          onChange={e => {
-                            const p = parseFloat(e.target.value) || 0;
-                            setSalePriceEngaged(String(lot.price - p));
-                          }} />
-                        <span className="msr-price-input-currency">MAD</span>
-                      </div>
-                    </div>
-                  )}
-                  {promoAmt > 0 && (
-                    <>
-                      <div className="msr-field-group">
-                        <label className="msr-label">Paiement promotion <span className="msr-required">*</span></label>
-                        <div className="msr-validation-choice" style={{ flexDirection: 'row', gap: 8 }}>
-                          <button type="button"
-                            className={`msr-vc-btn${promotionTiming === 'debut' ? ' msr-vc-btn--deduct-active' : ''}`}
-                            style={{ flex: 1 }}
-                            onClick={() => setPromotionTiming('debut')}>
-                            <IcCalendar />
-                            <span className="msr-vc-label">Au début</span>
-                            <span className="msr-vc-desc">Avec le 1er acompte</span>
-                          </button>
-                          <button type="button"
-                            className={`msr-vc-btn${promotionTiming === 'fin' ? ' msr-vc-btn--deduct-active' : ''}`}
-                            style={{ flex: 1 }}
-                            onClick={() => setPromotionTiming('fin')}>
-                            <IcCalendar />
-                            <span className="msr-vc-label">À la fin</span>
-                            <span className="msr-vc-desc">Avec le solde</span>
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{ marginTop: 4, fontSize: '0.8rem', color: promotionTiming === 'debut' ? 'var(--color-success)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {promotionTiming === 'debut'
-                          ? <><IcCheck /> Promotion encaissée maintenant — avant validation de l'engagement.</>
-                          : 'Promotion encaissée avec le solde final.'}
-                      </div>
-                    </>
-                  )}
+                  {/* Montants : la garantie conservée est le premier acompte reçu */}
+                  <EngagementAmountsFields
+                    cataloguePrice={lot.price ?? null}
+                    value={amounts}
+                    onChange={setAmounts}
+                    salePriceHint={salePriceHint}
+                    firstPayment={finaliserFirstPayment}
+                    firstPaymentHint={validationChoice === 'deduct'
+                      ? 'Garantie conservée'
+                      : validationChoice === 'refund' ? 'Garantie rendue : aucun acompte reçu' : 'Selon la décision sur la garantie'}
+                  />
 
                   {/* Échéancier de paiement */}
                   <div className="pay-plan-toggle-row">
@@ -2569,9 +2643,9 @@ export default function LotDetailModal({
                   {validationChoice === 'deduct' && (
                     <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
                       <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                        La garantie de <strong>{formatPrice(activeGuarantee)}</strong> sera déduite du prix de vente.
-                        {enablePaymentPlan && engagePlanPrice > 0 && (
-                          <> Le plan de paiement portera sur le solde restant : <strong>{formatPrice(Math.max(0, engagePlanPrice - activeGuarantee))}</strong>.</>
+                        La garantie de <strong>{formatMad(activeGuarantee)}</strong> est comptée comme premier acompte reçu.
+                        {engageAgreed > 0 && (
+                          <> L'échéancier portera sur le reste : <strong>{formatMad(Math.max(0, engageAgreed - activeGuarantee))}</strong>.</>
                         )}
                       </span>
                     </div>
@@ -2583,28 +2657,14 @@ export default function LotDetailModal({
             {/* ── to_soldee form ── */}
             {mode === 'to_soldee' && (
               <>
-                {/* Avertissement promotion non reçue (timing 'fin') */}
-                {reservation?.promotion_amount > 0
-                  && !reservation?.promotion_received
-                  && reservation?.promotion_paid_timing === 'fin' && (
-                  <div className="msr-info-pill" style={{ background: 'rgba(239,68,68,0.10)', borderColor: 'var(--color-danger)', marginBottom: 12 }}>
-                    <span style={{ fontSize: '0.82rem', color: 'var(--color-danger)' }}>
-                      La différence de promotion (<strong>{reservation.promotion_amount.toLocaleString('fr-FR')} MAD</strong>) doit être reçue avant de solder — utilisez le bouton <em>Promotion reçue</em> sur la fiche du lot.
-                    </span>
-                  </div>
-                )}
                 <div className="msr-field-group">
-                  <label className="msr-label"><IcMoney /> Prix final de vente <span className="msr-required">*</span></label>
-                  <div className="msr-price-input-wrap">
-                    <input type="number" className="msr-price-input" placeholder="Prix de vente final"
-                      value={finalSalePrice} onChange={e => setFinalSalePrice(e.target.value)} />
-                    <span className="msr-price-input-currency">MAD</span>
+                  <span className="msr-label"><IcMoney /> Prix total convenu</span>
+                  <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                    <span className="msr-info-pill-value">
+                      {formatMad(financeSummary?.agreed_total_price ?? reservation?.agreed_total_price ?? lot.price)}
+                    </span>
+                    <span className="msr-info-pill-sub">La vente est enregistrée au prix total convenu.</span>
                   </div>
-                  {finalSalePrice && lot.price && (
-                    <div className={`msr-price-diff msr-price-diff--${parseFloat(finalSalePrice) > lot.price ? 'up' : parseFloat(finalSalePrice) < lot.price ? 'down' : 'eq'}`}>
-                      {(() => { const diff = parseFloat(finalSalePrice) - lot.price; const pct = (diff / lot.price * 100).toFixed(1); return `${diff > 0 ? '+' : ''}${pct}% ${diff > 0 ? 'au-dessus du' : diff < 0 ? 'en-dessous du' : 'identique au'} catalogue`; })()}
-                    </div>
-                  )}
                 </div>
                 <div className="msr-field-group">
                   <label className="msr-label">Notes <span className="msr-optional">(optionnel)</span></label>
@@ -2672,11 +2732,11 @@ export default function LotDetailModal({
                   {lot.client_name && <span style={{ fontWeight: 600 }}>{lot.client_name}</span>}
                   {lot.notary_name && <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Notaire : {lot.notary_name}</span>}
                   {lot.notary_date && <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Acte du : {formatDate(lot.notary_date)}</span>}
-                  {documents.length > 0 ? (
+                  {notaryDocuments.length > 0 ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.82rem' }}>
                       <IcFile style={{ color: 'var(--color-primary)' }} />
                       <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
-                        {documents.length} document{documents.length > 1 ? 's' : ''} joint{documents.length > 1 ? 's' : ''}
+                        {notaryDocuments.length} document{notaryDocuments.length > 1 ? 's' : ''} joint{notaryDocuments.length > 1 ? 's' : ''}
                       </span>
                     </span>
                   ) : (
@@ -2723,19 +2783,19 @@ export default function LotDetailModal({
             )}
             {mode === 'start_option' && (
               <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
-                onClick={handleStartOption} disabled={loading}>
+                onClick={handleStartOption} disabled={loading || !selectedClient}>
                 <IcCheck />{loading ? 'En cours...' : 'Confirmer l\'option'}
               </button>
             )}
             {mode === 'direct_reservation' && (
               <button type="button" className="msr-btn-confirm msr-btn-confirm--reserve"
-                onClick={handleDirectReservation} disabled={loading}>
+                onClick={handleDirectReservation} disabled={loading || !selectedClient}>
                 <IcCheck />{loading ? 'En cours...' : 'Créer la réservation'}
               </button>
             )}
             {mode === 'direct_engage' && (
               <button type="button" className="msr-btn-confirm msr-btn-confirm--sell"
-                onClick={handleDirectEngage} disabled={loading}>
+                onClick={handleDirectEngage} disabled={loading || !selectedClient}>
                 <IcCheck />{loading ? 'En cours...' : 'Engager la réservation'}
               </button>
             )}
@@ -2838,10 +2898,10 @@ export default function LotDetailModal({
                 <span className="mpp-title">Plan de paiement</span>
                 <span className="mpp-subtitle">{previewRowCount} versement{previewRowCount > 1 ? 's' : ''}</span>
               </div>
-              <span className="mpp-total">{formatPrice(thirdPanelPrice)}</span>
+              <span className="mpp-total">{isEngageMode ? formatMad(thirdPanelPrice) : formatPrice(thirdPanelPrice)}</span>
             </div>
             <div className="mpp-body">
-              <PaymentPlanConfigurator lotPrice={thirdPanelPrice} plan={paymentPlan} onChange={setPaymentPlan} panel promotionAmount={engagePromoAmount} />
+              <PaymentPlanConfigurator lotPrice={thirdPanelPrice} plan={paymentPlan} onChange={setPaymentPlan} panel engage={engagePreview} />
             </div>
           </div>
         )}

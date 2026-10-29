@@ -1,14 +1,20 @@
-"""Email service — invitations and payment confirmations via Resend."""
+"""Email service — invitations, confirmations and notifications via Resend."""
 
 import asyncio
-from datetime import datetime
+import base64
+from datetime import date, datetime
 
 import resend
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.services.notifications.channels import Attachment, DeliveryResult
 
 logger = get_logger(__name__)
+
+# User-facing message stored in the notification history; the provider error
+# itself is logged only (it can be technical or leak account details).
+SEND_FAILED_ERROR = "Échec de l'envoi de l'email."
 
 
 def _build_invitation_html(
@@ -193,17 +199,21 @@ def _format_amount(amount: float) -> str:
     return f"{amount:,.2f} DH".replace(",", " ")
 
 
-def _format_date(dt: datetime | None) -> str:
+def _format_date(dt: date | datetime | None) -> str:
     """Format a datetime to a readable French date string."""
     if dt is None:
         return "—"
     return dt.strftime("%d/%m/%Y")
 
 
+# Installment types (``payment_installments.payment_type``) in the emails.
+_PAYMENT_TYPE_LABELS = {"deposit": "Acompte", "balance": "Solde", "gap": "Écart"}
+
+
 def _build_payment_confirmation_html(
     client_name: str,
     amount: float,
-    paid_date: datetime | None,
+    paid_date: date | datetime | None,
     lot_numero: str,
     project_name: str,
     payment_type: str,
@@ -216,8 +226,8 @@ def _build_payment_confirmation_html(
     total_str = _format_amount(schedule_total)
     date_str = _format_date(paid_date)
 
-    is_balance = payment_type == "balance"
-    type_label = "Solde" if is_balance else "Acompte"
+    is_balance = payment_type != "deposit"
+    type_label = _PAYMENT_TYPE_LABELS.get(payment_type, "Acompte")
     banner_bg = "#1a3a4f" if is_balance else "#1a4731"
     banner_color = "#3b9edb" if is_balance else "#2ecc71"
     banner_text = f"Versement {type_label.lower()} confirmé"
@@ -441,6 +451,49 @@ class EmailService:
     def _enabled(self) -> bool:
         return bool(settings.RESEND_API_KEY)
 
+    async def send_email(
+        self,
+        to: str,
+        subject: str,
+        html: str,
+        attachments: list[Attachment] | None = None,
+    ) -> DeliveryResult:
+        """Send a generic email; never raises.
+
+        Returns ``not_configured`` without ``RESEND_API_KEY``, ``failed`` if
+        Resend refuses it (the provider error is logged, not returned),
+        ``sent`` otherwise.
+        """
+        if not self._enabled:
+            logger.warning("Email skipped — RESEND_API_KEY not configured", to=to)
+            return DeliveryResult(
+                status="not_configured",
+                error="L'envoi d'emails n'est pas configuré (RESEND_API_KEY absente).",
+            )
+
+        params: resend.Emails.SendParams = {
+            "from": settings.EMAIL_FROM,
+            "to": [to],
+            "subject": subject,
+            "html": html,
+        }
+        if attachments:
+            params["attachments"] = [
+                {
+                    "filename": a.filename,
+                    "content": base64.b64encode(a.content).decode("ascii"),
+                }
+                for a in attachments
+            ]
+
+        try:
+            await asyncio.to_thread(resend.Emails.send, params)
+        except Exception:
+            logger.exception("Failed to send email", to=to, subject=subject)
+            return DeliveryResult(status="failed", error=SEND_FAILED_ERROR)
+        logger.info("Email sent", to=to, subject=subject)
+        return DeliveryResult(status="sent")
+
     async def send_invitation_email(
         self,
         first_name: str,
@@ -528,7 +581,7 @@ class EmailService:
         client_name: str,
         client_email: str,
         amount: float,
-        paid_date: datetime | None,
+        paid_date: date | datetime | None,
         lot_numero: str,
         project_name: str,
         payment_type: str,
@@ -536,7 +589,7 @@ class EmailService:
         total_installments: int,
         schedule_total: float,
     ) -> bool:
-        """Send a payment confirmation email to the client (deposit or balance).
+        """Send a payment confirmation email (deposit, balance or gap installment).
 
         Returns True if sent successfully, False otherwise.
         """
@@ -547,7 +600,7 @@ class EmailService:
             )
             return False
 
-        type_label = "solde" if payment_type == "balance" else "acompte"
+        type_label = _PAYMENT_TYPE_LABELS.get(payment_type, "Acompte").lower()
         html = _build_payment_confirmation_html(
             client_name=client_name,
             amount=amount,

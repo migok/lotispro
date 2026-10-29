@@ -79,12 +79,13 @@ async def _sold_lot(
     )
     lot = await make_lot(db_session, project, status="available", numero=numero)
     buyer = await make_client(db_session, manager)
+    # Paid in full at engagement: nothing left to pay, the lot can be « soldé ».
     engage = await _post(
         client,
         headers,
         lot.id,
         "direct-engage",
-        {"client_id": buyer.id, "guarantee_amount": 50000, "payment_type": PAYMENT},
+        {"client_id": buyer.id, "guarantee_amount": 500000, "payment_type": PAYMENT},
     )
     assert engage.status_code == 200, engage.json()
     solde = await _post(client, headers, lot.id, "solde", {"price": 500000})
