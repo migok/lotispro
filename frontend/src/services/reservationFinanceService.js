@@ -1,4 +1,4 @@
-import { apiGet, apiPostForm } from '../utils/api';
+import { apiGet, apiPostForm, apiPut } from '../utils/api';
 import { formatMad } from '../utils/formatters';
 
 /**
@@ -29,6 +29,23 @@ export const recordPayment = (reservationId, { installmentId, amount, paidOn, me
   if (file) formData.append('file', file);
   return apiPostForm(`/api/reservations/${reservationId}/payments`, formData);
 };
+
+/** Réservation (notes, auteur…) : `GET /api/reservations/{id}`. */
+export const getReservation = (reservationId) =>
+  apiGet(`/api/reservations/${reservationId}`);
+
+/**
+ * Modifie une réservation engagée (remplacement complet) : `body` = { agreed_total_price,
+ * sale_price, gap_due_timing, gap_due_date, notes, installments: [{ id, amount, due_date }],
+ * reason, expected_updated_at }. Résout avec le résumé financier et `acte_status` ;
+ * rejette avec `status` (409 si la réservation a changé entre-temps) et le message de l'API.
+ */
+export const updateEngagement = (reservationId, body) =>
+  apiPut(`/api/reservations/${reservationId}/engagement`, body);
+
+/** Historique des modifications (le plus récent d'abord), seulement les champs changés. */
+export const listReservationChanges = (reservationId) =>
+  apiGet(`/api/reservations/${reservationId}/changes`);
 
 /** Statut calculé d'une échéance → libellé. */
 export const INSTALLMENT_STATUS_LABELS = {

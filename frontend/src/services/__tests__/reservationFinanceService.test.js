@@ -1,10 +1,13 @@
 import {
   acteThresholdMessage,
   getFinancialSummary,
+  getReservation,
   installmentLabel,
   INSTALLMENT_STATUS_LABELS,
   listPayments,
+  listReservationChanges,
   recordPayment,
+  updateEngagement,
 } from '../reservationFinanceService'
 
 function stubFetch(body = {}, status = 200) {
@@ -79,5 +82,39 @@ describe('reservationFinanceService', () => {
     expect(installmentLabel({ payment_type: 'balance', installment_number: 1 })).toBe('Solde 1')
     expect(installmentLabel({ payment_type: 'gap', installment_number: 1 })).toBe('Écart à régulariser')
     expect(INSTALLMENT_STATUS_LABELS).toEqual({ pending: 'À recevoir', partial: 'Partiellement reçu', paid: 'Reçu' })
+  })
+
+  it('edits an engaged reservation with PUT /engagement and a JSON body', async () => {
+    const fetchMock = stubFetch({ updated_at: '2026-10-28T22:00:00', acte_status: null })
+    const body = {
+      agreed_total_price: 520000, sale_price: 460000, gap_due_timing: 'fin', gap_due_date: null, notes: null,
+      installments: [{ id: 2, amount: 100000, due_date: '2026-11-28' }],
+      reason: 'Remise', expected_updated_at: '2026-10-28T21:50:12.123456',
+    }
+
+    await expect(updateEngagement(11, body)).resolves.toEqual({ updated_at: '2026-10-28T22:00:00', acte_status: null })
+
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(String(url)).toMatch(/\/api\/reservations\/11\/engagement$/)
+    expect(options.method).toBe('PUT')
+    expect(JSON.parse(options.body)).toEqual(body)
+  })
+
+  it('rejects an edit conflict with its 409 status and message', async () => {
+    stubFetch({ error: 'CONFLICT', message: 'La réservation a été modifiée entre-temps. Rechargez la fiche.' }, 409)
+
+    await expect(updateEngagement(11, {})).rejects.toMatchObject({
+      status: 409, message: 'La réservation a été modifiée entre-temps. Rechargez la fiche.',
+    })
+  })
+
+  it('reads the reservation and its change history', async () => {
+    const fetchMock = stubFetch([])
+
+    await getReservation(11)
+    await listReservationChanges(11)
+
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/reservations\/11$/)
+    expect(String(fetchMock.mock.calls[1][0])).toMatch(/\/api\/reservations\/11\/changes$/)
   })
 })

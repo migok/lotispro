@@ -14,6 +14,8 @@ import DepositDecisionFields from './lots/DepositDecisionFields';
 import { buildEngagePayload, firstAmountsError, gapAmount, parseAmount, refundFields } from '../utils/engagePayload';
 import EngagementAmountsFields from './lots/EngagementAmountsFields';
 import PaymentsPanel from './lots/PaymentsPanel';
+import EditEngagementForm from './lots/EditEngagementForm';
+import ReservationChangesHistory from './lots/ReservationChangesHistory';
 import { acteThresholdMessage } from '../services/reservationFinanceService';
 import NotifyClientPanel from './notifications/NotifyClientPanel';
 import NotificationHistory from './notifications/NotificationHistory';
@@ -644,6 +646,11 @@ function LotDetailModalContent({
     () => setFinance({ reservationId: lot?.reservation_id, summary: null, failed: true }),
     [lot?.reservation_id]
   );
+  // « Modifier la réservation » (E4-T5): open for this reservation id; finance views are
+  // remounted (reloaded) after a save; deed regeneration failed on the last save.
+  const [editingFor, setEditingFor] = useState(null);
+  const [financeVersion, setFinanceVersion] = useState(0);
+  const [acteFailedFor, setActeFailedFor] = useState(null);
   const reportEdlOpenCount = useCallback(
     (count) => setEdlCount({ lotId: lot?.id, count }),
     [lot?.id]
@@ -816,6 +823,7 @@ function LotDetailModalContent({
     try {
       await apiPost(`/api/reservations/${lot.reservation_id}/acte`, {});
       toast.success('Acte régénéré');
+      setActeFailedFor(null);
       await loadDocuments();
     } catch (err) {
       toast.error(err.message || "Erreur lors de la génération de l'acte");
@@ -871,6 +879,22 @@ function LotDetailModalContent({
   // A payment may archive the deed (threshold crossed): reload documents and the lot list
   const handlePaymentRecorded = () => {
     loadDocuments();
+    if (onRefresh) onRefresh();
+  };
+
+  // After an edit: reload the reservation, amounts, schedule, history, documents and the lot list
+  const handleEngagementSaved = (result) => {
+    setEditingFor(null);
+    setActeFailedFor(result?.acte_status === 'failed' ? lot.reservation_id : null);
+    setFinanceVersion((v) => v + 1);
+    loadReservation(lot.reservation_id);
+    loadDocuments();
+    if (onRefresh) onRefresh();
+  };
+
+  // After « Recharger » (409): the form reloaded itself; refresh the lot card too
+  const handleEngagementReloaded = () => {
+    loadReservation(lot.reservation_id);
     if (onRefresh) onRefresh();
   };
 
@@ -1395,6 +1419,10 @@ function LotDetailModalContent({
   const canRecordPayments = lot.status === 'reservation_engagee'
     && (isManager || (lot.reserved_by_user_id != null && lot.reserved_by_user_id === user?.id));
   const showFinance = ACTE_STATUSES.includes(lot.status) && !!lot.reservation_id;
+  // Same rule as payments (backend: 403 / 400 otherwise). The form needs the loaded summary and
+  // the reservation's notes (the edit replaces them: never open it with unknown notes).
+  const canEditEngagement = canRecordPayments && financeSummary != null && reservation?.id === lot.reservation_id;
+  const editingEngagement = canEditEngagement && editingFor === lot.reservation_id;
   const lotStats = [
     lot.surface && { icon: <IcSurface />, value: `${lot.surface} m²`, label: 'Surface' },
     (lot.price_per_sqm || (lot.price && lot.surface && lot.surface > 0)) && {
@@ -1551,6 +1579,12 @@ function LotDetailModalContent({
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleDownloadDocument(acte)}>
                               Télécharger
                             </button>
+                            {acteFailedFor === lot.reservation_id && (
+                              <button type="button" className="btn btn-ghost btn-sm" onClick={handleRegenerateActe} disabled={regeneratingActe}
+                                title="La nouvelle version de l'acte n'a pas pu être générée">
+                                {regeneratingActe ? 'Génération...' : 'Régénérer'}
+                              </button>
+                            )}
                           </span>
                         </div>
                       );
@@ -1593,15 +1627,45 @@ function LotDetailModalContent({
           {/* ── Échéancier et encaissements (réservation engagée et au-delà) ── */}
           {showFinance && (
             <div className="ldm-documents-section">
-              <div className="ldm-section-label">Échéancier et encaissements</div>
-              <PaymentsPanel
-                key={lot.reservation_id}
+              <div className="ldm-documents-header">
+                <div className="ldm-section-label" style={{ margin: 0 }}>
+                  {editingEngagement ? 'Modifier la réservation' : 'Échéancier et encaissements'}
+                </div>
+                {canEditEngagement && !editingEngagement && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditingFor(lot.reservation_id)}>
+                    Modifier la réservation
+                  </button>
+                )}
+              </div>
+              {editingEngagement ? (
+                <EditEngagementForm
+                  reservationId={lot.reservation_id}
+                  summary={financeSummary}
+                  notes={reservation?.notes}
+                  onSaved={handleEngagementSaved}
+                  onCancel={() => setEditingFor(null)}
+                  onReloaded={handleEngagementReloaded}
+                />
+              ) : (
+                <PaymentsPanel
+                  key={`${lot.reservation_id}-${financeVersion}`}
+                  reservationId={lot.reservation_id}
+                  canRecord={canRecordPayments}
+                  showActeStatus={false}
+                  onSummaryChange={reportFinanceSummary}
+                  onSummaryError={reportFinanceError}
+                  onPaymentRecorded={handlePaymentRecorded}
+                />
+              )}
+            </div>
+          )}
+          {showFinance && (
+            <div className="ldm-documents-section">
+              <div className="ldm-section-label">Historique des modifications</div>
+              <ReservationChangesHistory
+                key={`${lot.reservation_id}-${financeVersion}`}
                 reservationId={lot.reservation_id}
-                canRecord={canRecordPayments}
-                showActeStatus={false}
-                onSummaryChange={reportFinanceSummary}
-                onSummaryError={reportFinanceError}
-                onPaymentRecorded={handlePaymentRecorded}
+                installments={financeSummary?.installments}
               />
             </div>
           )}

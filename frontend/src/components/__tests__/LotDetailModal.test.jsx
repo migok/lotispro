@@ -529,6 +529,135 @@ describe('LotDetailModal', () => {
     })
   })
 
+  describe('edit an engaged reservation (E4-T5)', () => {
+    const OWNER = { id: 2, role: 'commercial' }
+    const OTHER_COMMERCIAL = { id: 3, role: 'commercial' }
+    const ENGAGED = {
+      id: 5, numero: 'E5', status: 'reservation_engagee', price: 500000, reservation_id: 11,
+      client_name: 'Fatima Benali', reserved_by_user_id: OWNER.id,
+    }
+    const RESERVATION = {
+      id: 11, reserved_by_user_id: OWNER.id, notes: 'Client fidèle', sale_price: 450000,
+      agreed_total_price: 500000, gap_amount: 50000, gap_due_timing: 'fin', first_payment: 100000,
+    }
+    /** Consistent schedule: 150 000 + 200 000 + gap 50 000 = 500 000 − 100 000. */
+    const SUMMARY = {
+      catalogue_price: 500000, agreed_total_price: 500000, acte_price: 450000, gap_amount: 50000,
+      gap_due_timing: 'fin', gap_due_date: null, first_payment: 100000, total_received: 100000, remaining: 400000,
+      acte_min_paid_pct: 10, acte_threshold_amount: 50000, acte_available: true,
+      installments: [
+        { id: 1, payment_type: 'deposit', installment_number: 1, amount: 150000, due_date: '2030-01-01T00:00:00', received: 0, remaining: 150000, status: 'pending' },
+        { id: 2, payment_type: 'balance', installment_number: 1, amount: 200000, due_date: '2030-03-01T00:00:00', received: 0, remaining: 200000, status: 'pending' },
+        { id: 4, payment_type: 'gap', installment_number: 1, amount: 50000, due_date: '2030-03-01T00:00:00', received: 0, remaining: 50000, status: 'pending' },
+      ],
+      updated_at: '2026-10-28T10:00:00',
+    }
+    const ACTE = { id: 1, lot_id: 5, reservation_id: 11, filename: 'acte_reservation_11_lotE5.pdf', category: 'acte_reservation', created_at: '2026-10-28T10:00:00' }
+    const CHANGE = {
+      id: 1, user_id: 1, user_name: 'Test Manager', changed_at: '2026-10-28T21:50:12', reason: 'Remise accordée',
+      before: { agreed_total_price: 480000 }, after: { agreed_total_price: 500000 },
+    }
+    const routes = (extra = {}) => ({
+      '/api/reservations/11/financial-summary': SUMMARY,
+      '/api/reservations/11': RESERVATION,
+      '/api/reservations/11/changes': [CHANGE],
+      '/api/lots/5/documents': [ACTE],
+      ...extra,
+    })
+    const gets = (fetchMock, path) =>
+      fetchMock.mock.calls.filter(([url, options]) => String(url).endsWith(path) && !options?.method).length
+    const puts = (fetchMock) => fetchMock.mock.calls.filter(([, options]) => options?.method === 'PUT')
+
+    it('lets a manager open the edit form and cancel it without any request', async () => {
+      const fetchMock = mockFetch(routes())
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: 'Modifier la réservation' }))
+      expect(screen.getByLabelText('Motif de la modification')).toBeInTheDocument()
+      expect(screen.getByLabelText('Notes')).toHaveValue('Client fidèle')
+      await user.click(screen.getByRole('button', { name: 'Annuler' }))
+
+      expect(screen.queryByLabelText('Motif de la modification')).not.toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: 'Modifier la réservation' })).toBeInTheDocument()
+      expect(puts(fetchMock)).toEqual([])
+    })
+
+    it('offers the edit to the commercial who made the reservation', async () => {
+      mockFetch(routes())
+      renderModal(ENGAGED, undefined, OWNER)
+
+      expect(await screen.findByRole('button', { name: 'Modifier la réservation' })).toBeInTheDocument()
+    })
+
+    it('waits for the reservation notes before offering the edit (notes are fully replaced)', async () => {
+      mockFetch(routes({ '/api/reservations/11': PENDING }))
+      renderModal(ENGAGED)
+
+      // footer deed button: the modal has the summary
+      await screen.findByRole('button', { name: /Acte de réservation/ })
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+    })
+
+    it("hides the edit from another commercial", async () => {
+      mockFetch(routes())
+      renderModal(ENGAGED, undefined, OTHER_COMMERCIAL)
+
+      await screen.findByRole('button', { name: /Acte de réservation/ })
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+    })
+
+    it('hides the edit once the reservation is no longer engaged', async () => {
+      mockFetch(routes())
+      renderModal({ ...ENGAGED, status: 'reservation_soldee' })
+
+      await screen.findByRole('table', { name: 'Échéancier' })
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+    })
+
+    it('shows the change history in the lot card', async () => {
+      mockFetch(routes())
+      renderModal({ ...ENGAGED, status: 'reservation_soldee' })
+
+      expect(await screen.findByText('Historique des modifications')).toBeInTheDocument()
+      expect(await screen.findByText('Remise accordée')).toBeInTheDocument()
+      expect(screen.getByText('Prix total convenu : 480 000 MAD → 500 000 MAD')).toBeInTheDocument()
+    })
+
+    it('after saving, reloads the lot, the amounts, the documents and the history, and offers to regenerate a failed deed', async () => {
+      const fetchMock = mockFetch(routes({
+        '/api/reservations/11/engagement': { ...SUMMARY, updated_at: '2026-10-28T11:00:00', acte_status: 'failed' },
+      }))
+      const onRefresh = vi.fn()
+      const user = userEvent.setup()
+      renderWithProviders(<LotDetailModal lot={ENGAGED} onClose={() => {}} onRefresh={onRefresh} />, { user: MANAGER })
+
+      await user.click(await screen.findByRole('button', { name: 'Modifier la réservation' }))
+      // a deed exists: no regenerate alert before the edit
+      expect(screen.queryByRole('button', { name: 'Régénérer' })).not.toBeInTheDocument()
+      const before = {
+        summary: gets(fetchMock, '/api/reservations/11/financial-summary'),
+        reservation: gets(fetchMock, '/api/reservations/11'),
+        documents: gets(fetchMock, '/api/lots/5/documents'),
+        changes: gets(fetchMock, '/api/reservations/11/changes'),
+      }
+      await user.type(screen.getByLabelText('Motif de la modification'), 'Correction des notes')
+      await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+      expect(await screen.findByText("La réservation est enregistrée, mais l'acte n'a pas pu être régénéré.")).toBeInTheDocument()
+      expect(puts(fetchMock)).toHaveLength(1)
+      await waitFor(() => expect(screen.queryByLabelText('Motif de la modification')).not.toBeInTheDocument())
+      await waitFor(() => expect(gets(fetchMock, '/api/reservations/11/financial-summary')).toBeGreaterThan(before.summary))
+      await waitFor(() => expect(gets(fetchMock, '/api/reservations/11')).toBeGreaterThan(before.reservation))
+      await waitFor(() => expect(gets(fetchMock, '/api/lots/5/documents')).toBeGreaterThan(before.documents))
+      await waitFor(() => expect(gets(fetchMock, '/api/reservations/11/changes')).toBeGreaterThan(before.changes))
+      expect(onRefresh).toHaveBeenCalled()
+      // the older deed is still there, and the regeneration stays available
+      expect(await screen.findByRole('button', { name: 'Régénérer' })).toBeInTheDocument()
+      expect(screen.getByText('Acte de réservation', { selector: '.badge' })).toBeInTheDocument()
+    })
+  })
+
   describe('archived deed at the notary stage', () => {
     const NOTARY = { id: 6, numero: 'N6', status: 'chez_notaire', price: 500000, reservation_id: 12, client_name: 'Fatima Benali' }
     const DEED = { id: 1, lot_id: 6, reservation_id: 12, filename: 'acte_reservation_12_lotN6.pdf', category: 'acte_reservation' }
