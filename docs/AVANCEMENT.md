@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-29 (E4 validé en recette et fusionné, PR #54)_
+_Dernière mise à jour : 2026-10-29 (E5-T1 en revue)_
 
 ## Vue d'ensemble
 
@@ -21,7 +21,7 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E2 👤 #7 Fiche client | ✅ | 6 / 6 | [#18](https://github.com/migok/lotispro/issues/18) | [#48](https://github.com/migok/lotispro/pull/48) |
 | E3 Statuts par projet + états des lieux | ✅ | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | [#51](https://github.com/migok/lotispro/pull/51) |
 | E4 🔄 #8 Réservation | ✅ | 6 / 6 | [#29](https://github.com/migok/lotispro/issues/29) | [#54](https://github.com/migok/lotispro/pull/54) |
-| E5 📊 #3 Vue projet | ⬜ | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | |
+| E5 📊 #3 Vue projet | 🟦 | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | |
 | E6 📅 #4 Dashboard par période | ⬜ | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | |
 | E7 SMS / WhatsApp | ⛔ fournisseur à choisir | 0 / 3 | [#42](https://github.com/migok/lotispro/issues/42) | |
 
@@ -55,7 +55,7 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E4-T3 | UI notifications + historique | ✅ | [#32](https://github.com/migok/lotispro/issues/32) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
 | E4-T4 | Rappels d'expiration | ✅ | [#33](https://github.com/migok/lotispro/issues/33) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
 | E4-T5 | Modifier une réservation engagée | ✅ | [#52](https://github.com/migok/lotispro/issues/52) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
-| E5-T1 | Endpoint `lots-matrix` | ⬜ | [#35](https://github.com/migok/lotispro/issues/35) | | |
+| E5-T1 | Endpoint `lots-matrix` | 🟨 | [#35](https://github.com/migok/lotispro/issues/35) | | |
 | E5-T2 | Onglet Lots (grille + navigation) | ⬜ | [#36](https://github.com/migok/lotispro/issues/36) | | |
 | E5-T3 | Filtres persistés | ⬜ | [#37](https://github.com/migok/lotispro/issues/37) | | |
 | E6-T1 | Backend période + KPIs | ⬜ | [#39](https://github.com/migok/lotispro/issues/39) | | |

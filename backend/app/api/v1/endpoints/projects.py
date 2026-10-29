@@ -13,6 +13,7 @@ from app.api.dependencies import (
 )
 from app.domain.schemas.common import MessageResponse
 from app.domain.schemas.lot import LotBulkMetadataUpdate
+from app.domain.schemas.lots_matrix import LotsMatrixResponse
 from app.domain.schemas.project import (
     AssignUserRequest,
     ProjectCreate,
@@ -203,6 +204,25 @@ async def get_project_kpis(
         user_id=current_user.id,
         user_role=current_user.role,
         filter_user_id=user_id if current_user.role == "manager" else None,
+    )
+
+
+@router.get(
+    "/{project_id}/lots-matrix",
+    response_model=LotsMatrixResponse,
+    summary="Lots matrix",
+    description="Lot counts by lot type and status for a project",
+)
+async def get_lots_matrix(
+    project_id: int,
+    current_user: CurrentUser,
+    project_service: ProjectServiceDep,
+) -> LotsMatrixResponse:
+    """Get the lot type x status matrix of a project."""
+    return await project_service.get_lots_matrix(
+        project_id=project_id,
+        user_id=current_user.id,
+        user_role=current_user.role,
     )
 
 

@@ -20,6 +20,8 @@ from app.domain.lot_workflow import (
     assert_transition_allowed,
     enabled_statuses,
 )
+from app.domain.lots_matrix import build_lots_matrix
+from app.domain.schemas.lots_matrix import LotsMatrixResponse
 from app.domain.schemas.project import (
     ProjectCreate,
     ProjectFinancingPlanCreate,
@@ -131,6 +133,28 @@ class ProjectService:
             )
             for p in projects
         ]
+
+    async def get_lots_matrix(
+        self,
+        project_id: int,
+        user_id: int,
+        user_role: str,
+    ) -> LotsMatrixResponse:
+        """Lot counts by type and status, with the project access check.
+
+        Raises:
+            NotFoundError: If project not found
+            AuthorizationError: If user cannot access project
+        """
+        project = await self.project_repo.get_by_id(project_id)
+        if not project:
+            raise NotFoundError("Project", project_id)
+
+        if not await self.project_repo.can_user_access(project_id, user_id, user_role):
+            raise AuthorizationError(message="Vous n'avez pas accès à ce projet.")
+
+        counts = await self.lot_repo.count_by_type_and_status(project_id)
+        return build_lots_matrix(project.enabled_optional_statuses, counts)
 
     async def get_project(
         self,
