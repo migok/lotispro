@@ -84,6 +84,13 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 - Pas de merge effectué (décision reportée).
 - `backend/railway.toml` ligne 6 : `|| alembic stamp 0001` retiré (appliqué manuellement par l'utilisateur le 2026-10-24) — un échec de migration fait désormais échouer le déploiement.
 
+### Déploiement — base partagée en avance sur `dev` / `main` (E4)
+
+- Depuis le 2026-10-28, la base Supabase partagée est à la révision **0025** (migrations E4 0023-0025 appliquées pour la recette), alors que `origin/dev` s'arrête à 0022 et `origin/main` à 0001.
+- Le `preDeployCommand` de Railway lance `alembic upgrade head` : déployer une branche qui ne contient pas les migrations 0023-0025 contre cette base échoue au pré-déploiement (révision 0025 inconnue du code). **Ne déployer aucune branche sans 0023-0025 contre la base partagée.**
+- Ordre de déploiement après le merge d'E4 : `feature/e4-reservation` → `dev`, puis `dev` → `main` ; ensuite déployer Railway (backend) puis Vercel (frontend) immédiatement après, pour ne pas laisser un frontend sans les écrans E4 face à l'API E4 (ou l'inverse).
+- Retour arrière : `alembic downgrade 0022` ramène la base au niveau de `dev`, mais **détruit les données E4** (tables `reservation_payments`, `reservation_changes`, `notifications` ; colonnes prix total convenu / écart des réservations, `projects.acte_min_paid_pct`, `users.phone`, `lot_documents.category`) — à n'utiliser qu'en dernier recours, après sauvegarde.
+
 ## Dette technique suivie
 
 Fonctions backend qui dépassent les seuils `PLR0912` (> 12 branches) / `PLR0915` (> 50 instructions). Ces règles sont désactivées dans `backend/pyproject.toml` ; à découper quand un epic touche la fonction. Liste issue de `ruff check . --isolated --select PLR0912,PLR0915` (E0-T4, 2026-10-22).
