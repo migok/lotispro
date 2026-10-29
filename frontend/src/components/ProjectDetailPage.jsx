@@ -10,6 +10,8 @@ import { useAuth } from '../contexts/authHooks';
 import { getCarteMapContainerStyle } from './carteMapContainerStyle';
 import useLeafletAutoResize from './useLeafletAutoResize';
 import WorkflowSettings from './project/WorkflowSettings';
+import LotsTab from './project/LotsTab';
+import { lotFromFeature } from '../utils/lotFromFeature';
 import { ACTIVE_LOT_STATUSES, STATUS_HEX_COLORS, STATUS_LABELS } from '../utils/constants';
 import { ALL_STATUSES, DEFAULT_ENABLED_OPTIONAL, allowedTransitions, enabledStatuses } from '../utils/lotWorkflow';
 
@@ -33,6 +35,14 @@ const TAB_ICONS = {
       <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
       <line x1="8" y1="2" x2="8" y2="18"/>
       <line x1="16" y1="6" x2="16" y2="22"/>
+    </svg>
+  ),
+  lots: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <line x1="3" y1="9" x2="21" y2="9"/>
+      <line x1="3" y1="15" x2="21" y2="15"/>
+      <line x1="9" y1="3" x2="9" y2="21"/>
     </svg>
   ),
   dashboard: (
@@ -72,6 +82,7 @@ const TAB_ICONS = {
 // Fonction pour générer les onglets dynamiquement selon le rôle
 const getTabs = (isManager) => [
   { id: 'carte', label: 'Carte' },
+  { id: 'lots', label: 'Lots' },
   { id: 'dashboard', label: isManager ? 'Tableau de Bord' : 'Dashboard' },
   { id: 'kpis', label: 'KPIs' },
   { id: 'performance', label: 'Performance' },
@@ -410,40 +421,7 @@ export default function ProjectDetailPage() {
               setSelectedLotIds(new Set(newSelected));
             } else {
               // Normal mode: open detail modal
-              setSelectedLot({
-                id: props.db_id || null,
-                project_id: parseInt(projectId) || null,
-                lot_id: String(lotId),
-                numero: String(lotId),
-                status: status,
-                reserved_by_name: props.reserved_by ?? null,
-                reserved_by_user_id: props.reserved_by_user_id ?? null,
-                reserved_until: props.reserved_until ?? null,
-                surface: area ? parseFloat(area) : null,
-                price: props.price || null,
-                price_per_sqm: props.price_per_sqm || null,
-                price_per_sqm_acte: props.price_per_sqm_acte || null,
-                zone: props.zone || null,
-                client_id: props.client_id || null,
-                client_name: props.client_name || null,
-                client_phone: props.client_phone || null,
-                reservation_id: props.reservation_id || null,
-                reservation_date: props.reservation_date || null,
-                expiration_date: props.expiration_date || null,
-                deposit: props.deposit || 0,
-                days_in_status: props.days_in_status || 0,
-                sold_by_name: props.sold_by_name || null,
-                sale_date: props.sale_date || null,
-                type_lot: props.type_lot || null,
-                emplacement: props.emplacement || null,
-                type_maison: props.type_maison || null,
-                deposit_paid_pct: props.deposit_paid_pct ?? null,
-                balance_paid_pct: props.balance_paid_pct ?? null,
-                first_deposit_days: props.first_deposit_days ?? null,
-                edl_scheduled_at: props.edl_scheduled_at ?? null,
-                edl_intervenant: props.edl_intervenant ?? null,
-                edl_open_actions_count: props.edl_open_actions_count ?? null,
-              });
+              setSelectedLot(lotFromFeature(feature, projectId));
               setShowPopup(true);
             }
           });
@@ -666,6 +644,8 @@ export default function ProjectDetailPage() {
             }}
           />
         </div>
+
+        {activeTab === 'lots' && <LotsTab projectId={parseInt(projectId)} enabledOptional={enabledOptional} />}
 
         {activeTab === 'kpis' && <KPIsTab project={project} />}
 

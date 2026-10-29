@@ -13472,3 +13472,79 @@ body {
 .mpp-finance-table td { padding: 7px 6px; }
 .mpp-finance-table td { font-size: 0.8rem; }
 .mpp-finance-table .finance-record-btn { white-space: normal; text-align: left; line-height: 1.2; }
+
+/* Lots tab (E5) */
+.lots-tab { display: flex; flex-direction: column; gap: var(--spacing-lg); }
+.lots-tab-loading { text-align: center; padding: var(--spacing-xl); }
+.lots-tab-empty,
+.lots-list-empty { color: var(--text-secondary); text-align: center; padding: var(--spacing-lg) 0; margin: 0; }
+.lots-tab-section {
+  min-width: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+}
+.lots-tab-title { margin: 0 0 var(--spacing-md); font-size: 1rem; font-weight: 600; color: var(--text-primary); }
+
+/* Grid: scrolls horizontally on tablets, type column stays visible */
+.lots-matrix-scroll { max-width: 100%; overflow-x: auto; }
+.lots-matrix { min-width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+.lots-matrix th,
+.lots-matrix td { padding: 4px 6px; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--border-subtle); }
+.lots-matrix thead th {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cell-color, var(--text-secondary));
+}
+.lots-matrix .lots-matrix-type {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-secondary);
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.lots-matrix thead .lots-matrix-type { color: var(--text-secondary); }
+.lots-matrix .lots-matrix-type--none { font-style: italic; color: var(--text-secondary); }
+.lots-matrix .lots-matrix-total { font-weight: 600; }
+.lots-matrix tfoot th,
+.lots-matrix tfoot td { border-top: 1px solid var(--border-subtle); border-bottom: none; }
+.lots-matrix-count--zero { color: var(--text-muted); }
+.lots-matrix-count--status {
+  background: color-mix(in srgb, var(--cell-color) 18%, transparent);
+  color: var(--cell-color);
+}
+.lots-matrix-btn {
+  min-width: 2.5rem;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lots-matrix-btn:hover { border-color: currentColor; }
+.lots-matrix-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.lots-matrix-btn.is-selected { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; }
+
+/* Filtered list */
+.lots-list-scroll { overflow-x: auto; }
+.lots-list th,
+.lots-list td { padding: 0.5rem 0.75rem; white-space: nowrap; }
+.lots-list-row { cursor: pointer; }
+.lots-list-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.lots-list-numero { font-weight: 600; color: var(--text-primary); }
+.lots-list-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--status-color, var(--text-secondary));
+}

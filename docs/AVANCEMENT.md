@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-29 (E5-T1 en revue)_
+_Dernière mise à jour : 2026-10-29 (E5-T2 en revue)_
 
 ## Vue d'ensemble
 
@@ -56,7 +56,7 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E4-T4 | Rappels d'expiration | ✅ | [#33](https://github.com/migok/lotispro/issues/33) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
 | E4-T5 | Modifier une réservation engagée | ✅ | [#52](https://github.com/migok/lotispro/issues/52) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
 | E5-T1 | Endpoint `lots-matrix` | 🟨 | [#35](https://github.com/migok/lotispro/issues/35) | | |
-| E5-T2 | Onglet Lots (grille + navigation) | ⬜ | [#36](https://github.com/migok/lotispro/issues/36) | | |
+| E5-T2 | Onglet Lots (grille + navigation) | 🟨 | [#36](https://github.com/migok/lotispro/issues/36) | | |
 | E5-T3 | Filtres persistés | ⬜ | [#37](https://github.com/migok/lotispro/issues/37) | | |
 | E6-T1 | Backend période + KPIs | ⬜ | [#39](https://github.com/migok/lotispro/issues/39) | | |
 | E6-T2 | Sélecteur de période + découpage Dashboard | ⬜ | [#40](https://github.com/migok/lotispro/issues/40) | | |
