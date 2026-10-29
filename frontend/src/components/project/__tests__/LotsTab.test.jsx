@@ -65,8 +65,8 @@ function mockApi(state) {
   return fetchMock
 }
 
-const renderTab = () =>
-  renderWithProviders(<LotsTab projectId={7} enabledOptional={['option']} />, { user: { id: 1, role: 'manager' } })
+const renderTab = (projectId = 7) =>
+  renderWithProviders(<LotsTab projectId={projectId} enabledOptional={['option']} />, { user: { id: 1, role: 'manager' } })
 
 const listedNumbers = () => {
   const list = screen.getByRole('table', { name: 'Liste des lots' })
@@ -74,6 +74,10 @@ const listedNumbers = () => {
 }
 
 describe('LotsTab', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -201,5 +205,166 @@ describe('LotsTab', () => {
 
     expect(screen.getByText('Aucun lot ne correspond aux filtres.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Option — 0 lot' })).toBeInTheDocument()
+  })
+})
+
+describe('LotsTab filters', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  const setup = async () => {
+    const fetchMock = mockApi({ matrix: { body: MATRIX }, lots: { body: GEOJSON } })
+    const user = userEvent.setup()
+    const view = renderTab()
+    await screen.findByRole('table', { name: 'Lots par type et statut' })
+    return { fetchMock, user, view }
+  }
+
+  const badge = () => screen.queryByText(/^\d+ filtres?$/)
+
+  it('shows the bar with no active filter', async () => {
+    await setup()
+
+    expect(screen.getByRole('checkbox', { name: 'Disponible' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Option' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Bloqué' })).not.toBeChecked()
+    const select = screen.getByRole('combobox', { name: 'Type de lot' })
+    expect(select).toHaveValue('')
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Tous les types', 'Villa', 'Non renseigné'])
+    expect(screen.getByRole('searchbox', { name: 'Rechercher un numéro' })).toHaveValue('')
+    expect(badge()).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Réinitialiser' })).toBeDisabled()
+  })
+
+  it('combines several statuses and a type', async () => {
+    const { user } = await setup()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Disponible' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Option' }))
+
+    expect(listedNumbers()).toEqual(['LOT-1', 'LOT-2', 'LOT-3', 'LOT-10'])
+    expect(screen.getByText('1 filtre')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type de lot' }), 'Villa')
+
+    expect(listedNumbers()).toEqual(['LOT-1', 'LOT-2', 'LOT-10'])
+    expect(screen.getByText('2 filtres')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Disponible' }))
+    expect(listedNumbers()).toEqual(['LOT-10'])
+  })
+
+  it('filters on the « Non renseigné » type', async () => {
+    const { user } = await setup()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type de lot' }), 'Non renseigné')
+
+    expect(listedNumbers()).toEqual(['LOT-3'])
+    expect(screen.getByRole('heading', { name: 'Non renseigné — 1 lot' })).toBeInTheDocument()
+  })
+
+  it('filters by number instantly without any request', async () => {
+    const { fetchMock, user } = await setup()
+    const callsBefore = fetchMock.mock.calls.length
+
+    await user.type(screen.getByRole('searchbox', { name: 'Rechercher un numéro' }), '1')
+
+    expect(listedNumbers()).toEqual(['LOT-1', 'LOT-10'])
+    expect(screen.getByText('1 filtre')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('resets every filter', async () => {
+    const { user } = await setup()
+    await user.click(screen.getByRole('checkbox', { name: 'Option' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Type de lot' }), 'Villa')
+    await user.type(screen.getByRole('searchbox', { name: 'Rechercher un numéro' }), '1')
+    expect(screen.getByText('3 filtres')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Réinitialiser' }))
+
+    expect(listedNumbers()).toEqual(['LOT-1', 'LOT-2', 'LOT-3', 'LOT-10'])
+    expect(badge()).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Réinitialiser' })).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: 'Option' })).not.toBeChecked()
+    expect(screen.getByRole('combobox', { name: 'Type de lot' })).toHaveValue('')
+    expect(screen.getByRole('searchbox', { name: 'Rechercher un numéro' })).toHaveValue('')
+  })
+
+  it('reflects a grid cell click in the bar', async () => {
+    const { user } = await setup()
+
+    await user.click(screen.getByRole('button', { name: 'Villa — Disponible : 2 lots' }))
+
+    expect(screen.getByRole('checkbox', { name: 'Disponible' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Option' })).not.toBeChecked()
+    expect(screen.getByRole('combobox', { name: 'Type de lot' })).toHaveValue('Villa')
+    expect(screen.getByText('2 filtres')).toBeInTheDocument()
+  })
+
+  it('keeps the search when a grid cell is clicked', async () => {
+    const { user } = await setup()
+    await user.type(screen.getByRole('searchbox', { name: 'Rechercher un numéro' }), '2')
+
+    await user.click(screen.getByRole('button', { name: 'Villa — Disponible : 2 lots' }))
+
+    expect(screen.getByRole('searchbox', { name: 'Rechercher un numéro' })).toHaveValue('2')
+    expect(listedNumbers()).toEqual(['LOT-2'])
+  })
+
+  it('ignores corrupt or unknown persisted filters', async () => {
+    sessionStorage.setItem('lotsFilters:7', JSON.stringify({ statuses: ['nope'], typeLot: 3, search: 12 }))
+    mockApi({ matrix: { body: MATRIX }, lots: { body: GEOJSON } })
+    renderTab()
+
+    expect(await screen.findByRole('heading', { name: 'Tous les lots — 4 lots' })).toBeInTheDocument()
+    expect(badge()).not.toBeInTheDocument()
+  })
+
+  it('ignores unparsable persisted filters', async () => {
+    sessionStorage.setItem('lotsFilters:7', '{oops')
+    mockApi({ matrix: { body: MATRIX }, lots: { body: GEOJSON } })
+    renderTab()
+
+    expect(await screen.findByRole('heading', { name: 'Tous les lots — 4 lots' })).toBeInTheDocument()
+  })
+
+  it('restores the filters of a project after a remount', async () => {
+    mockApi({ matrix: { body: MATRIX }, lots: { body: GEOJSON } })
+    const user = userEvent.setup()
+    const first = renderTab(7)
+    await user.click(await screen.findByRole('checkbox', { name: 'Option' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Rechercher un numéro' }), '1')
+    first.unmount()
+
+    renderTab(7)
+    expect(await screen.findByRole('checkbox', { name: 'Option' })).toBeChecked()
+    expect(screen.getByRole('searchbox', { name: 'Rechercher un numéro' })).toHaveValue('1')
+    expect(listedNumbers()).toEqual(['LOT-10'])
+    expect(screen.getByText('2 filtres')).toBeInTheDocument()
+  })
+
+  it('starts another project without filter', async () => {
+    sessionStorage.setItem('lotsFilters:7', JSON.stringify({ statuses: ['option'], typeLot: null, search: '' }))
+    mockApi({ matrix: { body: MATRIX }, lots: { body: GEOJSON } })
+    renderTab(8)
+
+    expect(await screen.findByRole('heading', { name: 'Tous les lots — 4 lots' })).toBeInTheDocument()
+    expect(badge()).not.toBeInTheDocument()
+  })
+
+  it('keeps working when the storage is unavailable', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied') })
+    const { user } = await setup()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Option' }))
+
+    expect(listedNumbers()).toEqual(['LOT-10'])
   })
 })

@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import LotDetailModal from '../LotDetailModal';
 import { fetchLotsMatrix, fetchProjectLots } from '../../services/projectLotsService';
+import LotsFiltersBar from './LotsFiltersBar';
 import LotsMatrix from './LotsMatrix';
 import LotsList from './LotsList';
-import { EMPTY_FILTERS, NO_TYPE, NO_TYPE_LABEL, applyLotsFilters, lotsCount, statusLabel } from './lotsFilters';
+import {
+  EMPTY_FILTERS, NO_TYPE, NO_TYPE_LABEL, applyLotsFilters, loadFilters, lotsCount, saveFilters, statusLabel,
+} from './lotsFilters';
 
 const LOAD_ERROR = 'Impossible de charger les lots du projet.';
 
@@ -20,7 +23,8 @@ const describeFilters = (filters) => {
  * et liste filtrée côté client ; le détail d'un lot s'ouvre par-dessus la liste, qui reste montée.
  */
 export default function LotsTab({ projectId, enabledOptional }) {
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  // The parent keys this tab by project, so the persisted filters are read once per project.
+  const [filters, setFilters] = useState(() => loadFilters(projectId));
   const [matrix, setMatrix] = useState(null);
   const [lots, setLots] = useState(null);
   const [error, setError] = useState('');
@@ -45,7 +49,21 @@ export default function LotsTab({ projectId, enabledOptional }) {
 
   const refresh = () => setReloadKey((key) => key + 1);
 
+  const updateFilters = (next) => {
+    setFilters(next);
+    saveFilters(projectId, next);
+  };
+
   const visibleLots = useMemo(() => (lots ? applyLotsFilters(lots, filters) : []), [lots, filters]);
+
+  // Types of the grid rows; a persisted type the grid no longer has stays selectable so the select never lies.
+  const typeOptions = useMemo(() => {
+    const types = matrix ? matrix.rows.map((row) => row.type_lot) : [];
+    if (filters.typeLot !== null && filters.typeLot !== NO_TYPE && !types.includes(filters.typeLot)) {
+      types.push(filters.typeLot);
+    }
+    return types;
+  }, [matrix, filters.typeLot]);
 
   const loaded = matrix !== null && lots !== null;
 
@@ -64,7 +82,14 @@ export default function LotsTab({ projectId, enabledOptional }) {
       {loaded && matrix.grand_total > 0 && (
         <>
           <section className="lots-tab-section">
-            <LotsMatrix matrix={matrix} filters={filters} onSelect={setFilters} />
+            <LotsFiltersBar
+              filters={filters}
+              statuses={matrix.statuses}
+              typeOptions={typeOptions}
+              onChange={updateFilters}
+              onReset={() => updateFilters({ ...EMPTY_FILTERS, statuses: [] })}
+            />
+            <LotsMatrix matrix={matrix} filters={filters} onSelect={updateFilters} />
           </section>
 
           <section className="lots-tab-section">

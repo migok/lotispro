@@ -13548,3 +13548,58 @@ body {
   font-weight: 500;
   color: var(--status-color, var(--text-secondary));
 }
+
+/* Filters bar */
+.lots-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.lots-filters-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.lots-filters-legend {
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.lots-filters-statuses .lots-filters-legend { width: 100%; }
+.lots-filters-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.lots-filters-status .status-dot { color: var(--status-color, var(--text-secondary)); }
+.lots-filters-status input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.lots-filters-field { display: flex; flex-direction: column; gap: var(--spacing-xs); min-width: 160px; }
+.lots-filters-field .form-input { padding: 8px 12px; font-size: 0.85rem; }
+.lots-filters-actions { display: flex; align-items: center; gap: var(--spacing-sm); margin-left: auto; }
+.lots-filters-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lots-filters .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (max-width: 1024px) {
+  .lots-filters-statuses { flex-basis: 100%; }
+  .lots-filters-field { flex: 1 1 200px; }
+  .lots-filters-actions { margin-left: 0; }
+}

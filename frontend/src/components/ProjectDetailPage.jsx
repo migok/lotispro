@@ -645,7 +645,7 @@ export default function ProjectDetailPage() {
           />
         </div>
 
-        {activeTab === 'lots' && <LotsTab projectId={parseInt(projectId)} enabledOptional={enabledOptional} />}
+        {activeTab === 'lots' && <LotsTab key={projectId} projectId={parseInt(projectId)} enabledOptional={enabledOptional} />}
 
         {activeTab === 'kpis' && <KPIsTab project={project} />}
 
