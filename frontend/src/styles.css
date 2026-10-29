@@ -13423,3 +13423,23 @@ body {
   border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
 }
 .finance-legacy-notice { margin-bottom: 10px; }
+
+/* ── Échéancier et encaissements (E4-T5): lot card block and wide view ── */
+.ldm-finance-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.finance-totals { margin-bottom: 10px; }
+.finance-key--strong { font-weight: 600; }
+.finance-val--due { color: var(--color-primary); }
+.finance-acte-status { margin-bottom: 10px; }
+.finance-acte-status--pending { font-size: 0.73rem; color: var(--color-warning); }
+.finance-table-wrap { overflow-x: auto; }
+.finance-table { width: 100%; }
+.pay-row--gap .finance-installment-label { font-weight: 600; }
+.finance-overdue { margin-left: 4px; }
+.finance-payments-error,
+.finance-payments-list { margin-top: 12px; }
+.finance-payments { display: flex; flex-direction: column; gap: 10px; }
+.mpp-finance-body { padding: var(--spacing-md); }
+.mpp-finance-table th,
+.mpp-finance-table td { padding: 7px 6px; }
+.mpp-finance-table td { font-size: 0.8rem; }
+.mpp-finance-table .finance-record-btn { white-space: normal; text-align: left; line-height: 1.2; }

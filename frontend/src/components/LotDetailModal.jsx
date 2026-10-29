@@ -14,6 +14,7 @@ import DepositDecisionFields from './lots/DepositDecisionFields';
 import { buildEngagePayload, firstAmountsError, gapAmount, parseAmount, refundFields } from '../utils/engagePayload';
 import EngagementAmountsFields from './lots/EngagementAmountsFields';
 import PaymentsPanel from './lots/PaymentsPanel';
+import ReservationFinanceView from './lots/ReservationFinanceView';
 import EditEngagementForm from './lots/EditEngagementForm';
 import ReservationChangesHistory from './lots/ReservationChangesHistory';
 import { acteThresholdMessage, LEGACY_FINANCE_MESSAGE } from '../services/reservationFinanceService';
@@ -888,6 +889,16 @@ function LotDetailModalContent({
     if (onRefresh) onRefresh();
   };
 
+  // « Voir l'échéancier » (mode `finance_view`): schedule and payments in the wide modal
+  const openFinanceView = () => handleSetMode('finance_view');
+  const closeFinanceView = () => setMode(null);
+  // Proof of a payment: a lot document (its archived name when the list has it)
+  const handleDownloadProof = (payment) => {
+    const doc = documents.find((d) => d.id === payment.document_id)
+      ?? { id: payment.document_id, filename: `justificatif_${payment.id}` };
+    handleDownloadDocument(doc);
+  };
+
   const openEngagementEdit = () => {
     handleSetMode('edit_engagement');
     setEditingFor(lot.reservation_id);
@@ -1521,9 +1532,34 @@ function LotDetailModalContent({
     );
   }
 
+  /* ── SCHEDULE AND PAYMENTS (E4-T5): wide 3-column layout ─── */
+  if (mode === 'finance_view' && showFinance) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal modal--3col" onClick={e => e.stopPropagation()}>
+          {lotSummaryPanel}
+          <ReservationFinanceView
+            key={`${lot.reservation_id}-${financeVersion}`}
+            reservationId={lot.reservation_id}
+            lotNumero={lot.numero}
+            canRecord={canRecordPayments}
+            canEdit={canEditEngagement}
+            onEdit={openEngagementEdit}
+            onClose={closeFinanceView}
+            onSummaryChange={reportFinanceSummary}
+            onSummaryError={reportFinanceError}
+            onPaymentRecorded={handlePaymentRecorded}
+            onDownloadProof={handleDownloadProof}
+            closeButton={<button className="modal-close" onClick={onClose}><IcClose /></button>}
+          />
+        </div>
+      </div>
+    );
+  }
+
   /* ── DETAIL VIEW ─────────────────────────────────────────── */
-  // (an edit left open on another reservation falls back to the lot card)
-  if (!mode || mode === 'edit_engagement') {
+  // (an edit or a schedule left open on another reservation falls back to the lot card)
+  if (!mode || mode === 'edit_engagement' || mode === 'finance_view') {
     return (
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal ldm-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
@@ -1709,16 +1745,21 @@ function LotDetailModalContent({
             <div className="ldm-documents-section">
               <div className="ldm-documents-header">
                 <div className="ldm-section-label" style={{ margin: 0 }}>Échéancier et encaissements</div>
-                {canEditEngagement && (
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={openEngagementEdit}>
-                    Modifier la réservation
+                <div className="ldm-finance-actions">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={openFinanceView}>
+                    Voir l'échéancier
                   </button>
-                )}
+                  {canEditEngagement && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={openEngagementEdit}>
+                      Modifier la réservation
+                    </button>
+                  )}
+                </div>
               </div>
               <PaymentsPanel
                 key={`${lot.reservation_id}-${financeVersion}`}
                 reservationId={lot.reservation_id}
-                canRecord={canRecordPayments}
+                compact
                 showActeStatus={false}
                 onSummaryChange={reportFinanceSummary}
                 onSummaryError={reportFinanceError}
