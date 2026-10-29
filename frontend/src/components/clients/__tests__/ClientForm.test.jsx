@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../../test/renderWithProviders'
 import ClientForm from '../ClientForm'
 import { apiGet } from '../../../utils/api'
+import { loadInternationalPhoneInput } from '../lazyInternationalPhoneInput'
 
 vi.mock('../../../utils/api', () => ({ apiGet: vi.fn() }))
 
@@ -14,16 +15,35 @@ const fill = async (user, label, value) => {
 const fillRequired = async (user) => {
   await fill(user, 'Nom *', 'Benali')
   await fill(user, 'Prénom *', 'Fatima')
-  await fill(user, 'Téléphone *', '0612345678')
+  await fill(user, 'Téléphone *', '+212612345678')
   await fill(user, 'Adresse Maroc', '12 rue X')
   await fill(user, 'Ville (Maroc) *', 'Casablanca')
   await user.selectOptions(screen.getByLabelText("Canal d'acquisition *"), 'smap')
 }
 
 describe('ClientForm', () => {
+  // Le champ téléphone est chargé à la demande : on le précharge pour des rendus synchrones.
+  beforeAll(async () => {
+    await loadInternationalPhoneInput()
+  })
+
   beforeEach(() => {
     apiGet.mockReset()
     apiGet.mockResolvedValue([])
+  })
+
+  it('saves a French phone and an independent Moroccan WhatsApp number', async () => {
+    const user = userEvent.setup({ delay: null })
+    const onSubmit = vi.fn().mockResolvedValue({})
+    renderWithProviders(<ClientForm onSubmit={onSubmit} />)
+    await fillRequired(user)
+    await fill(user, 'Téléphone *', '+33612345678')
+    await user.click(screen.getByLabelText('Même numéro que le téléphone'))
+    const whatsapp = screen.getAllByLabelText('WhatsApp')[0]
+    await user.type(whatsapp, '+212612345678')
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ phone: '+33612345678', whatsapp: '+212612345678' })
   })
 
   it('renders fields in spec order', () => {
@@ -43,7 +63,7 @@ describe('ClientForm', () => {
   })
 
   it('shows referrer for recommandation and referrer+date for samsar', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderWithProviders(<ClientForm onSubmit={vi.fn()} />)
     const channel = screen.getByLabelText("Canal d'acquisition *")
 
@@ -58,7 +78,7 @@ describe('ClientForm', () => {
   })
 
   it('asks acte address only when both addresses are filled', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderWithProviders(<ClientForm onSubmit={vi.fn()} />)
 
     await fill(user, 'Adresse Maroc', '12 rue X')
@@ -68,22 +88,22 @@ describe('ClientForm', () => {
   })
 
   it('prefills whatsapp from phone', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const onSubmit = vi.fn().mockResolvedValue({})
     renderWithProviders(<ClientForm onSubmit={onSubmit} />)
 
     const same = screen.getByLabelText('Même numéro que le téléphone')
     expect(same).toBeChecked()
     await fillRequired(user)
-    expect(screen.getAllByLabelText('WhatsApp')[0]).toHaveValue('0612345678')
+    expect(screen.getAllByLabelText('WhatsApp')[0].value.replace(/\s/g, '')).toBe('+212612345678')
 
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
-    expect(onSubmit.mock.calls[0][0].whatsapp).toBe('0612345678')
+    expect(onSubmit.mock.calls[0][0].whatsapp).toBe('+212612345678')
   })
 
   it('blocks submit and shows required errors', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const onSubmit = vi.fn()
     renderWithProviders(<ClientForm onSubmit={onSubmit} />)
 
@@ -97,7 +117,7 @@ describe('ClientForm', () => {
   })
 
   it('marks the city required once its address is filled and blocks submit without it', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const onSubmit = vi.fn()
     renderWithProviders(<ClientForm onSubmit={onSubmit} />)
     await fillRequired(user)
@@ -112,7 +132,7 @@ describe('ClientForm', () => {
   })
 
   it('marks the country required once the foreign address is filled and blocks submit without it', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const onSubmit = vi.fn()
     renderWithProviders(<ClientForm onSubmit={onSubmit} />)
     await fillRequired(user)
@@ -129,7 +149,7 @@ describe('ClientForm', () => {
   })
 
   it('suggests countries but accepts free input, and prints the country', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const onSubmit = vi.fn().mockResolvedValue({})
     const { container } = renderWithProviders(<ClientForm onSubmit={onSubmit} />)
     const input = screen.getByLabelText('Pays (étranger)')
@@ -152,7 +172,7 @@ describe('ClientForm', () => {
   })
 
   it('shows a server error on the country field without a toast-only fallback', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const error = Object.assign(new Error('Request validation failed'), {
       status: 422,
       details: [{ field: 'body.country_abroad', message: 'Indiquez le pays' }],
@@ -166,7 +186,7 @@ describe('ClientForm', () => {
   })
 
   it('always shows the acte notice and the printed address once determined', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderWithProviders(<ClientForm onSubmit={vi.fn()} />)
     expect(
       screen.getByText(
@@ -181,7 +201,7 @@ describe('ClientForm', () => {
   })
 
   it('maps server field errors under fields', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const error = Object.assign(new Error('Request validation failed'), {
       status: 422,
       details: [{ field: 'body.cin', message: 'Format CIN invalide (ex. AB123456)' }],
@@ -196,7 +216,7 @@ describe('ClientForm', () => {
   })
 
   it('shows non-blocking duplicate warning with link', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     apiGet.mockResolvedValue([{ id: 7, name: 'Fatima Benali' }])
     renderWithProviders(<ClientForm onSubmit={vi.fn()} excludeId={3} />)
 
@@ -212,7 +232,7 @@ describe('ClientForm', () => {
   })
 
   it('legacy client opens in edit form', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     const onSubmit = vi.fn()
     renderWithProviders(
       <ClientForm initialValues={{ name: 'Benali', last_name: 'Benali', phone: '+212612345678' }} onSubmit={onSubmit} />
@@ -236,7 +256,7 @@ describe('ClientForm', () => {
   })
 
   it('auto-ticks Email for a new client typing an email, until the user touches the boxes', async () => {
-    const user = userEvent.setup()
+    const user = userEvent.setup({ delay: null })
     renderWithProviders(<ClientForm onSubmit={vi.fn()} />)
     const box = () => screen.getByLabelText('Email', { selector: 'input[type=checkbox]' })
 
@@ -272,5 +292,44 @@ describe('ClientForm', () => {
     )
     expect(screen.getByLabelText('Même numéro que le téléphone')).not.toBeChecked()
     expect(screen.getAllByLabelText('WhatsApp')[0]).toHaveValue('')
+  })
+
+  it('links the phone error to its input for screen readers', async () => {
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<ClientForm onSubmit={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    expect(screen.getByLabelText('Téléphone *')).toHaveAccessibleDescription('Champ obligatoire')
+    expect(screen.getByLabelText('Nom *')).toHaveAccessibleDescription('Champ obligatoire')
+  })
+
+  it('rejects a number too short for its country', async () => {
+    const user = userEvent.setup({ delay: null })
+    const onSubmit = vi.fn()
+    renderWithProviders(<ClientForm onSubmit={onSubmit} />)
+    await fillRequired(user)
+    await fill(user, 'Téléphone *', '+33612345')
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Téléphone *')).toHaveAccessibleDescription('Numéro incomplet ou invalide pour ce pays')
+  })
+
+  it('hints to pick a country for a legacy number saved without dial code', async () => {
+    const user = userEvent.setup({ delay: null })
+    const onSubmit = vi.fn()
+    renderWithProviders(
+      <ClientForm
+        initialValues={{
+          last_name: 'Benali', first_name: 'F', phone: '0612345678', acquisition_channel: 'smap',
+          address_morocco: '12 rue X', city_morocco: 'Casablanca',
+        }}
+        onSubmit={onSubmit}
+      />
+    )
+    expect(
+      screen.getByText('Ancien numéro sans indicatif : choisissez le pays (ex. Maroc) pour le convertir.')
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText("Choisissez l'indicatif du pays")).toBeInTheDocument()
   })
 })

@@ -8,17 +8,19 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-29 (E4-T0 à E4-T5 en revue)_
+_Dernière mise à jour : 2026-10-29 (E3 #51 et téléphone international #53 fusionnés ; E4-T0 à E4-T5 en revue)_
 
 ## Vue d'ensemble
+
+Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](https://github.com/migok/lotispro/pull/53), fusionnée le 2026-10-27) : sélecteur d'indicatif avec drapeaux, noms français et recherche (pays, alias ou indicatif) pour Téléphone / WhatsApp, pays usuels en tête (Maroc, France…), sans pays par défaut. Un numéro saisi ou collé avec `00` est converti en `+` avant analyse (le pays bascule sur l'indicatif composé). Longueur contrôlée par `isPossiblePhoneNumber` côté formulaire (l'API garde la regex E.164). Plus de conversion implicite des numéros locaux en `+212` (formulaire et API) ; pas de migration : un ancien numéro sans indicatif affiche une aide et se convertit en choisissant le pays. Composant chargé à la demande (chunk séparé).
 
 | Epic | Statut | Tâches faites | Issue | PR |
 |---|---|---|---|---|
 | E0 Fondations & nettoyage | ✅ | 6 / 6 | [#8](https://github.com/migok/lotispro/issues/8) | [#46](https://github.com/migok/lotispro/pull/46) |
 | E1 🐛 #5 Plein écran | ✅ | 2 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | [#47](https://github.com/migok/lotispro/pull/47) |
 | E2 👤 #7 Fiche client | ✅ | 6 / 6 | [#18](https://github.com/migok/lotispro/issues/18) | [#48](https://github.com/migok/lotispro/pull/48) |
-| E3 Statuts par projet + états des lieux | 🟨 | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | |
-| E4 🔄 #8 Réservation | 🟦 | 0 / 6 | [#29](https://github.com/migok/lotispro/issues/29) | |
+| E3 Statuts par projet + états des lieux | ✅ | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | [#51](https://github.com/migok/lotispro/pull/51) |
+| E4 🔄 #8 Réservation | 🟨 | 0 / 6 | [#29](https://github.com/migok/lotispro/issues/29) | |
 | E5 📊 #3 Vue projet | ⬜ | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | |
 | E6 📅 #4 Dashboard par période | ⬜ | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | |
 | E7 SMS / WhatsApp | ⛔ fournisseur à choisir | 0 / 3 | [#42](https://github.com/migok/lotispro/issues/42) | |
@@ -41,12 +43,12 @@ _Dernière mise à jour : 2026-10-29 (E4-T0 à E4-T5 en revue)_
 | E2-T4 | Fiche / listes / PDF | ✅ | [#22](https://github.com/migok/lotispro/issues/22) | [#48](https://github.com/migok/lotispro/pull/48) | 2026-10-24 |
 | E2-T5 | Villes, adresse obligatoire, notice acte | ✅ | — | [#48](https://github.com/migok/lotispro/pull/48) | 2026-10-25 |
 | E2-T6 | Pays de l'adresse à l'étranger | ✅ | — | [#48](https://github.com/migok/lotispro/pull/48) | 2026-10-25 |
-| E3-T1 | `lot_workflow` + `lot_status_history` | ✅ | [#24](https://github.com/migok/lotispro/issues/24) | | 2026-10-25 |
-| E3-FIX | Dernière échéance payée → 500 (#50) | ✅ | [#50](https://github.com/migok/lotispro/issues/50) | | 2026-10-25 |
-| E3-T2 | Statuts optionnels par projet | ✅ | [#25](https://github.com/migok/lotispro/issues/25) | | 2026-10-25 |
-| E3-T3 | Transition option → engagée | ✅ | [#26](https://github.com/migok/lotispro/issues/26) | | 2026-10-25 |
-| E3-T4 | États des lieux backend | ✅ | [#27](https://github.com/migok/lotispro/issues/27) | | 2026-10-26 |
-| E3-T5 | Frontend statuts + EDL | ✅ | [#28](https://github.com/migok/lotispro/issues/28) | | 2026-10-26 |
+| E3-T1 | `lot_workflow` + `lot_status_history` | ✅ | [#24](https://github.com/migok/lotispro/issues/24) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-25 |
+| E3-FIX | Dernière échéance payée → 500 (#50) | ✅ | [#50](https://github.com/migok/lotispro/issues/50) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-25 |
+| E3-T2 | Statuts optionnels par projet | ✅ | [#25](https://github.com/migok/lotispro/issues/25) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-25 |
+| E3-T3 | Transition option → engagée | ✅ | [#26](https://github.com/migok/lotispro/issues/26) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-25 |
+| E3-T4 | États des lieux backend | ✅ | [#27](https://github.com/migok/lotispro/issues/27) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-26 |
+| E3-T5 | Frontend statuts + EDL | ✅ | [#28](https://github.com/migok/lotispro/issues/28) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-26 |
 | E4-T0 | Correctif PDF : police Unicode (’, arabe) | 🟨 | [#49](https://github.com/migok/lotispro/issues/49) | | |
 | E4-T1 | Acte auto à l'engagement | 🟨 | [#30](https://github.com/migok/lotispro/issues/30) | | |
 | E4-T2 | Service de notifications | 🟨 | [#31](https://github.com/migok/lotispro/issues/31) | | |

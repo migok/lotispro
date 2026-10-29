@@ -350,6 +350,26 @@ class TestClientValidation:
         )
 
     @pytest.mark.integration
+    async def test_create_rejects_local_number_without_dial_code(
+        self,
+        client: AsyncClient,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        response = await client.post(
+            "/api/clients",
+            json={**FULL_PAYLOAD, "phone": "0612345678"},
+            headers=auth_headers(commercial),
+        )
+
+        assert response.status_code == 422
+        detail = response.json()["details"][0]
+        assert detail["field"].endswith("phone")
+        assert detail["message"] == (
+            "Numéro invalide (format international, ex. +212612345678)"
+        )
+
+    @pytest.mark.integration
     async def test_create_samsar_requires_date(
         self,
         client: AsyncClient,
@@ -506,7 +526,7 @@ class TestClientValidation:
             json={
                 **FULL_PAYLOAD,
                 "phone": "+212 6 12 34 56 78",
-                "whatsapp": "0 6 1 2 3 4 5 6 7 8",
+                "whatsapp": "+ 2 1 2 6 1 2 3 4 5 6 7 8",
                 "cin": "A B 1 2 3 4 5 6",
             },
             headers=auth_headers(commercial),
@@ -528,7 +548,7 @@ class TestClientValidation:
         headers = auth_headers(commercial)
         created = await client.post(
             "/api/clients",
-            json={**FULL_PAYLOAD, "whatsapp": "06 12 34 56 78"},
+            json={**FULL_PAYLOAD, "whatsapp": "00212 6 12 34 56 78"},
             headers=headers,
         )
         assert created.json()["whatsapp"] == "+212612345678"
@@ -537,8 +557,8 @@ class TestClientValidation:
             f"/api/clients/{created.json()['id']}",
             json={
                 "cin": "cd 654321",
-                "phone": "0661-234-567",
-                "whatsapp": "07 11 22 33 44",
+                "phone": "+212661-234-567",
+                "whatsapp": "+212 7 11 22 33 44",
             },
             headers=headers,
         )

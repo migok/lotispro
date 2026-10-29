@@ -1,6 +1,10 @@
 /**
  * Règles de la fiche client (miroir de backend/app/domain/client_profile.py).
  */
+// Variante « core » + métadonnées min : vérifie la longueur sans embarquer le composant
+// de saisie (chargé à la demande) dans le bundle principal.
+import { isPossiblePhoneNumber } from 'react-phone-number-input/core';
+import phoneMetadata from 'libphonenumber-js/min/metadata';
 
 export const ACQUISITION_CHANNEL_LABELS = {
   smap: 'SMAP',
@@ -18,6 +22,8 @@ export const NOTIFICATION_CHANNEL_LABELS = {
 
 export const CIN_ERROR = 'Format CIN invalide (ex. AB123456)';
 export const PHONE_ERROR = 'Numéro invalide (format international, ex. +212612345678)';
+export const PHONE_LENGTH_ERROR = 'Numéro incomplet ou invalide pour ce pays';
+export const PHONE_DIAL_CODE_ERROR = "Choisissez l'indicatif du pays";
 const REQUIRED = 'Champ obligatoire';
 
 const CIN_PATTERN = /^[A-Z]{1,2}[0-9]{1,6}$/;
@@ -33,12 +39,11 @@ export function normalizeCin(v) {
   return { value: cin, error: null };
 }
 
-/** E.164 : 0XXXXXXXXX -> +212XXXXXXXXX, 00 -> +, séparateurs retirés. */
+/** E.164 : indicatif explicite requis, 00 -> +, séparateurs retirés. */
 export function normalizePhone(v) {
   let phone = String(v ?? '').replace(/[\s.-]/g, '');
   if (!phone) return { value: null, error: null };
   if (phone.startsWith('00')) phone = `+${phone.slice(2)}`;
-  else if (/^0[0-9]{9}$/.test(phone)) phone = `+212${phone.slice(1)}`;
   if (!PHONE_PATTERN.test(phone)) return { value: null, error: PHONE_ERROR };
   return { value: phone, error: null };
 }
@@ -54,6 +59,19 @@ export function effectiveActeAddress(values) {
   if (hasMorocco) return 'morocco';
   if (hasAbroad) return 'abroad';
   return null;
+}
+
+/**
+ * Erreur d'un numéro saisi (null si valide) : un numéro national sans indicatif
+ * demande de choisir le pays ; la longueur est contrôlée selon le pays
+ * (le backend ne vérifie que le format E.164).
+ */
+function phoneError(v) {
+  const digits = String(v).replace(/[\s.-]/g, '');
+  if (/^[0-9]+$/.test(digits) && !digits.startsWith('00')) return PHONE_DIAL_CODE_ERROR;
+  const phone = normalizePhone(v);
+  if (phone.error) return phone.error;
+  return isPossiblePhoneNumber(phone.value, phoneMetadata) ? null : PHONE_LENGTH_ERROR;
 }
 
 /** Valide le formulaire ; renvoie { champ: message } (vide si tout est bon). */
@@ -86,13 +104,9 @@ export function validateClientForm(values) {
 
   const cin = normalizeCin(values.cin);
   if (cin.error) errors.cin = cin.error;
-  if (filled(values.phone)) {
-    const phone = normalizePhone(values.phone);
-    if (phone.error) errors.phone = phone.error;
-  }
-  if (filled(values.whatsapp)) {
-    const whatsapp = normalizePhone(values.whatsapp);
-    if (whatsapp.error) errors.whatsapp = whatsapp.error;
+  for (const field of ['phone', 'whatsapp']) {
+    const error = filled(values[field]) ? phoneError(values[field]) : null;
+    if (error) errors[field] = error;
   }
   return errors;
 }
