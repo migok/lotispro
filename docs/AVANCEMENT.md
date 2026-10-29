@@ -20,7 +20,7 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E1 🐛 #5 Plein écran | ✅ | 2 / 2 | [#15](https://github.com/migok/lotispro/issues/15) | [#47](https://github.com/migok/lotispro/pull/47) |
 | E2 👤 #7 Fiche client | ✅ | 6 / 6 | [#18](https://github.com/migok/lotispro/issues/18) | [#48](https://github.com/migok/lotispro/pull/48) |
 | E3 Statuts par projet + états des lieux | ✅ | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | [#51](https://github.com/migok/lotispro/pull/51) |
-| E4 🔄 #8 Réservation | 🟨 | 0 / 6 | [#29](https://github.com/migok/lotispro/issues/29) | |
+| E4 🔄 #8 Réservation | 🟨 | 0 / 6 | [#29](https://github.com/migok/lotispro/issues/29) | [#54](https://github.com/migok/lotispro/pull/54) |
 | E5 📊 #3 Vue projet | ⬜ | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | |
 | E6 📅 #4 Dashboard par période | ⬜ | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | |
 | E7 SMS / WhatsApp | ⛔ fournisseur à choisir | 0 / 3 | [#42](https://github.com/migok/lotispro/issues/42) | |
@@ -49,12 +49,12 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E3-T3 | Transition option → engagée | ✅ | [#26](https://github.com/migok/lotispro/issues/26) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-25 |
 | E3-T4 | États des lieux backend | ✅ | [#27](https://github.com/migok/lotispro/issues/27) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-26 |
 | E3-T5 | Frontend statuts + EDL | ✅ | [#28](https://github.com/migok/lotispro/issues/28) | [#51](https://github.com/migok/lotispro/pull/51) | 2026-10-26 |
-| E4-T0 | Correctif PDF : police Unicode (’, arabe) | 🟨 | [#49](https://github.com/migok/lotispro/issues/49) | | |
-| E4-T1 | Acte auto à l'engagement | 🟨 | [#30](https://github.com/migok/lotispro/issues/30) | | |
-| E4-T2 | Service de notifications | 🟨 | [#31](https://github.com/migok/lotispro/issues/31) | | |
-| E4-T3 | UI notifications + historique | 🟨 | [#32](https://github.com/migok/lotispro/issues/32) | | |
-| E4-T4 | Rappels d'expiration | 🟨 | [#33](https://github.com/migok/lotispro/issues/33) | | |
-| E4-T5 | Modifier une réservation engagée | 🟨 | [#52](https://github.com/migok/lotispro/issues/52) | | |
+| E4-T0 | Correctif PDF : police Unicode (’, arabe) | 🟨 | [#49](https://github.com/migok/lotispro/issues/49) | [#54](https://github.com/migok/lotispro/pull/54) | |
+| E4-T1 | Acte auto à l'engagement | 🟨 | [#30](https://github.com/migok/lotispro/issues/30) | [#54](https://github.com/migok/lotispro/pull/54) | |
+| E4-T2 | Service de notifications | 🟨 | [#31](https://github.com/migok/lotispro/issues/31) | [#54](https://github.com/migok/lotispro/pull/54) | |
+| E4-T3 | UI notifications + historique | 🟨 | [#32](https://github.com/migok/lotispro/issues/32) | [#54](https://github.com/migok/lotispro/pull/54) | |
+| E4-T4 | Rappels d'expiration | 🟨 | [#33](https://github.com/migok/lotispro/issues/33) | [#54](https://github.com/migok/lotispro/pull/54) | |
+| E4-T5 | Modifier une réservation engagée | 🟨 | [#52](https://github.com/migok/lotispro/issues/52) | [#54](https://github.com/migok/lotispro/pull/54) | |
 | E5-T1 | Endpoint `lots-matrix` | ⬜ | [#35](https://github.com/migok/lotispro/issues/35) | | |
 | E5-T2 | Onglet Lots (grille + navigation) | ⬜ | [#36](https://github.com/migok/lotispro/issues/36) | | |
 | E5-T3 | Filtres persistés | ⬜ | [#37](https://github.com/migok/lotispro/issues/37) | | |
