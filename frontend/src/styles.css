@@ -12876,6 +12876,43 @@ body {
   background: transparent;
 }
 
+/* ── Modifier la réservation (E4-T5): form spans the center column, schedule in the panel ── */
+.msr-edit-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.msr-edit-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.msr-edit-alert-text { flex: 1; }
+.mpp-edit-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--spacing-md);
+}
+.mpp-edit-table-wrap { overflow-x: auto; }
+.mpp-edit-table { width: 100%; }
+.mpp-edit-table .msr-input,
+.mpp-edit-table .msr-price-input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+.mpp-edit-table .pay-row--gap .mpp-edit-label { font-weight: 600; }
+.mpp-edit-total {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.mpp-edit-total--off { color: var(--color-error); }
+
 /* ── Payment timeline ───────────────────────────────────── */
 .pay-timeline {
   display: flex;

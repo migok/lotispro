@@ -584,6 +584,44 @@ describe('LotDetailModal', () => {
       expect(puts(fetchMock)).toEqual([])
     })
 
+    it('opens the edit in the wide 3-column layout, then « Annuler » returns to the lot card', async () => {
+      const fetchMock = mockFetch(routes())
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: 'Modifier la réservation' }))
+
+      const modal = document.querySelector('.modal--3col')
+      expect(modal).not.toBeNull()
+      expect(modal.querySelector('.modal-split-left')).toHaveTextContent('E5')
+      const center = modal.querySelector('.modal-split-right')
+      expect(within(center).getByRole('heading', { name: 'Modifier la réservation' })).toBeInTheDocument()
+      expect(within(center).getByText('Lot E5')).toBeInTheDocument()
+      expect(within(center).getByLabelText('Prix total convenu')).toHaveValue(500000)
+      expect(within(center).getByLabelText('Premier acompte reçu')).toHaveTextContent('100 000 MAD')
+      expect(within(center).getByLabelText('Motif de la modification')).toBeInTheDocument()
+      const panel = modal.querySelector('.modal-pay-panel')
+      expect(panel).not.toBeNull()
+      expect(within(panel).getByText('Échéancier')).toBeInTheDocument()
+      expect(panel.querySelector('.mpp-total')).toHaveTextContent('400 000 MAD')
+      expect(within(panel).getByRole('table', { name: 'Échéances' })).toBeInTheDocument()
+      expect(within(panel).getByLabelText('Montant (Acompte 1)')).toHaveValue(150000)
+      expect(within(panel).getByText('Total des échéances : 400 000 MAD / attendu 400 000 MAD')).toBeInTheDocument()
+      // the live total follows the amounts typed in the center column
+      await user.clear(within(center).getByLabelText('Prix total convenu'))
+      await user.type(within(center).getByLabelText('Prix total convenu'), '510000')
+      await user.clear(within(center).getByLabelText("Prix figurant sur l'acte"))
+      await user.type(within(center).getByLabelText("Prix figurant sur l'acte"), '510000')
+      expect(within(panel).getByText('Total des échéances : 350 000 MAD / attendu 410 000 MAD')).toBeInTheDocument()
+
+      await user.click(within(center).getByRole('button', { name: 'Annuler' }))
+
+      expect(document.querySelector('.modal--3col')).toBeNull()
+      expect(await screen.findByRole('button', { name: 'Modifier la réservation' })).toBeInTheDocument()
+      expect(await screen.findByRole('table', { name: 'Échéancier' })).toBeInTheDocument()
+      expect(puts(fetchMock)).toEqual([])
+    })
+
     it('offers the edit to the commercial who made the reservation', async () => {
       mockFetch(routes())
       renderModal(ENGAGED, undefined, OWNER)
@@ -643,11 +681,15 @@ describe('LotDetailModal', () => {
         changes: gets(fetchMock, '/api/reservations/11/changes'),
       }
       await user.type(screen.getByLabelText('Motif de la modification'), 'Correction des notes')
-      await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+      expect(document.querySelector('.modal--3col')).not.toBeNull()
+      await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }))
 
       expect(await screen.findByText("La réservation est enregistrée, mais l'acte n'a pas pu être régénéré.")).toBeInTheDocument()
       expect(puts(fetchMock)).toHaveLength(1)
       await waitFor(() => expect(screen.queryByLabelText('Motif de la modification')).not.toBeInTheDocument())
+      // back to the lot card
+      expect(document.querySelector('.modal--3col')).toBeNull()
+      expect(await screen.findByRole('button', { name: 'Modifier la réservation' })).toBeInTheDocument()
       await waitFor(() => expect(gets(fetchMock, '/api/reservations/11/financial-summary')).toBeGreaterThan(before.summary))
       await waitFor(() => expect(gets(fetchMock, '/api/reservations/11')).toBeGreaterThan(before.reservation))
       await waitFor(() => expect(gets(fetchMock, '/api/lots/5/documents')).toBeGreaterThan(before.documents))

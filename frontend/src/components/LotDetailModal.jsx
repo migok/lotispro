@@ -648,7 +648,7 @@ function LotDetailModalContent({
     () => setFinance({ reservationId: lot?.reservation_id, summary: null, failed: true }),
     [lot?.reservation_id]
   );
-  // « Modifier la réservation » (E4-T5): open for this reservation id; finance views are
+  // « Modifier la réservation » (E4-T5, mode `edit_engagement`): open for this reservation id; finance views are
   // remounted (reloaded) after a save; deed regeneration failed on the last save.
   const [editingFor, setEditingFor] = useState(null);
   const [financeVersion, setFinanceVersion] = useState(0);
@@ -889,8 +889,17 @@ function LotDetailModalContent({
   };
 
   // After an edit: reload the reservation, amounts, schedule, history, documents and the lot list
-  const handleEngagementSaved = (result) => {
+  const openEngagementEdit = () => {
+    handleSetMode('edit_engagement');
+    setEditingFor(lot.reservation_id);
+  };
+  const closeEngagementEdit = () => {
     setEditingFor(null);
+    setMode(null);
+  };
+
+  const handleEngagementSaved = (result) => {
+    closeEngagementEdit();
     setActeFailedFor(result?.acte_status === 'failed' ? lot.reservation_id : null);
     setFinanceVersion((v) => v + 1);
     loadReservation(lot.reservation_id);
@@ -1428,7 +1437,7 @@ function LotDetailModalContent({
   // Same rule as payments (backend: 403 / 400 otherwise). The form needs the loaded summary and
   // the reservation's notes (the edit replaces them: never open it with unknown notes).
   const canEditEngagement = canRecordPayments && financeSummary != null && reservation?.id === lot.reservation_id;
-  const editingEngagement = canEditEngagement && editingFor === lot.reservation_id;
+  const editingEngagement = mode === 'edit_engagement' && canEditEngagement && editingFor === lot.reservation_id;
   const lotStats = [
     lot.surface && { icon: <IcSurface />, value: `${lot.surface} m²`, label: 'Surface' },
     (lot.price_per_sqm || (lot.price && lot.surface && lot.surface > 0)) && {
@@ -1448,8 +1457,68 @@ function LotDetailModalContent({
     lot.type_maison && { icon: <IcHome />, value: lot.type_maison, label: 'Type maison' },
   ].filter(Boolean);
 
+  // Lot summary: left column of the wide modal (transition forms, reservation edit)
+  const lotSummaryPanel = (
+    <div className="modal-split-left">
+      <div className="msl-eyebrow">Lot</div>
+      <div className="msl-num">{lot.numero}</div>
+      {lot.zone && <div className="msl-zone">Zone {lot.zone}{lot.type_lot ? ` · ${lot.type_lot}` : ''}</div>}
+      <div className="msl-price">{formatPrice(lot.price)}</div>
+      {lot.price_per_sqm
+        ? <div className="msl-price-m2">{lot.price_per_sqm.toLocaleString('fr-FR')} MAD/m² <span className="lot-price-tag">catalogue</span></div>
+        : (lot.surface && lot.price && lot.surface > 0)
+          ? <div className="msl-price-m2">{formatPrice(lot.price / lot.surface)}/m² <span className="lot-price-tag">catalogue</span></div>
+          : null
+      }
+      {lot.price_per_sqm_acte && lot.surface && (
+        <div className="msl-price-m2 lot-price-acte">
+          {formatPrice(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100)} <span className="lot-price-tag">acte</span>
+        </div>
+      )}
+      <span className={`status-badge ${lot.status}`} style={{ display: 'inline-flex', fontSize: '0.78rem', padding: '5px 11px', margin: '14px 0 18px' }}>
+        <span className="status-dot"></span>{STATUS_LABELS[lot.status]}
+      </span>
+      <div className="msl-stats">
+        {lotStats.map((s, i) => (
+          <div key={i} className="msl-stat">
+            <span className="msl-stat-icon">{s.icon}</span>
+            <span className="msl-stat-text">
+              <span className="msl-stat-value">{s.value}</span>
+              <span className="msl-stat-label">{s.label}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      {lot.client_name && (
+        <div className="msl-reservation-tag"><IcUser /><span>{lot.client_name}</span></div>
+      )}
+    </div>
+  );
+
+  /* ── EDIT AN ENGAGED RESERVATION (E4-T5): wide 3-column layout ─ */
+  if (editingEngagement) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal modal--3col" onClick={e => e.stopPropagation()}>
+          {lotSummaryPanel}
+          <EditEngagementForm
+            reservationId={lot.reservation_id}
+            summary={financeSummary}
+            notes={reservation?.notes}
+            lotNumero={lot.numero}
+            onSaved={handleEngagementSaved}
+            onCancel={closeEngagementEdit}
+            onReloaded={handleEngagementReloaded}
+            closeButton={<button className="modal-close" onClick={onClose}><IcClose /></button>}
+          />
+        </div>
+      </div>
+    );
+  }
+
   /* ── DETAIL VIEW ─────────────────────────────────────────── */
-  if (!mode) {
+  // (an edit left open on another reservation falls back to the lot card)
+  if (!mode || mode === 'edit_engagement') {
     return (
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal ldm-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
@@ -1634,35 +1703,22 @@ function LotDetailModalContent({
           {showFinance && (
             <div className="ldm-documents-section">
               <div className="ldm-documents-header">
-                <div className="ldm-section-label" style={{ margin: 0 }}>
-                  {editingEngagement ? 'Modifier la réservation' : 'Échéancier et encaissements'}
-                </div>
-                {canEditEngagement && !editingEngagement && (
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditingFor(lot.reservation_id)}>
+                <div className="ldm-section-label" style={{ margin: 0 }}>Échéancier et encaissements</div>
+                {canEditEngagement && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={openEngagementEdit}>
                     Modifier la réservation
                   </button>
                 )}
               </div>
-              {editingEngagement ? (
-                <EditEngagementForm
-                  reservationId={lot.reservation_id}
-                  summary={financeSummary}
-                  notes={reservation?.notes}
-                  onSaved={handleEngagementSaved}
-                  onCancel={() => setEditingFor(null)}
-                  onReloaded={handleEngagementReloaded}
-                />
-              ) : (
-                <PaymentsPanel
-                  key={`${lot.reservation_id}-${financeVersion}`}
-                  reservationId={lot.reservation_id}
-                  canRecord={canRecordPayments}
-                  showActeStatus={false}
-                  onSummaryChange={reportFinanceSummary}
-                  onSummaryError={reportFinanceError}
-                  onPaymentRecorded={handlePaymentRecorded}
-                />
-              )}
+              <PaymentsPanel
+                key={`${lot.reservation_id}-${financeVersion}`}
+                reservationId={lot.reservation_id}
+                canRecord={canRecordPayments}
+                showActeStatus={false}
+                onSummaryChange={reportFinanceSummary}
+                onSummaryError={reportFinanceError}
+                onPaymentRecorded={handlePaymentRecorded}
+              />
             </div>
           )}
           {showFinance && (
@@ -2041,40 +2097,7 @@ function LotDetailModalContent({
       <div className={`modal ${showThirdPanel ? 'modal--3col' : 'modal--split'}`} onClick={e => e.stopPropagation()}>
 
         {/* ── LEFT: Lot summary ── */}
-        <div className="modal-split-left">
-          <div className="msl-eyebrow">Lot</div>
-          <div className="msl-num">{lot.numero}</div>
-          {lot.zone && <div className="msl-zone">Zone {lot.zone}{lot.type_lot ? ` · ${lot.type_lot}` : ''}</div>}
-          <div className="msl-price">{formatPrice(lot.price)}</div>
-          {lot.price_per_sqm
-            ? <div className="msl-price-m2">{lot.price_per_sqm.toLocaleString('fr-FR')} MAD/m² <span className="lot-price-tag">catalogue</span></div>
-            : (lot.surface && lot.price && lot.surface > 0)
-              ? <div className="msl-price-m2">{formatPrice(lot.price / lot.surface)}/m² <span className="lot-price-tag">catalogue</span></div>
-              : null
-          }
-          {lot.price_per_sqm_acte && lot.surface && (
-            <div className="msl-price-m2 lot-price-acte">
-              {formatPrice(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100)} <span className="lot-price-tag">acte</span>
-            </div>
-          )}
-          <span className={`status-badge ${lot.status}`} style={{ display: 'inline-flex', fontSize: '0.78rem', padding: '5px 11px', margin: '14px 0 18px' }}>
-            <span className="status-dot"></span>{STATUS_LABELS[lot.status]}
-          </span>
-          <div className="msl-stats">
-            {lotStats.map((s, i) => (
-              <div key={i} className="msl-stat">
-                <span className="msl-stat-icon">{s.icon}</span>
-                <span className="msl-stat-text">
-                  <span className="msl-stat-value">{s.value}</span>
-                  <span className="msl-stat-label">{s.label}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-          {lot.client_name && (
-            <div className="msl-reservation-tag"><IcUser /><span>{lot.client_name}</span></div>
-          )}
-        </div>
+        {lotSummaryPanel}
 
         {/* ── RIGHT: Form ── */}
         <div className="modal-split-right">

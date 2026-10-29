@@ -48,7 +48,7 @@ function renderForm(props = {}) {
 
 const schedule = () => screen.getByRole('table', { name: 'Échéances' })
 const row = (name) => within(schedule()).getByRole('row', { name })
-const saveButton = () => screen.getByRole('button', { name: 'Enregistrer' })
+const saveButton = () => screen.getByRole('button', { name: 'Enregistrer les modifications' })
 
 async function retype(user, element, value) {
   await user.clear(element)
@@ -77,6 +77,27 @@ describe('EditEngagementForm', () => {
     expect(screen.getByText('Total des échéances : 400 000 MAD / attendu 400 000 MAD')).toBeInTheDocument()
     // reason required
     expect(saveButton()).toBeDisabled()
+  })
+
+  it('lays the amounts out in the center column and the schedule in the payment panel', () => {
+    stubFetch()
+    renderForm({ lotNumero: 'E5' })
+
+    const center = document.querySelector('.modal-split-right')
+    expect(within(center).getByRole('heading', { name: 'Modifier la réservation' })).toBeInTheDocument()
+    expect(within(center).getByText('Lot E5')).toBeInTheDocument()
+    const form = within(center).getByRole('form', { name: 'Modifier la réservation' })
+    expect(form).toHaveAttribute('novalidate')
+    expect(within(form).getByLabelText('Prix total convenu')).toBeInTheDocument()
+    expect(within(form).getByLabelText('Motif de la modification')).toBeInTheDocument()
+    expect(within(form).getByRole('button', { name: 'Enregistrer les modifications' })).toHaveAttribute('type', 'submit')
+    expect(within(center).queryByRole('table', { name: 'Échéances' })).not.toBeInTheDocument()
+
+    const panel = document.querySelector('.modal-pay-panel')
+    expect(within(panel).getByText('Échéancier')).toBeInTheDocument()
+    expect(panel.querySelector('.mpp-total')).toHaveTextContent('400 000 MAD')
+    expect(within(panel).getByRole('table', { name: 'Échéances' })).toBeInTheDocument()
+    expect(within(panel).getByText('Total des échéances : 400 000 MAD / attendu 400 000 MAD')).not.toHaveClass('mpp-edit-total--off')
   })
 
   it('keeps the first payment, the received installments and the gap row read-only', async () => {
@@ -116,7 +137,7 @@ describe('EditEngagementForm', () => {
 
     // deed +10 000 → gap −10 000: unbalanced
     await retype(user, screen.getByLabelText("Prix figurant sur l'acte"), '460000')
-    expect(screen.getByText('Total des échéances : 410 000 MAD / attendu 420 000 MAD')).toBeInTheDocument()
+    expect(screen.getByText('Total des échéances : 410 000 MAD / attendu 420 000 MAD')).toHaveClass('mpp-edit-total--off')
     expect(saveButton()).toBeDisabled()
 
     // off by one cent: still unbalanced
