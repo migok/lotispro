@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../test/renderWithProviders'
 import CommercialsPage from '../CommercialsPage'
+import { loadInternationalPhoneInput } from '../clients/lazyInternationalPhoneInput'
 
 const COMMERCIAL = { id: 5, name: 'Karim Alaoui', email: 'karim@exemple.ma', role: 'commercial', phone: '+212612345678', created_at: '2026-01-02T10:00:00' }
 
@@ -19,6 +20,10 @@ function mockFetch(patchResponse) {
 }
 
 describe('CommercialsPage - téléphone', () => {
+  beforeAll(async () => {
+    await loadInternationalPhoneInput()
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -31,7 +36,7 @@ describe('CommercialsPage - téléphone', () => {
     expect(await screen.findByText('+212612345678')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Modifier le téléphone' }))
     await user.clear(screen.getByLabelText('Téléphone'))
-    await user.type(screen.getByLabelText('Téléphone'), '0698765432')
+    await user.type(screen.getByLabelText('Téléphone'), '+212698765432')
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     expect(await screen.findByText('+212698765432')).toBeInTheDocument()

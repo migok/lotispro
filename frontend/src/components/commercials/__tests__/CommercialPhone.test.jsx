@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../../test/renderWithProviders'
 import CommercialPhone from '../CommercialPhone'
+import { loadInternationalPhoneInput } from '../../clients/lazyInternationalPhoneInput'
 
 const MANAGER = { id: 1, role: 'manager' }
 
@@ -23,6 +24,11 @@ function renderPhone(props = {}) {
 }
 
 describe('CommercialPhone', () => {
+  // Le champ téléphone est chargé à la demande : on le précharge pour des rendus synchrones.
+  beforeAll(async () => {
+    await loadInternationalPhoneInput()
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -47,7 +53,7 @@ describe('CommercialPhone', () => {
     const onSaved = renderPhone({ commercial: { id: 5, phone: null } })
 
     await user.click(screen.getByRole('button', { name: 'Modifier le téléphone' }))
-    await user.type(screen.getByLabelText('Téléphone'), '06 12 34 56 78')
+    await user.type(screen.getByLabelText('Téléphone'), '+212 6 12 34 56 78')
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
@@ -78,10 +84,10 @@ describe('CommercialPhone', () => {
 
     await user.click(screen.getByRole('button', { name: 'Modifier le téléphone' }))
     await user.clear(screen.getByLabelText('Téléphone'))
-    await user.type(screen.getByLabelText('Téléphone'), '123')
+    await user.type(screen.getByLabelText('Téléphone'), '+33612345')
     await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
 
-    expect(screen.getByText('Numéro invalide (format international, ex. +212612345678)')).toBeInTheDocument()
+    expect(screen.getByText('Numéro incomplet ou invalide pour ce pays')).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
@@ -96,6 +102,18 @@ describe('CommercialPhone', () => {
     expect(await screen.findByText('Numéro refusé')).toBeInTheDocument()
     expect(onSaved).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Téléphone')).toBeInTheDocument()
+  })
+
+  it('asks for the dial code when a legacy number has none', async () => {
+    const fetchMock = mockPatch({})
+    const user = userEvent.setup()
+    renderPhone({ commercial: { id: 5, phone: '0612345678' } })
+
+    await user.click(screen.getByRole('button', { name: 'Modifier le téléphone' }))
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }))
+
+    expect(screen.getByText("Choisissez l'indicatif du pays")).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('cancels the edit', async () => {

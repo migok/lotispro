@@ -10,6 +10,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.domain.client_profile import PHONE_ERROR
 from app.infrastructure.database.models import (
     LotDocumentModel,
     LotModel,
@@ -568,16 +569,24 @@ async def test_invite_and_update_user_phone(
     monkeypatch.setattr(EmailService, "send_invitation_email", _no_invitation)
     headers = auth_headers(manager)
 
+    invite_payload = {
+        "email": "new.commercial@example.com",
+        "first_name": "Karim",
+        "last_name": "Idrissi",
+        "role": "commercial",
+    }
+    local = await client.post(
+        "/api/users/invite",
+        headers=headers,
+        json={**invite_payload, "phone": "06 12 34 56 78"},
+    )
+    assert local.status_code == 422
+    assert PHONE_ERROR in local.text
+
     invited = await client.post(
         "/api/users/invite",
         headers=headers,
-        json={
-            "email": "new.commercial@example.com",
-            "first_name": "Karim",
-            "last_name": "Idrissi",
-            "role": "commercial",
-            "phone": "06 12 34 56 78",
-        },
+        json={**invite_payload, "phone": "+212 6 12 34 56 78"},
     )
     assert invited.status_code == 201, invited.text
     assert invited.json()["phone"] == "+212612345678"

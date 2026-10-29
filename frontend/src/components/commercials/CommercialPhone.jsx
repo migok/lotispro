@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { apiPatch } from '../../utils/api';
-import { normalizePhone } from '../../utils/clientProfile';
+import { normalizePhone, phoneError } from '../../utils/clientProfile';
+import LazyPhoneInput from '../clients/LazyPhoneInput';
 
 /**
  * Téléphone d'un commercial (utilisé dans les emails de notification).
@@ -19,8 +20,9 @@ export default function CommercialPhone({ commercial, canEdit, onSaved }) {
   };
 
   const handleSave = async () => {
-    const { value: phone, error: invalid } = normalizePhone(value);
+    const invalid = value.trim() ? phoneError(value) : null;
     if (invalid) { setError(invalid); return; }
+    const { value: phone } = normalizePhone(value);
     setSaving(true);
     setError('');
     try {
@@ -56,16 +58,20 @@ export default function CommercialPhone({ commercial, canEdit, onSaved }) {
   return (
     <div className="identity-meta" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <label htmlFor={`commercial-phone-${commercial.id}`}>Téléphone</label>
-      <input
+      <LazyPhoneInput
         id={`commercial-phone-${commercial.id}`}
-        type="tel"
-        className="msr-input"
-        placeholder="+212612345678"
+        label="téléphone"
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={setValue}
         disabled={saving}
+        error={error}
+        describedBy={error ? `commercial-phone-${commercial.id}-error` : undefined}
       />
-      {error && <span style={{ color: 'var(--color-blocked)' }}>{error}</span>}
+      {error && (
+        <span id={`commercial-phone-${commercial.id}-error`} role="alert" style={{ color: 'var(--color-blocked)' }}>
+          {error}
+        </span>
+      )}
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
           {saving ? 'Enregistrement…' : 'Enregistrer'}
