@@ -117,6 +117,36 @@ describe('ClientPicker', () => {
     const { user, input } = setup()
     await user.type(input, 'zzz')
     expect(screen.queryAllByRole('option')).toHaveLength(0)
+    expect(screen.getByText('Aucun client trouvé')).toBeInTheDocument()
+  })
+
+  it('scrolls the active option into view', async () => {
+    const spy = vi.fn()
+    Element.prototype.scrollIntoView = spy
+    try {
+      const { user, input } = setup()
+      await user.click(input)
+      await user.keyboard('{ArrowDown}{ArrowDown}')
+      expect(spy).toHaveBeenCalled()
+      expect(spy.mock.instances.at(-1)).toBe(screen.getAllByRole('option')[1])
+    } finally {
+      delete Element.prototype.scrollIntoView
+    }
+  })
+
+  it('sets aria-controls only while the list is rendered', async () => {
+    const { user, input } = setup()
+    expect(input).not.toHaveAttribute('aria-controls')
+    await user.click(input)
+    expect(input).toHaveAttribute('aria-controls', screen.getByRole('listbox').id)
+  })
+
+  it('focuses the input when opened with the chevron so keys work', async () => {
+    const { user, input, onChange } = setup()
+    await user.click(screen.getByRole('button', { name: 'Afficher les clients' }))
+    expect(input).toHaveFocus()
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(onChange).toHaveBeenCalledWith(CLIENTS[0])
   })
 
   it('filters by name, ignoring case', async () => {

@@ -13288,7 +13288,8 @@ body {
 .client-form--compact .form-2col { grid-template-columns: 1fr; }
 
 /* Client picker dropdown */
-.msr-client-picker { position: relative; }
+.msr-client-picker { position: relative; flex: 1; min-width: 0; }
+.msr-client-picker-input { width: 100%; }
 .msr-client-picker-field { position: relative; }
 .msr-client-picker-input { padding-right: 36px; }
 .msr-client-picker-toggle {

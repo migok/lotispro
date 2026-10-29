@@ -30,6 +30,7 @@ export default function ClientPicker({ clients, value, onChange }) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const rootRef = useRef(null);
+  const inputRef = useRef(null);
   const baseId = useId();
   const listId = `${baseId}-list`;
   const optionId = (i) => `${baseId}-opt-${i}`;
@@ -45,6 +46,12 @@ export default function ClientPicker({ clients, value, onChange }) {
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
+
+  useEffect(() => {
+    if (!open || activeIndex < 0) return;
+    const el = document.getElementById(`${baseId}-opt-${activeIndex}`);
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+  }, [open, activeIndex, baseId]);
 
   if (value) {
     return (
@@ -87,10 +94,11 @@ export default function ClientPicker({ clients, value, onChange }) {
     <div className="msr-client-picker" ref={rootRef}>
       <div className="msr-client-picker-field">
         <input
+          ref={inputRef}
           type="text"
           role="combobox"
           aria-expanded={open}
-          aria-controls={listId}
+          aria-controls={open && results.length > 0 ? listId : undefined}
           aria-autocomplete="list"
           aria-activedescendant={open && shown[activeIndex] ? optionId(activeIndex) : undefined}
           className="msr-input msr-client-picker-input"
@@ -106,7 +114,11 @@ export default function ClientPicker({ clients, value, onChange }) {
           className={`msr-client-picker-toggle${open ? ' is-open' : ''}`}
           aria-label="Afficher les clients"
           tabIndex={-1}
-          onClick={() => setOpen(o => !o)}
+          onClick={() => {
+            if (open) { setOpen(false); return; }
+            setOpen(true);
+            inputRef.current?.focus();
+          }}
         >
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
