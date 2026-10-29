@@ -61,7 +61,7 @@ def test_body_contains_lot_project_amount_and_commercial(kind: str) -> None:
     assert "A-12" in html
     assert "Les Jardins" in html
     assert "Fatima Benali" in html
-    assert "10 000,00 DH" in html
+    assert "10 000 MAD" in html
     assert "Karim Idrissi" in html
     assert "karim@lotispro.com" in html
     assert "+212612345678" in html
@@ -69,16 +69,31 @@ def test_body_contains_lot_project_amount_and_commercial(kind: str) -> None:
 
 @pytest.mark.parametrize(
     ("amount", "expected"),
-    [(1234567.5, "1 234 567,50 DH"), (500.0, "500,00 DH"), (0.0, "0,00 DH")],
+    [(1234567.5, "1 234 567,50 MAD"), (500.0, "500 MAD"), (0.0, "0 MAD")],
 )
 def test_amount_is_formatted_in_french(amount: float, expected: str) -> None:
     _, html = build_message(_ctx("option_confirmee", amount=amount))
     assert expected in html
 
 
+@pytest.mark.parametrize(
+    ("kind", "label"),
+    [
+        ("option_confirmee", "Acompte"),
+        ("reservation_a_finaliser", "Garantie versée"),
+        ("reservation_engagee", "Prix total convenu"),
+    ],
+)
+def test_amount_label_per_kind(kind: str, label: str) -> None:
+    _, html = build_message(_ctx(kind))
+    assert f"{label}</td>" in html
+    assert "Prix de vente" not in html
+    assert " DH" not in html
+
+
 def test_amount_line_omitted_when_none() -> None:
     _, html = build_message(_ctx("option_confirmee", amount=None))
-    assert " DH" not in html
+    assert " MAD" not in html
 
 
 @pytest.mark.parametrize(

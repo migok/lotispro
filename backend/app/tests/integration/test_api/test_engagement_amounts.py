@@ -865,3 +865,150 @@ class TestFirstPaymentSingleSource:
 
         assert response.status_code == 200, response.text
         assert response.json()["first_payment"] == 100000
+
+
+class TestFinalReviewFixes:
+    """E4 final review: engagement and solde edge cases."""
+
+    async def test_sale_price_zero_is_refused_422(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        lot, buyer_id = await _available_lot(db_session, manager)
+
+        response = await _transition(
+            client,
+            auth_headers(commercial),
+            lot.id,
+            "direct-engage",
+            {"client_id": buyer_id, **REFERENCE, "sale_price": 0},
+        )
+
+        assert response.status_code == 422
+        assert "sale_price" in response.text
+        await db_session.refresh(lot)
+        assert lot.status == "available"
+
+    async def test_finaliser_engage_legacy_guarantee_without_payment_type(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+    ) -> None:
+        """Pre-E4 reservation: guarantee recorded without a payment method."""
+        headers = auth_headers(commercial)
+        lot, buyer_id = await _available_lot(db_session, manager)
+        prep = await _transition(
+            client,
+            headers,
+            lot.id,
+            "direct-reservation",
+            {
+                "client_id": buyer_id,
+                "guarantee_amount": 100000,
+                "payment_type": "check",
+                "finalization_date": (
+                    datetime.now(UTC) + timedelta(days=15)
+                ).isoformat(),
+            },
+        )
+        assert prep.status_code == 200, prep.text
+        reservation_id = prep.json()["id"]
+        reservation = await db_session.get(ReservationModel, reservation_id)
+        assert reservation is not None
+        reservation.payment_type = None
+        await db_session.commit()
+        engage = {
+            "guarantee_action": "deduct",
+            "agreed_total_price": 500000,
+            "sale_price": 450000,
+        }
+
+        refused = await _transition(client, headers, lot.id, "engage", engage)
+
+        assert refused.status_code == 400, refused.text
+        assert refused.json()["message"] == "Mode de paiement de la garantie inconnu."
+        await db_session.refresh(lot)
+        assert lot.status == "reservation_a_finaliser"
+        assert await _payments(db_session, reservation_id) == []
+
+        accepted = await _transition(
+            client, headers, lot.id, "engage", {**engage, "payment_type": "cash"}
+        )
+
+        assert accepted.status_code == 200, accepted.text
+        payments = await _payments(db_session, reservation_id)
+        assert [(p.amount, p.method) for p in payments] == [(100000, "cash")]
+
+    async def test_second_solde_after_a_concurrent_one_is_refused(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The waiter of the reservation lock re-reads the lot after it.
+
+        The second request read the lot (still engaged) before the first one
+        committed: simulated by serving it that stale snapshot.
+        """
+        from types import SimpleNamespace
+
+        from app.core.exceptions import BusinessRuleError
+        from app.domain.schemas.sale import SaleFromReservation
+        from app.infrastructure.database.models import ProjectModel
+        from app.services.reservation_service import ReservationService
+
+        lot, _ = await _direct_engage(
+            client,
+            db_session,
+            manager,
+            auth_headers(commercial),
+            guarantee_amount=500000,
+            payment_type="transfer",
+            agreed_total_price=500000,
+        )
+        stale = SimpleNamespace(
+            id=lot.id,
+            project_id=lot.project_id,
+            status=lot.status,
+            current_reservation_id=lot.current_reservation_id,
+            price=lot.price,
+        )
+        project = await db_session.get(ProjectModel, lot.project_id)
+        assert project is not None
+        sold_before = project.sold_lots
+
+        first = ReservationService(db_session)
+        await first.engagee_to_soldee(
+            lot.id, SaleFromReservation(), user_id=manager.id, user_role="manager"
+        )
+        await db_session.commit()
+
+        waiter = ReservationService(db_session)
+
+        async def _stale_lot(_lot_id: int) -> SimpleNamespace:
+            return stale
+
+        monkeypatch.setattr(waiter.lot_repo, "get_by_id", _stale_lot)
+        with pytest.raises(BusinessRuleError) as refused:
+            await waiter.engagee_to_soldee(
+                lot.id, SaleFromReservation(), user_id=manager.id, user_role="manager"
+            )
+
+        assert refused.value.message.startswith(
+            "Lot must be in reservation_engagee status"
+        )
+        await db_session.rollback()
+        sales = (await db_session.execute(select(SaleModel))).scalars().all()
+        assert len(sales) == 1
+        await db_session.refresh(project)
+        assert project.sold_lots == sold_before + 1

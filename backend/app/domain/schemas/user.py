@@ -10,7 +10,10 @@ from app.domain.schemas.common import BaseSchema
 
 
 class _PhoneMixin(BaseSchema):
-    """Normalise ``phone`` to E.164 (Moroccan ``06…`` accepted)."""
+    """Normalise ``phone`` to E.164: international format only (``+`` or ``00``,
+    country code, 8 to 15 digits; spaces, dots and dashes ignored). A local
+    number such as ``06…`` is refused.
+    """
 
     @field_validator("phone", check_fields=False)
     @classmethod

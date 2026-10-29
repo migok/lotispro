@@ -87,7 +87,8 @@ def agreed_total(details: dict) -> float:
 
 def acte_price(details: dict) -> float:
     """Prix figurant sur l'acte (``sale_price``), else the agreed total."""
-    return details.get("sale_price") or agreed_total(details)
+    sale_price = details.get("sale_price")
+    return sale_price if sale_price is not None else agreed_total(details)
 
 
 def threshold_cents(agreed: float, pct: float) -> int:

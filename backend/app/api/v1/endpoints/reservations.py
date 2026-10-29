@@ -25,7 +25,7 @@ from app.api.dependencies import (
     ReservationPaymentServiceDep,
     ReservationServiceDep,
 )
-from app.core.exceptions import BusinessRuleError, NotFoundError
+from app.core.exceptions import AuthorizationError, BusinessRuleError, NotFoundError
 from app.domain.schemas.document import LotDocumentResponse
 from app.domain.schemas.engagement_edit import (
     EngagementEdit,
@@ -48,6 +48,7 @@ from app.domain.schemas.reservation_payment import (
 from app.domain.schemas.sale import SaleFromReservation, SaleResponse
 from app.services.acte_service import DEPOSIT_UNPAID, ActeNotReadyError
 from app.services.email_service import EmailService
+from app.services.reservation_payment_service import ProofStorageError
 
 _email_service = EmailService()
 
@@ -319,16 +320,27 @@ async def download_payment_receipt(
     summary="Régénérer l'acte archivé",
     description=(
         "Génère l'acte de réservation et l'archive comme nouvelle version dans les "
-        "documents du lot (les versions précédentes sont conservées)."
+        "documents du lot (les versions précédentes sont conservées). Réservé "
+        "au commercial auteur de la réservation et aux managers."
     ),
 )
 async def regenerate_acte(
     reservation_id: int,
-    current_user: CurrentUser,
+    current_user: CommercialOrManager,
     acte_service: ActeServiceDep,
 ) -> LotDocumentResponse:
     """Archive a new version of the reservation deed."""
-    await acte_service.load_details(reservation_id)  # 404 if unknown
+    details = await acte_service.load_details(reservation_id)  # 404 if unknown
+    if (
+        current_user.role != "manager"
+        and details["reserved_by_user_id"] != current_user.id
+    ):
+        raise AuthorizationError(
+            message=(
+                "Seuls le commercial auteur de la réservation et les managers "
+                "peuvent régénérer l'acte."
+            )
+        )
     result = await acte_service.generate_and_store(reservation_id, current_user.id)
     if result.status == "not_ready":
         raise BusinessRuleError(
@@ -352,7 +364,7 @@ async def regenerate_acte(
 )
 async def download_archived_acte(
     reservation_id: int,
-    current_user: CurrentUser,
+    current_user: CommercialOrManager,
     acte_service: ActeServiceDep,
     document_service: DocumentServiceDep,
 ) -> Response:
@@ -389,9 +401,14 @@ async def record_reservation_payment(
     file: Annotated[UploadFile | None, File()] = None,
 ) -> ReservationPaymentResponse:
     """Record a payment on an installment (proof of payment optional)."""
-    return await payment_service.record_payment(
-        reservation_id, data, file, current_user
-    )
+    try:
+        return await payment_service.record_payment(
+            reservation_id, data, file, current_user
+        )
+    except ProofStorageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
+        ) from exc
 
 
 @router.get(
@@ -402,7 +419,7 @@ async def record_reservation_payment(
 )
 async def list_reservation_payments(
     reservation_id: int,
-    current_user: CurrentUser,
+    current_user: CommercialOrManager,
     payment_service: ReservationPaymentServiceDep,
 ) -> list[ReservationPaymentResponse]:
     """List the payments of a reservation (``paid_on``, ``id`` order)."""
@@ -421,7 +438,7 @@ async def list_reservation_payments(
 )
 async def get_financial_summary(
     reservation_id: int,
-    current_user: CurrentUser,
+    current_user: CommercialOrManager,
     payment_service: ReservationPaymentServiceDep,
 ) -> FinancialSummaryResponse:
     """Financial summary of a reservation."""
@@ -462,7 +479,7 @@ async def edit_engaged_reservation(
 )
 async def list_reservation_changes(
     reservation_id: int,
-    current_user: CurrentUser,
+    current_user: CommercialOrManager,
     edit_service: EngagementEditServiceDep,
 ) -> list[ReservationChangeResponse]:
     """Edit history of a reservation, newest first."""

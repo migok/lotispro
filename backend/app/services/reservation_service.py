@@ -51,6 +51,7 @@ from app.infrastructure.database.repositories import (
     ReservationRepository,
     SaleRepository,
 )
+from app.services.engagement_edit_service import lot_for_update
 
 logger = get_logger(__name__)
 
@@ -988,11 +989,19 @@ class ReservationService:
             and guarantee_action == "deduct"
             and current_reservation.guarantee_amount
         ):
+            # Reservations created before the payment type was recorded have
+            # none: the engagement request supplies it.
+            method = current_reservation.payment_type or data.payment_type
+            if method is None:
+                raise BusinessRuleError(
+                    message="Mode de paiement de la garantie inconnu.",
+                    rule="guarantee_payment_type_unknown",
+                )
             received.append(
                 {
                     "amount": current_reservation.guarantee_amount,
                     "paid_on": datetime.now(UTC).date(),
-                    "method": current_reservation.payment_type,
+                    "method": method,
                 }
             )
         agreed, acte = await self._engagement_amounts(
@@ -1146,6 +1155,27 @@ class ReservationService:
         )
         if not reservation:
             raise NotFoundError("Reservation", lot.current_reservation_id)
+
+        # The lot read above may predate a concurrent solde that held the
+        # reservation lock: re-read it under its own lock (same order as the
+        # engagement edit) so a second « Marquer soldé » cannot sell it twice.
+        locked_lot = (
+            await self.session.execute(lot_for_update(lot_id))
+        ).scalar_one_or_none()
+        if (
+            locked_lot is None
+            or locked_lot.status != "reservation_engagee"
+            or locked_lot.current_reservation_id != reservation.id
+            or reservation.status == "converted"
+        ):
+            current = locked_lot.status if locked_lot is not None else None
+            raise BusinessRuleError(
+                message=(
+                    f"Lot must be in reservation_engagee status (current: {current})"
+                ),
+                rule="invalid_lot_status",
+            )
+        lot = locked_lot
 
         if (
             user_role

@@ -173,7 +173,7 @@ class EngagementAmountsData(BaseSchema):
     )
     sale_price: float | None = Field(
         default=None,
-        ge=0,
+        gt=0,
         description=(
             "Prix figurant sur l'acte (par défaut : grille de prix, sinon prix "
             "total convenu) ; ne peut pas dépasser le prix total convenu"
@@ -225,6 +225,13 @@ class FinaliserEngageData(EngagementAmountsData):
     refund_payment_type: PAYMENT_TYPE | None = Field(
         default=None,
         description="Payment method used for the refund (only when guarantee_action=refund)",
+    )
+    payment_type: PAYMENT_TYPE | None = Field(
+        default=None,
+        description=(
+            "Mode de paiement de la garantie conservée (deduct), utilisé seulement "
+            "si la réservation n'en a pas (réservations antérieures)"
+        ),
     )
 
 

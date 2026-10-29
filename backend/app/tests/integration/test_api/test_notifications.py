@@ -189,7 +189,7 @@ async def test_notify_email_sent(
     assert call["to"] == "fatima@example.com"
     assert call["subject"].startswith("Confirmation d'option — Lot ")
     assert lot.numero in call["html"]
-    assert "10 000,00 DH" in call["html"]
+    assert "10 000 MAD" in call["html"]
     assert manager.email in call["html"]
     assert not call["attachments"]
 
@@ -359,8 +359,8 @@ async def test_engagee_email_shows_the_agreed_total_price(
 
     assert response.status_code == 200, response.text
     [call] = sent_emails.calls
-    assert "520 000,00 DH" in call["html"]
-    assert "450 000,00 DH" not in call["html"]
+    assert "520 000 MAD" in call["html"]
+    assert "450 000 MAD" not in call["html"]
 
 
 async def test_engagee_without_archived_acte_sends_without_attachment(

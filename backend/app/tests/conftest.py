@@ -105,6 +105,20 @@ def fake_storage(monkeypatch: pytest.MonkeyPatch) -> FakeStorage:
     return storage
 
 
+@pytest.fixture(autouse=True)
+def no_resend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Emails never reach Resend in tests (``backend/.env`` may hold a real key).
+
+    A module may still patch ``resend.Emails.send`` itself: its monkeypatch
+    runs after this one and wins.
+    """
+
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Resend must not be called in tests")
+
+    monkeypatch.setattr("resend.Emails.send", _refuse)
+
+
 @pytest.fixture
 async def manager(db_session: AsyncSession) -> UserModel:
     return await make_user(db_session, role="manager", email="manager@example.com")

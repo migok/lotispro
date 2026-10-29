@@ -172,7 +172,7 @@ async def test_reminds_finalisation_deadline(
     assert all(
         _naive(row.deadline_at) == _naive(reservation.expiration_date) for row in rows
     )
-    assert all("20 000,00 DH" in call["html"] for call in sent_emails.calls)
+    assert all("20 000 MAD" in call["html"] for call in sent_emails.calls)
     assert all("04/11/2026" in call["subject"] for call in sent_emails.calls)
 
 

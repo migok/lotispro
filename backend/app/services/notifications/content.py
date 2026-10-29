@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from html import escape
 
+from app.domain.reservation_amounts import format_mad
+
 
 @dataclass(frozen=True)
 class NotificationContext:
@@ -34,13 +36,13 @@ _TITLES = {
 _AMOUNT_LABELS = {
     "option_confirmee": "Acompte",
     "reservation_a_finaliser": "Garantie versée",
-    "reservation_engagee": "Prix de vente",
+    "reservation_engagee": "Prix total convenu",
 }
 
 
 def format_amount(amount: float) -> str:
-    """French amount: ``10 000,00 DH``."""
-    return f"{amount:,.2f}".replace(",", " ").replace(".", ",") + " DH"
+    """French amount, same format as the E4 screens: ``10 000 MAD``, ``1 500,25 MAD``."""
+    return f"{format_mad(amount)} MAD"
 
 
 def _format_date(value: datetime) -> str:

@@ -771,6 +771,50 @@ class TestProof:
         assert len(await _payment_rows(db_session, reservation_id)) == 1
         assert fake_storage.files == stored_before
 
+    async def test_proof_storage_failure_is_a_502_and_writes_nothing(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Headers,
+        monkeypatch: pytest.MonkeyPatch,
+        confirmations: SentConfirmations,
+    ) -> None:
+        headers = auth_headers(commercial)
+        _, reservation_id = await _engaged(client, db_session, manager, headers)
+        deposit = _inst(await _summary(client, headers, reservation_id), "deposit")
+
+        class _DownStorage(FakeStorage):
+            def upload_bytes(self, *args: Any, **kwargs: Any) -> None:
+                raise RuntimeError("storage down")
+
+        monkeypatch.setattr(
+            "app.services.document_service.get_storage_client", _DownStorage
+        )
+
+        response = await _pay(
+            client,
+            headers,
+            reservation_id,
+            deposit["id"],
+            1000,
+            file=("virement.pdf", b"%PDF-1.4 proof", "application/pdf"),
+        )
+
+        assert response.status_code == 502, response.text
+        assert response.json() == {
+            "detail": "Le justificatif n'a pas pu être enregistré. Réessayez."
+        }
+        assert len(await _payment_rows(db_session, reservation_id)) == 1
+        proofs = await db_session.execute(
+            select(LotDocumentModel).where(
+                LotDocumentModel.category == "justificatif_paiement"
+            )
+        )
+        assert proofs.scalars().all() == []
+        assert confirmations.calls == []
+
     @pytest.mark.parametrize("category", ["justificatif_paiement", "acte_reservation"])
     async def test_locked_documents_cannot_be_deleted(
         self,

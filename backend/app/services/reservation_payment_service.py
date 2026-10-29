@@ -56,6 +56,11 @@ logger = get_logger(__name__)
 
 PROOF_CATEGORY = "justificatif_paiement"
 _ORDER_RULE = "installment_order_violation"
+PROOF_STORAGE_FAILED = "Le justificatif n'a pas pu être enregistré. Réessayez."
+
+
+class ProofStorageError(Exception):
+    """The proof of payment could not be stored: nothing was written."""
 
 
 def _payment_response(
@@ -161,6 +166,8 @@ class ReservationPaymentService:
             BusinessRuleError: Reservation not engaged, installment missing or
                 of another reservation, amount above the installment's
                 remaining amount, payment order, or invalid proof file.
+            ProofStorageError: The proof file could not be stored (nothing
+                is written).
         """
         reservation = await self._locked_reservation(reservation_id)
         if user.role != "manager" and reservation.reserved_by_user_id != user.id:
@@ -227,15 +234,23 @@ class ReservationPaymentService:
         document_id = None
         if proof is not None:
             content, content_type = proof
-            document = await self.document_service.store_generated_document(
-                lot_id=reservation.lot_id,
-                reservation_id=reservation.id,
-                filename=file.filename or "justificatif",
-                content=content,
-                content_type=content_type,
-                category=PROOF_CATEGORY,
-                user_id=user.id,
-            )
+            try:
+                # Savepoint: a storage failure also drops the document row.
+                async with self.session.begin_nested():
+                    document = await self.document_service.store_generated_document(
+                        lot_id=reservation.lot_id,
+                        reservation_id=reservation.id,
+                        filename=file.filename or "justificatif",
+                        content=content,
+                        content_type=content_type,
+                        category=PROOF_CATEGORY,
+                        user_id=user.id,
+                    )
+            except Exception as exc:
+                logger.exception(
+                    "Payment proof storage failed", reservation_id=reservation.id
+                )
+                raise ProofStorageError(PROOF_STORAGE_FAILED) from exc
             document_id = document.id
 
         payment = await self.received_repo.create(
