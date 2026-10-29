@@ -239,6 +239,25 @@ describe('EditEngagementForm', () => {
     expect(screen.queryByText(/l'acte n'a pas pu être régénéré/)).not.toBeInTheDocument()
   })
 
+  it('submits with Enter from a schedule input of the side panel, like the save button', async () => {
+    const fetchMock = stubFetch((path, options) => (options.method === 'PUT' ? json({ ...SUMMARY, acte_status: null }) : undefined))
+    const user = userEvent.setup()
+    const { onSaved } = renderForm()
+
+    // not savable yet (no reason): Enter sends nothing
+    await user.type(screen.getByLabelText('Montant (Solde 2)'), '{Enter}')
+    expect(putCalls(fetchMock)).toHaveLength(0)
+
+    await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+    await user.type(screen.getByLabelText('Montant (Solde 2)'), '{Enter}')
+
+    await waitFor(() => expect(putCalls(fetchMock)).toHaveLength(1))
+    expect(JSON.parse(putCalls(fetchMock)[0][1].body)).toMatchObject({
+      reason: 'Remise', expected_updated_at: '2026-10-28T21:50:12.123456',
+    })
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1))
+  })
+
   it('cancels without any request', async () => {
     const fetchMock = stubFetch()
     const user = userEvent.setup()

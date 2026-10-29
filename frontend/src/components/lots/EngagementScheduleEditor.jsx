@@ -8,9 +8,10 @@ const STATUS_BADGE = { pending: 'badge-gray', partial: 'badge-gold', paid: 'badg
  * Échéancier de « Modifier la réservation » (spec E4-T5), dans le panneau de droite :
  * montant et date modifiables pour les échéances non reçues ; échéances reçues et ligne de
  * l'écart (recalculée en direct) en lecture seule avec leur statut ; « Total des échéances »
- * comparé à l'attendu, en rouge tant qu'ils diffèrent. `edit` : valeur de `useEngagementEdit`.
+ * comparé à l'attendu, en rouge tant qu'ils diffèrent. `edit` : valeur de `useEngagementEdit` ;
+ * `formId` : id du `<form>` de la colonne centrale, auquel les champs sont rattachés (Entrée).
  */
-export default function EngagementScheduleEditor({ edit }) {
+export default function EngagementScheduleEditor({ edit, formId }) {
   const { rows, scheduleRows, gapCents, gapDateText, totalCents, expectedCents, balanced, setRow } = edit;
 
   return (
@@ -30,14 +31,14 @@ export default function EngagementScheduleEditor({ edit }) {
                   <td className="mpp-edit-label">{label}</td>
                   <td>
                     {editable ? (
-                      <input type="date" className="msr-input" aria-label={`Date d'échéance (${label})`}
+                      <input type="date" form={formId} className="msr-input" aria-label={`Date d'échéance (${label})`}
                         value={rows[inst.id].dueDate} onChange={(e) => setRow(inst.id, 'dueDate', e.target.value)} />
                     ) : isGap ? gapDateText : formatDate(inst.due_date)}
                   </td>
                   <td>
                     {editable ? (
                       <>
-                        <input type="number" className="msr-price-input" min="0" step="0.01" aria-label={`Montant (${label})`}
+                        <input type="number" form={formId} className="msr-price-input" min="0" step="0.01" aria-label={`Montant (${label})`}
                           value={rows[inst.id].amount} onChange={(e) => setRow(inst.id, 'amount', e.target.value)} />
                         {inst.received > 0 && (
                           <div className="msr-price-diff msr-price-diff--eq">{`déjà reçu ${formatMad(inst.received)}`}</div>

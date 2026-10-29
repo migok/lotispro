@@ -699,6 +699,39 @@ describe('LotDetailModal', () => {
       expect(await screen.findByRole('button', { name: 'Régénérer' })).toBeInTheDocument()
       expect(screen.getByText('Acte de réservation', { selector: '.badge' })).toBeInTheDocument()
     })
+
+    it('after saving, offers the edit again only once the fresh summary has arrived', async () => {
+      const fresh = { ...SUMMARY, agreed_total_price: 510000, updated_at: '2026-10-28T11:00:00' }
+      const fetchMock = mockFetch(routes({ '/api/reservations/11/engagement': { ...SUMMARY, acte_status: null } }))
+      const base = fetchMock.getMockImplementation()
+      let saved = false
+      let answerSummary
+      fetchMock.mockImplementation((url, opts) => {
+        if (opts?.method === 'PUT') saved = true
+        if (saved && !opts?.method && String(url).endsWith('/api/reservations/11/financial-summary')) {
+          return new Promise((resolve) => {
+            answerSummary = () => resolve({ ok: true, status: 200, json: () => Promise.resolve(fresh) })
+          })
+        }
+        return base(url, opts)
+      })
+      const user = userEvent.setup()
+      renderModal(ENGAGED)
+
+      await user.click(await screen.findByRole('button', { name: 'Modifier la réservation' }))
+      await user.type(screen.getByLabelText('Motif de la modification'), 'Correction')
+      await user.click(screen.getByRole('button', { name: 'Enregistrer les modifications' }))
+
+      await waitFor(() => expect(answerSummary).toBeDefined())
+      expect(document.querySelector('.modal--3col')).toBeNull()
+      // the previous summary is stale: no edit until the fresh one is loaded
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+
+      answerSummary()
+      expect(await screen.findByRole('button', { name: 'Modifier la réservation' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Modifier la réservation' }))
+      expect(screen.getByLabelText('Prix total convenu')).toHaveValue(510000)
+    })
   })
 
   describe('payment plan preview of an engagement (E4 final review)', () => {

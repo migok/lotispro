@@ -888,7 +888,6 @@ function LotDetailModalContent({
     if (onRefresh) onRefresh();
   };
 
-  // After an edit: reload the reservation, amounts, schedule, history, documents and the lot list
   const openEngagementEdit = () => {
     handleSetMode('edit_engagement');
     setEditingFor(lot.reservation_id);
@@ -898,8 +897,11 @@ function LotDetailModalContent({
     setMode(null);
   };
 
+  // After an edit: reload the reservation, amounts, schedule, history, documents and the lot list.
+  // The summary is dropped so the edit stays hidden until PaymentsPanel reports the fresh one.
   const handleEngagementSaved = (result) => {
     closeEngagementEdit();
+    setFinance({ reservationId: null, summary: null, failed: false });
     setActeFailedFor(result?.acte_status === 'failed' ? lot.reservation_id : null);
     setFinanceVersion((v) => v + 1);
     loadReservation(lot.reservation_id);

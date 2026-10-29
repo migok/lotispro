@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { formatMad } from '../../utils/formatters';
 import useEngagementEdit from './useEngagementEdit';
 import EngagementEditFields from './EngagementEditFields';
@@ -11,7 +12,8 @@ import EngagementScheduleEditor from './EngagementScheduleEditor';
  * - centre (`.modal-split-right`) : titre, montants, échéance de l'écart, notes, motif, erreurs
  *   et pied « Annuler » / « Enregistrer les modifications », dans un `<form noValidate>` (les
  *   montants au centime ne doivent jamais bloquer l'envoi) ;
- * - droite (`.modal-pay-panel`) : échéancier modifiable et « Total des échéances » en direct.
+ * - droite (`.modal-pay-panel`) : échéancier modifiable et « Total des échéances » en direct ;
+ *   ses champs sont rattachés au formulaire (`form={formId}`) : Entrée enregistre aussi.
  *
  * L'état et les règles d'enregistrement sont dans `useEngagementEdit` (voir ses props).
  * `onCancel` ferme sans aucun appel ; `closeButton` (facultatif) : bouton de fermeture de la
@@ -20,6 +22,7 @@ import EngagementScheduleEditor from './EngagementScheduleEditor';
 export default function EditEngagementForm({
   reservationId, summary, notes, lotNumero, onSaved, onCancel, onReloaded, closeButton,
 }) {
+  const formId = useId();
   const edit = useEngagementEdit({ reservationId, summary, notes, onSaved, onReloaded });
   const rowCount = edit.scheduleRows.length;
 
@@ -34,7 +37,7 @@ export default function EditEngagementForm({
           {closeButton}
         </div>
 
-        <form className="msr-edit-form" onSubmit={edit.handleSubmit} noValidate aria-label="Modifier la réservation">
+        <form id={formId} className="msr-edit-form" onSubmit={edit.handleSubmit} noValidate aria-label="Modifier la réservation">
           <div className="msr-form">
             <EngagementEditFields edit={edit} />
           </div>
@@ -58,7 +61,7 @@ export default function EditEngagementForm({
           <span className="mpp-total">{formatMad(edit.expectedCents / 100)}</span>
         </div>
         <div className="mpp-body">
-          <EngagementScheduleEditor edit={edit} />
+          <EngagementScheduleEditor edit={edit} formId={formId} />
         </div>
       </div>
     </>

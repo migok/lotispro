@@ -21,7 +21,7 @@ function cataloguePctText(agreed, cataloguePrice) {
   const hundredths = Math.round(Math.abs(diffCents) * 10000 / catalogueCents);
   if (!hundredths) return '';
   const text = `${Math.floor(hundredths / 100)},${String(hundredths % 100).padStart(2, '0')}`;
-  return ` (${diffCents < 0 ? '−' : '+'}${text} %)`;
+  return ` (${diffCents < 0 ? '−' : '+'}${text}\u00a0%)`;
 }
 
 function FieldError({ message }) {
