@@ -80,7 +80,7 @@ describe('reservationFinanceService', () => {
 
   it('never shows unknown amounts in the deed threshold message (legacy reservation)', () => {
     expect(acteThresholdMessage({ legacy: true, acte_min_paid_pct: 10, total_received: null, acte_threshold_amount: null }))
-      .toBe("L'acte sera disponible quand 10 % du prix total convenu aura été encaissé.")
+      .toBe('Réservation engagée avant la nouvelle gestion des montants.')
   })
 
   it('explains why the amounts of a legacy reservation are not shown', () => {

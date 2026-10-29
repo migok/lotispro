@@ -225,6 +225,10 @@ class TestLegacySummary:
         assert summary["installments"][0]["amount"] == 150000
         assert summary["installments"][0]["status"] == "paid"
         assert summary["installments"][1]["status"] == "pending"
+        # received/remaining are unknown for a legacy reservation (not computed)
+        for line in summary["installments"]:
+            assert line["received"] is None
+            assert line["remaining"] is None
 
 
 class TestLegacyWritesRefused:

@@ -68,11 +68,16 @@ export function installmentLabel(installment) {
 export const LEGACY_FINANCE_MESSAGE =
   'Réservation engagée avant la nouvelle gestion des montants : les montants ne peuvent pas être affichés ici.';
 
+/** Message de l'acte d'une réservation engagée avant E4-T5 (aucun seuil applicable). */
+export const LEGACY_ACTE_MESSAGE = 'Réservation engagée avant la nouvelle gestion des montants.';
+
 /**
  * Message affiché tant que le seuil d'émission de l'acte n'est pas atteint (même texte que le
  * backend) ; sans les montants quand ils sont inconnus (réservation antérieure à E4-T5).
  */
 export function acteThresholdMessage(summary) {
+  // Legacy: no payment can ever be recorded, so the threshold can never be reached
+  if (summary.legacy === true) return LEGACY_ACTE_MESSAGE;
   const pct = String(summary.acte_min_paid_pct).replace('.', ',');
   const text = `L'acte sera disponible quand ${pct} % du prix total convenu aura été encaissé`;
   if (summary.total_received == null || summary.acte_threshold_amount == null) return `${text}.`;

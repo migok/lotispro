@@ -50,9 +50,10 @@ const schedule = () => screen.getByRole('table', { name: 'Échéances' })
 const row = (name) => within(schedule()).getByRole('row', { name })
 const saveButton = () => screen.getByRole('button', { name: 'Enregistrer les modifications' })
 
+// Pasting instead of typing key by key keeps the tests fast under parallel load.
 async function retype(user, element, value) {
   await user.clear(element)
-  await user.type(element, value)
+  if (value !== '') await user.paste(value)
 }
 
 describe('EditEngagementForm', () => {
@@ -127,7 +128,7 @@ describe('EditEngagementForm', () => {
     const user = userEvent.setup()
     renderForm()
 
-    await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+    await retype(user, screen.getByLabelText('Motif de la modification'), 'Remise')
     expect(saveButton()).toBeEnabled()
 
     // agreed +20 000 → gap +20 000 and expected +20 000: still balanced
@@ -150,7 +151,7 @@ describe('EditEngagementForm', () => {
 
     // a blank reason disables again
     await user.clear(screen.getByLabelText('Motif de la modification'))
-    await user.type(screen.getByLabelText('Motif de la modification'), '   ')
+    await retype(user, screen.getByLabelText('Motif de la modification'), '   ')
     expect(saveButton()).toBeDisabled()
   })
 
@@ -167,7 +168,7 @@ describe('EditEngagementForm', () => {
     await retype(user, screen.getByLabelText('Montant (Solde 2)'), '110000')
     fireEvent.change(screen.getByLabelText("Date d'échéance (Solde 2)"), { target: { value: '2027-01-27' } })
     await retype(user, screen.getByLabelText('Notes'), 'Client très fidèle')
-    await user.type(screen.getByLabelText('Motif de la modification'), '  Remise accordée par la direction ')
+    await retype(user, screen.getByLabelText('Motif de la modification'), '  Remise accordée par la direction ')
     await user.click(saveButton())
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
@@ -201,7 +202,7 @@ describe('EditEngagementForm', () => {
     expect(saveButton()).toBeDisabled() // date missing
     fireEvent.change(screen.getByLabelText("Date de l'écart"), { target: { value: '2027-06-30' } })
     await user.clear(screen.getByLabelText('Notes'))
-    await user.type(screen.getByLabelText('Motif de la modification'), 'Écart à date fixe')
+    await retype(user, screen.getByLabelText('Motif de la modification'), 'Écart à date fixe')
     await user.click(saveButton())
 
     await waitFor(() => expect(putCalls(fetchMock)).toHaveLength(1))
@@ -218,7 +219,7 @@ describe('EditEngagementForm', () => {
     const user = userEvent.setup()
     const { onSaved } = renderForm()
 
-    await user.type(screen.getByLabelText('Motif de la modification'), 'Correction')
+    await retype(user, screen.getByLabelText('Motif de la modification'), 'Correction')
     await user.click(saveButton())
 
     expect(await screen.findByText(message)).toBeInTheDocument()
@@ -230,7 +231,7 @@ describe('EditEngagementForm', () => {
     const user = userEvent.setup()
     const { onSaved } = renderForm()
 
-    await user.type(screen.getByLabelText('Motif de la modification'), 'Correction')
+    await retype(user, screen.getByLabelText('Motif de la modification'), 'Correction')
     await user.click(saveButton())
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled())
@@ -248,7 +249,7 @@ describe('EditEngagementForm', () => {
     await user.type(screen.getByLabelText('Montant (Solde 2)'), '{Enter}')
     expect(putCalls(fetchMock)).toHaveLength(0)
 
-    await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+    await retype(user, screen.getByLabelText('Motif de la modification'), 'Remise')
     await user.type(screen.getByLabelText('Montant (Solde 2)'), '{Enter}')
 
     await waitFor(() => expect(putCalls(fetchMock)).toHaveLength(1))
@@ -264,7 +265,7 @@ describe('EditEngagementForm', () => {
     const { onCancel, onSaved } = renderForm()
 
     await retype(user, screen.getByLabelText('Prix total convenu'), '520000')
-    await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+    await retype(user, screen.getByLabelText('Motif de la modification'), 'Remise')
     await user.click(screen.getByRole('button', { name: 'Annuler' }))
 
     expect(onCancel).toHaveBeenCalledTimes(1)
@@ -283,7 +284,7 @@ describe('EditEngagementForm', () => {
     const user = userEvent.setup()
     const { onSaved } = renderForm()
 
-    await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+    await retype(user, screen.getByLabelText('Motif de la modification'), 'Remise')
     await user.click(saveButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -305,7 +306,7 @@ describe('EditEngagementForm', () => {
     const user = userEvent.setup()
     renderForm()
 
-    await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+    await retype(user, screen.getByLabelText('Motif de la modification'), 'Remise')
     await user.click(saveButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent("Le montant doit être d'au moins 0,01 MAD.")
@@ -328,7 +329,7 @@ describe('EditEngagementForm', () => {
     const user = userEvent.setup()
     const { onReloaded, onSaved } = renderForm()
 
-    await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+    await retype(user, screen.getByLabelText('Motif de la modification'), 'Remise')
     await user.click(saveButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(CONFLICT)
@@ -340,7 +341,7 @@ describe('EditEngagementForm', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(onReloaded).toHaveBeenCalledTimes(1)
 
-    await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+    await retype(user, screen.getByLabelText('Motif de la modification'), 'Remise')
     await user.click(saveButton())
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled())
@@ -383,7 +384,7 @@ describe('EditEngagementForm', () => {
       }
       expect(screen.getByLabelText("Prix figurant sur l'acte")).toHaveValue(453217.5)
 
-      await user.type(screen.getByLabelText('Motif de la modification'), 'Prix grille')
+      await retype(user, screen.getByLabelText('Motif de la modification'), 'Prix grille')
       await user.click(saveButton())
 
       await waitFor(() => expect(putCalls(fetchMock)).toHaveLength(1))
@@ -394,7 +395,7 @@ describe('EditEngagementForm', () => {
       stubFetch()
       const user = userEvent.setup()
       renderForm()
-      await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+      await retype(user, screen.getByLabelText('Motif de la modification'), 'Remise')
       expect(saveButton()).toBeEnabled()
 
       await user.clear(screen.getByLabelText("Date d'échéance (Solde 1)"))
@@ -406,7 +407,7 @@ describe('EditEngagementForm', () => {
       stubFetch()
       const user = userEvent.setup()
       renderForm()
-      await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+      await retype(user, screen.getByLabelText('Motif de la modification'), 'Remise')
       await retype(user, screen.getByLabelText('Montant (Solde 1)'), '200000')
       await retype(user, screen.getByLabelText('Montant (Solde 2)'), '0')
       expect(screen.getByText('Total des échéances : 400 000 MAD / attendu 400 000 MAD')).toBeInTheDocument()

@@ -958,7 +958,8 @@ describe('LotDetailModal', () => {
       expect(screen.queryByText('Premier versement en retard')).not.toBeInTheDocument()
       expect(screen.queryByText('Premier acompte reçu')).not.toBeInTheDocument()
       expect(screen.queryByText(/sur — /)).not.toBeInTheDocument()
-      expect(screen.getByText("L'acte sera disponible quand 10 % du prix total convenu aura été encaissé.")).toBeInTheDocument()
+      expect(screen.getByText('Réservation engagée avant la nouvelle gestion des montants.')).toBeInTheDocument()
+      expect(screen.queryByText(/L'acte sera disponible quand/)).not.toBeInTheDocument()
     })
   })
 

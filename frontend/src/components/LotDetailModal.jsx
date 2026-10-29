@@ -1655,7 +1655,7 @@ function LotDetailModalContent({
                     </div>
                   )}
                   {/* Montants de la réservation engagée (spec E4-T5) */}
-                  {ACTE_STATUSES.includes(lot.status) && reservation?.sale_price != null && reservation.agreed_total_price != null && (
+                  {ACTE_STATUSES.includes(lot.status) && reservation?.sale_price != null && !financeLegacy && (
                     <>
                       <div className="ldm-ri-row">
                         <span className="ldm-ri-key">Prix figurant sur l'acte</span>

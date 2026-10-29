@@ -298,6 +298,32 @@ describe('ClientDetailPage - fiche client', () => {
         expect(screen.getByText('Lot A1 — Projet').closest('.pay-overview-card')).not.toHaveClass('pay-overview-card--highlight')
       })
 
+      it('scrolls to the focused card once, not again when the data is reloaded after a payment', async () => {
+        const scrollIntoView = vi.fn()
+        Element.prototype.scrollIntoView = scrollIntoView
+        try {
+          mockRows({ schedules: SCHEDULES, summaries: {} })
+          const user = userEvent.setup()
+          renderPage()
+          await user.click(await screen.findByRole('button', { name: /Réservations \(2\)/ }))
+          await user.click(await row('C3'))
+          await screen.findByText('Lot C3 — Projet')
+          await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1))
+
+          // recording a payment reloads the client data: the page must not scroll back
+          const reloads = () => fetch.mock.calls.filter(([url]) => String(url).endsWith('/details')).length
+          const before = reloads()
+          const record = (await screen.findAllByRole('button', { name: 'Enregistrer un encaissement' }))[0]
+          await user.click(record)
+          await user.click(screen.getByRole('button', { name: "Enregistrer l'encaissement" }))
+          await waitFor(() => expect(reloads()).toBeGreaterThan(before))
+          await new Promise((resolve) => setTimeout(resolve, 50))
+          expect(scrollIntoView).toHaveBeenCalledTimes(1)
+        } finally {
+          delete Element.prototype.scrollIntoView
+        }
+      })
+
       it('activates a row with the Enter key', async () => {
         mockRows({ schedules: SCHEDULES, summaries: {} })
         const user = userEvent.setup()

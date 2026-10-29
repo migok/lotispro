@@ -336,14 +336,18 @@ export default function ClientDetailPage() {
   useEffect(() => {
     if (!focus || activeTab !== 'payments' || paymentLoading) return;
     const el = document.getElementById(`pay-card-${focus.id}`);
-    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (!el) return;
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    // The card is there: highlight it for 2 s, and drop the target so a later reload of the
+    // schedules (e.g. after recording a payment) does not scroll back to it.
+    setHighlightId(focus.id);
+    clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlightId(null), 2000);
+    setFocus(null);
   }, [focus, activeTab, paymentLoading, paymentSchedules]);
 
   const openPayments = (res) => {
     setFocus({ id: res.id, numero: res.lot_numero });
-    setHighlightId(res.id);
-    clearTimeout(highlightTimer.current);
-    highlightTimer.current = setTimeout(() => setHighlightId(null), 2000);
     setActiveTab('payments');
   };
 

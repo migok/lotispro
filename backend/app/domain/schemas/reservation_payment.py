@@ -101,8 +101,9 @@ class InstallmentSummary(BaseSchema):
     installment_number: int
     amount: float
     due_date: datetime
-    received: float
-    remaining: float
+    # None for a legacy reservation: payments were not recorded per installment
+    received: float | None
+    remaining: float | None
     status: InstallmentStatus
 
 

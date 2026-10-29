@@ -358,8 +358,8 @@ class ReservationPaymentService:
                     installment_number=inst.installment_number,
                     amount=inst.amount,
                     due_date=inst.due_date,
-                    received=got,
-                    remaining=remaining(inst.amount, got),
+                    received=None if legacy else got,
+                    remaining=None if legacy else remaining(inst.amount, got),
                     # Legacy: payments were not recorded per installment, the
                     # stored status is the only one known.
                     status=(

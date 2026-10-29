@@ -21,7 +21,7 @@ export function fakeFinanceBackend({ acteMinPaidPct = 10, legacy = false } = {})
         legacy: true, catalogue_price: 500000, agreed_total_price: null, acte_price: null, gap_amount: null,
         gap_due_timing: null, gap_due_date: null, first_payment: null, total_received: null, remaining: null,
         acte_min_paid_pct: acteMinPaidPct, acte_threshold_amount: null, acte_available: false,
-        installments: installments.map((i) => ({ ...i, remaining: i.amount, status: 'pending' })),
+        installments: installments.map((i) => ({ ...i, received: null, remaining: null, status: i.id === 1 ? 'paid' : 'pending' })),
         updated_at: '2026-10-28T10:00:00',
       }
     }
