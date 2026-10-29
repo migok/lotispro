@@ -137,13 +137,13 @@ function fmtShort(date) {
 }
 
 /* ── Payment timeline (panel view) ───────────────────────── */
-function PaymentTimeline({ rows, total }) {
+function PaymentTimeline({ rows, total, format = formatPrice }) {
   if (!rows.length) return null;
   return (
     <div className="pay-timeline">
       <div className="pay-timeline-header">
         <span className="pay-timeline-title">Échéancier prévisionnel</span>
-        <span className="pay-timeline-total">{formatPrice(total)}</span>
+        <span className="pay-timeline-total">{format(total)}</span>
       </div>
       <div className="pay-timeline-list">
         {rows.map((row, i) => (
@@ -159,13 +159,13 @@ function PaymentTimeline({ rows, total }) {
                 </span>
                 <span className="pay-tl-date">{fmtShort(row.date)}</span>
               </div>
-              <div className="pay-tl-amount">{formatPrice(row.amount)}</div>
+              <div className="pay-tl-amount">{format(row.amount)}</div>
             </div>
           </div>
         ))}
         <div className="pay-tl-footer">
           <span className="pay-tl-footer-label">Total</span>
-          <span className="pay-tl-footer-amount">{formatPrice(total)}</span>
+          <span className="pay-tl-footer-amount">{format(total)}</span>
         </div>
       </div>
     </div>
@@ -320,6 +320,8 @@ function ExpiredAlert({ status, expirationDate }) {
 
 /* ── Payment plan configurator ────────────────────────────── */
 function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, engage = null }) {
+  // Engagement flows (E4-T5): exact amounts at the cent, as on the payment screens
+  const fmt = engage ? formatMad : formatPrice;
   const depPct = parseFloat(plan.deposit_pct) || 50;
   const balPct = Math.round((100 - depPct) * 100) / 100;
   const preview = useMemo(() => computePreview(lotPrice, plan, engage), [lotPrice, plan, engage]);
@@ -330,7 +332,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
       <div className="pay-plan-split">
         <div className="pay-plan-split-header">
           <span className="pay-plan-split-label">Répartition du paiement</span>
-          <span className="pay-plan-split-hint">Total = {formatPrice(lotPrice)}</span>
+          <span className="pay-plan-split-hint">Total = {fmt(lotPrice)}</span>
         </div>
         <div className="pay-plan-split-row">
           <div className="pay-plan-tranche">
@@ -341,7 +343,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
                 onChange={e => onChange({ ...plan, deposit_pct: e.target.value })} />
               <span className="pay-plan-pct-sym">%</span>
             </div>
-            <div className="pay-plan-tranche-amount">{formatPrice(preview.depositTotal)}</div>
+            <div className="pay-plan-tranche-amount">{fmt(preview.depositTotal)}</div>
           </div>
           <div className="pay-plan-divider">+</div>
           <div className="pay-plan-tranche">
@@ -350,7 +352,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
               <span className="pay-plan-pct-val">{balPct}</span>
               <span className="pay-plan-pct-sym">%</span>
             </div>
-            <div className="pay-plan-tranche-amount">{formatPrice(preview.balanceTotal)}</div>
+            <div className="pay-plan-tranche-amount">{fmt(preview.balanceTotal)}</div>
           </div>
         </div>
         <div className="pay-plan-bar">
@@ -359,7 +361,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
         </div>
         {preview.gapTotal > 0 && (
           <div className="pay-plan-split-hint" style={{ marginTop: 6 }}>
-            + Écart à régulariser : {formatPrice(preview.gapTotal)} (échéance distincte)
+            + Écart à régulariser : {fmt(preview.gapTotal)} (échéance distincte)
           </div>
         )}
       </div>
@@ -379,7 +381,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
         <div className="pay-plan-section pay-plan-section--deposit">
           <div className="pay-plan-section-title pay-plan-section-title--deposit">
             <span>Étalement acompte</span>
-            <span className="pay-plan-section-total">{formatPrice(preview.depositTotal)}</span>
+            <span className="pay-plan-section-total">{fmt(preview.depositTotal)}</span>
           </div>
           <div className="pay-plan-section-row">
             <div className="pay-plan-field">
@@ -399,7 +401,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
           <div className="pay-plan-per-installment pay-plan-per-installment--deposit">
             <span className="pay-plan-per-label">Par versement</span>
             <span className="pay-plan-per-amount">
-              {formatPrice(preview.depositTotal / Math.max(1, parseInt(plan.deposit_count) || 1))}
+              {fmt(preview.depositTotal / Math.max(1, parseInt(plan.deposit_count) || 1))}
             </span>
           </div>
           {preview.depositRows.length > 0 && (
@@ -413,7 +415,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
         <div className="pay-plan-section pay-plan-section--balance">
           <div className="pay-plan-section-title pay-plan-section-title--balance">
             <span>Étalement solde</span>
-            <span className="pay-plan-section-total">{formatPrice(preview.balanceTotal)}</span>
+            <span className="pay-plan-section-total">{fmt(preview.balanceTotal)}</span>
           </div>
           <div className="pay-plan-field">
             <label className="pay-plan-field-label">Délai avant le 1er versement solde</label>
@@ -440,7 +442,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
           <div className="pay-plan-per-installment pay-plan-per-installment--balance">
             <span className="pay-plan-per-label">Par versement</span>
             <span className="pay-plan-per-amount pay-plan-per-amount--balance">
-              {formatPrice(preview.balanceTotal / Math.max(1, parseInt(plan.balance_count) || 1))}
+              {fmt(preview.balanceTotal / Math.max(1, parseInt(plan.balance_count) || 1))}
             </span>
           </div>
           <div className="pay-plan-last-date pay-plan-last-date--balance">
@@ -451,7 +453,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
 
       {/* Panel mode: always-visible timeline / Inline mode: toggle + table */}
       {panel ? (
-        <PaymentTimeline rows={preview.allRows} total={lotPrice} />
+        <PaymentTimeline rows={preview.allRows} total={lotPrice} format={fmt} />
       ) : (
         <>
           <div className="pay-plan-preview-row">
@@ -466,7 +468,7 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
             <div className="pay-plan-preview">
               <div className="pay-plan-preview-header">
                 <span className="pay-plan-preview-title">Récapitulatif prévisionnel</span>
-                <span className="pay-plan-preview-total">Total : {formatPrice(lotPrice)}</span>
+                <span className="pay-plan-preview-total">Total : {fmt(lotPrice)}</span>
               </div>
               <table className="pay-preview-table">
                 <thead>
@@ -478,14 +480,14 @@ function PaymentPlanConfigurator({ lotPrice, plan, onChange, panel = false, enga
                       <td className="pay-preview-num">{i + 1}</td>
                       <td><span className={`pay-preview-badge pay-preview-badge--${row.type}`}>{previewRowLabel(row)}</span></td>
                       <td className="pay-preview-date">{fmtShort(row.date)}</td>
-                      <td className="pay-preview-amount">{formatPrice(row.amount)}</td>
+                      <td className="pay-preview-amount">{fmt(row.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="pay-preview-footer">
                     <td colSpan="3">Total</td>
-                    <td className="pay-preview-amount">{formatPrice(lotPrice)}</td>
+                    <td className="pay-preview-amount">{fmt(lotPrice)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -800,12 +802,16 @@ function LotDetailModalContent({
 
   const loadDocuments = async () => {
     if (!lot?.id) return;
+    const lotId = lot.id;
     try {
-      const data = await apiGet(`/api/lots/${lot.id}/documents`);
+      const data = await apiGet(`/api/lots/${lotId}/documents`);
+      // réponse arrivée après un changement de lot : ignorée
+      if (documentsLotId.current !== lotId) return;
       setDocuments(data);
       setDocumentsError(false);
       setDocumentsLoaded(true);
     } catch {
+      if (documentsLotId.current !== lotId) return;
       // ne pas conclure "acte absent" sur un échec de chargement
       setDocuments([]);
       setDocumentsLoaded(false);
@@ -2822,7 +2828,7 @@ function LotDetailModalContent({
                 <span className="mpp-title">Plan de paiement</span>
                 <span className="mpp-subtitle">{previewRowCount} versement{previewRowCount > 1 ? 's' : ''}</span>
               </div>
-              <span className="mpp-total">{formatPrice(thirdPanelPrice)}</span>
+              <span className="mpp-total">{isEngageMode ? formatMad(thirdPanelPrice) : formatPrice(thirdPanelPrice)}</span>
             </div>
             <div className="mpp-body">
               <PaymentPlanConfigurator lotPrice={thirdPanelPrice} plan={paymentPlan} onChange={setPaymentPlan} panel engage={engagePreview} />

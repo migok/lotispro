@@ -51,7 +51,9 @@ function initialForm(summary, notes) {
  * montant et date des échéances non encore reçues. En lecture seule : premier acompte reçu,
  * échéances reçues, échéance de l'écart (recalculée = convenu − acte, plafonnée au restant).
  * « Total des échéances » comparé en direct à l'attendu (convenu − premier acompte) ;
- * « Enregistrer » exige l'égalité au centime et un motif — le backend reste l'autorité.
+ * « Enregistrer » exige l'égalité au centime, un montant et une date sur chaque échéance modifiable
+ * et un motif — le backend reste l'autorité. Pas de validation native (`noValidate`) : les montants
+ * au centime ne doivent jamais bloquer l'envoi.
  *
  * `summary` : `financial-summary` (son `updated_at` est renvoyé comme `expected_updated_at`) ;
  * `notes` : notes actuelles de la réservation. `onSaved(result)` après l'enregistrement
@@ -78,7 +80,10 @@ export default function EditEngagementForm({ reservationId, summary: initialSumm
     .filter((inst) => inst.payment_type !== 'gap')
     .reduce((sum, inst) => sum + (isEditable(inst) ? toCents(rows[inst.id]?.amount) : toCents(inst.amount)), 0);
   const balanced = totalCents === expectedCents;
-  const canSave = balanced && reason.trim() !== '' && Object.keys(amountErrors).length === 0 && !saving && !reloading;
+  // Every editable installment needs an amount and a date (an empty amount would count as 0)
+  const rowsComplete = summary.installments.filter(isEditable)
+    .every((inst) => String(rows[inst.id]?.amount ?? '').trim() !== '' && Boolean(rows[inst.id]?.dueDate));
+  const canSave = balanced && rowsComplete && reason.trim() !== '' && Object.keys(amountErrors).length === 0 && !saving && !reloading;
 
   const scheduleRows = summary.installments.some((inst) => inst.payment_type === 'gap') || gapCents === 0
     ? summary.installments
@@ -138,7 +143,7 @@ export default function EditEngagementForm({ reservationId, summary: initialSumm
   };
 
   return (
-    <form className="edit-engagement-form" onSubmit={handleSubmit} aria-label="Modifier la réservation">
+    <form className="edit-engagement-form" onSubmit={handleSubmit} noValidate aria-label="Modifier la réservation">
       {error && (
         <div className="alert alert-error" role="alert" style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ flex: 1 }}>{error.message}</span>

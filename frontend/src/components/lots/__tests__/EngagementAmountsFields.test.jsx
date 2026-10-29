@@ -98,4 +98,13 @@ describe('EngagementAmountsFields', () => {
     expect(screen.queryByText(/promotion/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Premier acompte \(ND\)/)).not.toBeInTheDocument()
   })
+
+  it('takes amounts at the cent (step 0.01): a deed price of grid price × surface stays valid', () => {
+    render(<Host initial={{ ...REFERENCE, salePrice: '453217.5', firstPayment: '100000.25' }} />)
+
+    for (const label of ['Prix total convenu', "Prix figurant sur l'acte", 'Premier acompte reçu']) {
+      expect(screen.getByLabelText(label)).toHaveAttribute('step', '0.01')
+      expect(screen.getByLabelText(label)).toBeValid()
+    }
+  })
 })

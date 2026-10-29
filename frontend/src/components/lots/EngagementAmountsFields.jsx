@@ -53,7 +53,7 @@ export default function EngagementAmountsFields({
       <div className="msr-field-group">
         <label className="msr-label" htmlFor={`${id}-agreed`}>Prix total convenu</label>
         <div className="msr-price-input-wrap">
-          <input id={`${id}-agreed`} type="number" className="msr-price-input" min="0" step="1000"
+          <input id={`${id}-agreed`} type="number" className="msr-price-input" min="0" step="0.01"
             placeholder="Montant total demandé au client"
             value={value.agreedTotalPrice} onChange={set('agreedTotalPrice')} />
           <span className="msr-price-input-currency">MAD</span>
@@ -71,7 +71,7 @@ export default function EngagementAmountsFields({
       <div className="msr-field-group">
         <label className="msr-label" htmlFor={`${id}-acte`}>Prix figurant sur l'acte</label>
         <div className="msr-price-input-wrap">
-          <input id={`${id}-acte`} type="number" className="msr-price-input" min="0" step="1000"
+          <input id={`${id}-acte`} type="number" className="msr-price-input" min="0" step="0.01"
             placeholder="Prix imprimé sur l'acte"
             value={value.salePrice} onChange={set('salePrice')} />
           <span className="msr-price-input-currency">MAD</span>
@@ -125,7 +125,7 @@ export default function EngagementAmountsFields({
         ) : (
           <>
             <div className="msr-price-input-wrap">
-              <input id={`${id}-first`} type="number" className="msr-price-input" min="0" step="1000"
+              <input id={`${id}-first`} type="number" className="msr-price-input" min="0" step="0.01"
                 placeholder="Montant reçu"
                 value={value.firstPayment} onChange={set('firstPayment')} />
               <span className="msr-price-input-currency">MAD</span>

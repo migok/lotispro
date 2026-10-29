@@ -310,4 +310,72 @@ describe('EditEngagementForm', () => {
       expected_updated_at: '2026-10-28T22:30:00.5',
     })
   })
+
+  describe('final review fixes', () => {
+    // Deed price at the cent (grid price × surface): 500 000 − 453 217,50 = gap 46 782,50
+    const CENT_SUMMARY = {
+      ...SUMMARY,
+      acte_price: 453217.5,
+      gap_amount: 46782.5,
+      installments: [
+        SUMMARY.installments[0],
+        SUMMARY.installments[1],
+        { ...SUMMARY.installments[2], amount: 103217.5, remaining: 103217.5 },
+        { ...SUMMARY.installments[3], amount: 46782.5, remaining: 46782.5 },
+      ],
+    }
+
+    it('accepts amounts at the cent: step 0.01, no native validation, and the PUT is sent', async () => {
+      const fetchMock = stubFetch((path, options) => (options.method === 'PUT' ? json({ ...CENT_SUMMARY, acte_status: null }) : undefined))
+      const user = userEvent.setup()
+      renderForm({ summary: CENT_SUMMARY })
+
+      const form = screen.getByRole('form', { name: 'Modifier la réservation' })
+      expect(form).toHaveAttribute('novalidate')
+      for (const input of [
+        screen.getByLabelText('Prix total convenu'),
+        screen.getByLabelText("Prix figurant sur l'acte"),
+        screen.getByLabelText('Montant (Solde 1)'),
+        screen.getByLabelText('Montant (Solde 2)'),
+      ]) {
+        expect(input).toHaveAttribute('step', '0.01')
+        expect(input).toBeValid()
+      }
+      expect(screen.getByLabelText("Prix figurant sur l'acte")).toHaveValue(453217.5)
+
+      await user.type(screen.getByLabelText('Motif de la modification'), 'Prix grille')
+      await user.click(saveButton())
+
+      await waitFor(() => expect(putCalls(fetchMock)).toHaveLength(1))
+      expect(JSON.parse(putCalls(fetchMock)[0][1].body)).toMatchObject({ sale_price: 453217.5 })
+    })
+
+    it('disables « Enregistrer » while an editable installment has an empty date', async () => {
+      stubFetch()
+      const user = userEvent.setup()
+      renderForm()
+      await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+      expect(saveButton()).toBeEnabled()
+
+      await user.clear(screen.getByLabelText("Date d'échéance (Solde 1)"))
+
+      expect(saveButton()).toBeDisabled()
+    })
+
+    it('disables « Enregistrer » while an editable installment has an empty amount, even balanced', async () => {
+      stubFetch()
+      const user = userEvent.setup()
+      renderForm()
+      await user.type(screen.getByLabelText('Motif de la modification'), 'Remise')
+      await retype(user, screen.getByLabelText('Montant (Solde 1)'), '200000')
+      await retype(user, screen.getByLabelText('Montant (Solde 2)'), '0')
+      expect(screen.getByText('Total des échéances : 400 000 MAD / attendu 400 000 MAD')).toBeInTheDocument()
+      expect(saveButton()).toBeEnabled()
+
+      await user.clear(screen.getByLabelText('Montant (Solde 2)'))
+
+      expect(screen.getByText('Total des échéances : 400 000 MAD / attendu 400 000 MAD')).toBeInTheDocument()
+      expect(saveButton()).toBeDisabled()
+    })
+  })
 })

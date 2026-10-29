@@ -1,4 +1,5 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { useState } from 'react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../test/renderWithProviders'
 import LotDetailModal from '../LotDetailModal'
@@ -655,6 +656,65 @@ describe('LotDetailModal', () => {
       // the older deed is still there, and the regeneration stays available
       expect(await screen.findByRole('button', { name: 'Régénérer' })).toBeInTheDocument()
       expect(screen.getByText('Acte de réservation', { selector: '.badge' })).toBeInTheDocument()
+    })
+  })
+
+  describe('payment plan preview of an engagement (E4 final review)', () => {
+    it('shows the engagement schedule amounts at the cent, in the MAD format of the E4 screens', async () => {
+      mockFetch({ '/api/clients': [{ id: 7, name: 'Fatima Benali' }] })
+      const user = userEvent.setup()
+      renderModal({ id: 8, numero: 'H8', status: 'available', price: 500000 })
+
+      await user.click(screen.getByRole('button', { name: /Résa\. engagée/ }))
+      await user.clear(screen.getByLabelText("Prix figurant sur l'acte"))
+      await user.type(screen.getByLabelText("Prix figurant sur l'acte"), '453217.5')
+      await user.type(screen.getByLabelText('Premier acompte reçu'), '100000')
+
+      const panel = document.querySelector('.modal-pay-panel')
+      expect(panel).not.toBeNull()
+      expect(panel.querySelector('.mpp-total')).toHaveTextContent('400 000 MAD')
+      expect(within(panel).getByText(/Écart à régulariser : 46 782,50 MAD/)).toBeInTheDocument()
+      expect(within(panel).getAllByText('46 782,50 MAD').length).toBeGreaterThan(0)
+      expect(panel).not.toHaveTextContent('400.000')
+      expect(panel).not.toHaveTextContent('46.783')
+    })
+  })
+
+  describe('documents of the previous lot (E4 final review)', () => {
+    it('ignores a documents response that arrives after the lot changed', async () => {
+      const DEED_A = { id: 1, lot_id: 6, reservation_id: 12, filename: 'acte_reservation_12_lotN6.pdf', category: 'acte_reservation' }
+      let answerLotA
+      const fetchMock = vi.fn((url) => {
+        const path = String(url).replace(/^https?:\/\/[^/]+/, '').split('?')[0]
+        if (path === '/api/lots/6/documents') {
+          return new Promise((resolve) => {
+            answerLotA = () => resolve({ ok: true, status: 200, json: () => Promise.resolve([DEED_A]) })
+          })
+        }
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const LOT_A = { id: 6, numero: 'N6', status: 'chez_notaire', price: 500000, reservation_id: 12, client_name: 'Fatima Benali' }
+      const LOT_B = { id: 7, numero: 'N7', status: 'chez_notaire', price: 500000, reservation_id: 13, client_name: 'Karim Idrissi' }
+      function Switcher() {
+        const [lot, setLot] = useState(LOT_A)
+        return (
+          <>
+            <button type="button" onClick={() => setLot(LOT_B)}>Lot suivant</button>
+            <LotDetailModal lot={lot} onClose={() => {}} onRefresh={() => {}} />
+          </>
+        )
+      }
+      const user = userEvent.setup()
+      renderWithProviders(<Switcher />, { user: MANAGER })
+      await waitFor(() => expect(answerLotA).toBeDefined())
+
+      await user.click(screen.getByRole('button', { name: 'Lot suivant' }))
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/lots/7/documents'))).toBe(true))
+      await act(async () => { answerLotA() })
+
+      expect(screen.queryByText(DEED_A.filename)).not.toBeInTheDocument()
+      expect(await screen.findByText('Aucun document')).toBeInTheDocument()
     })
   })
 
