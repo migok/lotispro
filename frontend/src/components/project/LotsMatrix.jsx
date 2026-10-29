@@ -8,7 +8,7 @@ const isSelection = (filters, status, typeLot) =>
     : filters.statuses.length === 1 && filters.statuses[0] === status);
 
 /**
- * Compteur de la grille : bouton qui applique `next` quand il y a des lots,
+ * Compteur de la grille : bouton (`onClick`) quand il y a des lots,
  * simple nombre grisé sinon (D2 : les zéros ne sont pas cliquables).
  */
 function CountCell({ count, label, color, selected, onClick, className = '' }) {
