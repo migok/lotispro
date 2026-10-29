@@ -207,6 +207,39 @@ describe('PaymentsPanel', () => {
     expect(screen.queryByRole('table', { name: 'Encaissements' })).not.toBeInTheDocument()
   })
 
+  it('shows a warning instead of the amounts and the actions on a legacy reservation', async () => {
+    // Engaged before E4-T5: no agreed total price, amounts unknown (null), stored statuses
+    const summary = {
+      legacy: true, catalogue_price: 399000, agreed_total_price: null, acte_price: null, gap_amount: null,
+      gap_due_timing: null, gap_due_date: null, first_payment: null, total_received: null, remaining: null,
+      acte_min_paid_pct: 10, acte_threshold_amount: null, acte_available: false,
+      installments: [
+        { id: 7, payment_type: 'deposit', installment_number: 1, amount: 0, due_date: '2026-01-01T00:00:00', received: 0, remaining: 0, status: 'paid' },
+        { id: 8, payment_type: 'balance', installment_number: 1, amount: 299000, due_date: '2026-03-01T00:00:00', received: 0, remaining: 299000, status: 'pending' },
+      ],
+      updated_at: '2026-10-28T10:00:00',
+    }
+    vi.stubGlobal('fetch', vi.fn((url) => {
+      const body = String(url).endsWith('/financial-summary') ? summary : []
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) })
+    }))
+    const onSummaryChange = vi.fn()
+    renderPanel({ onSummaryChange })
+
+    expect(await screen.findByText(
+      'Réservation engagée avant la nouvelle gestion des montants : les montants ne peuvent pas être affichés ici.'
+    )).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Montants' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/MAD/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Enregistrer un encaissement' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Montant' })).not.toBeInTheDocument()
+    // the schedule itself (labels, dates, stored statuses) is still shown
+    expect(within(row(/Acompte 1/)).getByText('Reçu')).toBeInTheDocument()
+    expect(within(row(/Solde 1/)).getByText('À recevoir')).toBeInTheDocument()
+    expect(screen.queryByText('En retard')).not.toBeInTheDocument()
+    expect(onSummaryChange).toHaveBeenCalledWith(expect.objectContaining({ legacy: true }))
+  })
+
   it('shows a neutral message when the summary cannot be loaded', async () => {
     const onSummaryError = vi.fn()
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ message: 'boom' }) })))

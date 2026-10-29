@@ -71,6 +71,7 @@ PAYMENT_KEYS = {
     "created_at",
 }
 SUMMARY_KEYS = {
+    "legacy",
     "catalogue_price",
     "agreed_total_price",
     "acte_price",
@@ -259,6 +260,7 @@ class TestReferenceScenario:
 
         summary = await _summary(client, headers, reservation_id)
         assert set(summary) == SUMMARY_KEYS
+        assert summary["legacy"] is False
         assert summary["catalogue_price"] == 500000
         assert summary["agreed_total_price"] == 500000
         assert summary["acte_price"] == 450000

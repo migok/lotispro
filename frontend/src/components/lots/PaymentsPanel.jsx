@@ -6,6 +6,7 @@ import {
   getFinancialSummary,
   installmentLabel,
   INSTALLMENT_STATUS_LABELS,
+  LEGACY_FINANCE_MESSAGE,
   listPayments,
 } from '../../services/reservationFinanceService';
 import RecordPaymentForm from './RecordPaymentForm';
@@ -21,6 +22,9 @@ const isSummary = (data) => data != null && Array.isArray(data.installments);
  * et `payments` : Prix total convenu, Total encaissé, Reste à payer ; échéances avec leur
  * statut calculé (À recevoir / Partiellement reçu / Reçu), l'écart sur sa propre ligne ;
  * encaissements enregistrés ; indicateur « Acte disponible » ou message de seuil.
+ *
+ * Réservation engagée avant E4-T5 (`summary.legacy`) : un avertissement remplace les montants,
+ * l'échéancier est affiché sans montants (statuts tels qu'enregistrés) et sans action.
  *
  * `canRecord` : bouton « Enregistrer un encaissement » par échéance (désactivé une fois reçue).
  * `showActeStatus` (défaut true) : false quand l'hôte affiche déjà l'état de l'acte.
@@ -66,6 +70,8 @@ export default function PaymentsPanel({
   if (!data) return <div className="ldm-documents-empty">Chargement de l'échéancier…</div>;
 
   const { payments } = data;
+  const legacy = summary.legacy === true;
+  const recordable = canRecord && !legacy;
   const installmentById = new Map(summary.installments.map((i) => [i.id, i]));
   const formInstallment = formFor != null ? installmentById.get(formFor) : null;
   const now = new Date();
@@ -78,6 +84,9 @@ export default function PaymentsPanel({
 
   return (
     <div className="payments-panel">
+      {legacy ? (
+        <div className="alert alert-warning finance-legacy-notice" role="note">{LEGACY_FINANCE_MESSAGE}</div>
+      ) : (
       <div role="group" aria-label="Montants" className="ldm-ri-rows" style={{ marginBottom: 10 }}>
         <div className="ldm-ri-row">
           <span className="ldm-ri-key">Prix total convenu</span>
@@ -92,6 +101,7 @@ export default function PaymentsPanel({
           <span className="ldm-ri-val ldm-ri-val--bold" style={{ color: 'var(--color-primary)' }}>{formatMad(summary.remaining)}</span>
         </div>
       </div>
+      )}
 
       {showActeStatus && (
         summary.acte_available
@@ -104,14 +114,16 @@ export default function PaymentsPanel({
           <table className="pay-table" aria-label="Échéancier" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th>Échéance</th><th>Date</th><th>Montant</th><th>Reçu</th><th>Statut</th>
-                {canRecord && <th></th>}
+                <th>Échéance</th><th>Date</th>
+                {!legacy && <><th>Montant</th><th>Reçu</th></>}
+                <th>Statut</th>
+                {recordable && <th></th>}
               </tr>
             </thead>
             <tbody>
               {summary.installments.map((inst) => {
                 const received = inst.status === 'paid';
-                const overdue = !received && new Date(inst.due_date) < now;
+                const overdue = !legacy && !received && new Date(inst.due_date) < now;
                 return (
                   <tr key={inst.id} className={[
                     inst.payment_type === 'gap' ? 'pay-row--gap' : '',
@@ -120,15 +132,14 @@ export default function PaymentsPanel({
                   ].filter(Boolean).join(' ')}>
                     <td style={inst.payment_type === 'gap' ? { fontWeight: 600 } : undefined}>{installmentLabel(inst)}</td>
                     <td>{formatDate(inst.due_date)}</td>
-                    <td>{formatMad(inst.amount)}</td>
-                    <td>{formatMad(inst.received)}</td>
+                    {!legacy && <><td>{formatMad(inst.amount)}</td><td>{formatMad(inst.received)}</td></>}
                     <td>
                       <span className={`badge ${STATUS_BADGE[inst.status] ?? 'badge-gray'}`}>
                         {INSTALLMENT_STATUS_LABELS[inst.status] ?? inst.status}
                       </span>
                       {overdue && <span className="badge badge-red" style={{ marginLeft: 4 }}>En retard</span>}
                     </td>
-                    {canRecord && (
+                    {recordable && (
                       <td>
                         <button type="button" className="btn btn-ghost btn-sm"
                           disabled={received || formFor != null}
@@ -146,7 +157,7 @@ export default function PaymentsPanel({
         </div>
       )}
 
-      {canRecord && formInstallment && (
+      {recordable && formInstallment && (
         <RecordPaymentForm
           key={formInstallment.id}
           reservationId={reservationId}

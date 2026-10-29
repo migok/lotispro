@@ -19,6 +19,33 @@ GapTiming = Literal["debut", "fin", "date"]
 InstallmentStatus = Literal["pending", "partial", "paid"]
 
 
+LEGACY_RESERVATION_MESSAGE = (
+    "Réservation engagée avant la nouvelle gestion des montants : "
+    "cette action n'est pas disponible."
+)
+
+
+def is_legacy(agreed_total_price: float | None) -> bool:
+    """Engaged before E4-T5: no prix total convenu was recorded.
+
+    Such a reservation has no premier acompte nor gap in the new model: its
+    amounts are not shown and no payment nor edit can be made on it.
+    """
+    return agreed_total_price is None
+
+
+def ensure_not_legacy(agreed_total_price: float | None) -> None:
+    """Refuse an action that needs the E4-T5 amounts on a legacy reservation.
+
+    Raises:
+        BusinessRuleError: ``legacy_reservation``.
+    """
+    if is_legacy(agreed_total_price):
+        raise BusinessRuleError(
+            message=LEGACY_RESERVATION_MESSAGE, rule="legacy_reservation"
+        )
+
+
 def to_cents(x: float) -> int:
     """Amount in cents (``round(x * 100)``)."""
     return round(x * 100)

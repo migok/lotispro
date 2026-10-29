@@ -107,19 +107,27 @@ class InstallmentSummary(BaseSchema):
 
 
 class FinancialSummaryResponse(BaseSchema):
-    """Amounts of a reservation (spec E4-T5 definitions)."""
+    """Amounts of a reservation (spec E4-T5 definitions).
 
+    ``legacy``: engaged before E4-T5 (no prix total convenu). The amounts of
+    the new model are then ``null`` (never invented from the catalogue price);
+    the installments are returned as stored.
+    """
+
+    legacy: bool = Field(
+        description="Réservation engagée avant la nouvelle gestion des montants"
+    )
     catalogue_price: float | None = Field(description="Prix catalogue (lots.price)")
-    agreed_total_price: float = Field(description="Prix total convenu")
-    acte_price: float = Field(description="Prix figurant sur l'acte")
-    gap_amount: float = Field(description="Écart à régulariser = convenu − acte")
+    agreed_total_price: float | None = Field(description="Prix total convenu")
+    acte_price: float | None = Field(description="Prix figurant sur l'acte")
+    gap_amount: float | None = Field(description="Écart à régulariser = convenu − acte")
     gap_due_timing: str | None
     gap_due_date: date | None
-    first_payment: float = Field(description="Premier acompte reçu")
-    total_received: float
-    remaining: float = Field(description="Reste à payer = convenu − encaissé")
+    first_payment: float | None = Field(description="Premier acompte reçu")
+    total_received: float | None
+    remaining: float | None = Field(description="Reste à payer = convenu − encaissé")
     acte_min_paid_pct: float
-    acte_threshold_amount: float
+    acte_threshold_amount: float | None
     acte_available: bool
     installments: list[InstallmentSummary]
     updated_at: datetime

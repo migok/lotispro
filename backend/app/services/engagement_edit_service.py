@@ -33,6 +33,7 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger
 from app.domain.reservation_amounts import (
+    ensure_not_legacy,
     format_mad,
     gap_amount,
     gap_installment_amount,
@@ -164,11 +165,11 @@ class EngagementEditService:
         Raises:
             NotFoundError: Reservation not found.
             AuthorizationError: Neither the reservation's commercial nor a manager.
-            BusinessRuleError: Not engaged, agreed total below what was
-                received, deed price above the agreed total, installment list
-                not matching the schedule, total not matching, installment
-                below what it already received, received installment changed,
-                or nothing to change.
+            BusinessRuleError: Not engaged, legacy (engaged before E4-T5),
+                agreed total below what was received, deed price above the
+                agreed total, installment list not matching the schedule,
+                total not matching, installment below what it already
+                received, received installment changed, or nothing to change.
             ConflictError: ``expected_updated_at`` is stale.
         """
         found = await self.reservation_repo.get_by_id(reservation_id)
@@ -198,6 +199,7 @@ class EngagementEditService:
                 message="Seule une réservation engagée peut être modifiée.",
                 rule="reservation_not_engaged",
             )
+        ensure_not_legacy(reservation.agreed_total_price)
         if _utc(reservation.updated_at) != _utc(data.expected_updated_at):
             raise ConflictError(STALE_MESSAGE)
         installments = list(

@@ -16,9 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import AuthorizationError, BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
 from app.domain.reservation_amounts import (
+    ensure_not_legacy,
     format_mad,
     gap_amount,
     installment_status,
+    is_legacy,
     remaining,
     to_cents,
 )
@@ -163,9 +165,10 @@ class ReservationPaymentService:
         Raises:
             NotFoundError: Reservation not found.
             AuthorizationError: Neither the reservation's commercial nor a manager.
-            BusinessRuleError: Reservation not engaged, installment missing or
-                of another reservation, amount above the installment's
-                remaining amount, payment order, or invalid proof file.
+            BusinessRuleError: Reservation not engaged or legacy (engaged
+                before E4-T5), installment missing or of another reservation,
+                amount above the installment's remaining amount, payment
+                order, or invalid proof file.
             ProofStorageError: The proof file could not be stored (nothing
                 is written).
         """
@@ -190,6 +193,7 @@ class ReservationPaymentService:
                 ),
                 rule="reservation_not_engaged",
             )
+        ensure_not_legacy(reservation.agreed_total_price)
         if data.installment_id is None:
             raise BusinessRuleError(
                 message="Choisissez l'échéance de cet encaissement.",
@@ -343,6 +347,7 @@ class ReservationPaymentService:
         received = await self.received_repo.totals_by_installment(
             [i.id for i in installments]
         )
+        legacy = is_legacy(details.get("agreed_total_price"))
         lines = []
         for inst in installments:
             got = received.get(inst.id, 0.0)
@@ -355,11 +360,35 @@ class ReservationPaymentService:
                     due_date=inst.due_date,
                     received=got,
                     remaining=remaining(inst.amount, got),
-                    status=installment_status(inst.amount, got),
+                    # Legacy: payments were not recorded per installment, the
+                    # stored status is the only one known.
+                    status=(
+                        inst.status if legacy else installment_status(inst.amount, got)
+                    ),
                 )
             )
 
+        if legacy:
+            # Engaged before E4-T5: the new-model amounts are unknown.
+            return FinancialSummaryResponse(
+                legacy=True,
+                catalogue_price=details["lot_price"],
+                agreed_total_price=None,
+                acte_price=None,
+                gap_amount=None,
+                gap_due_timing=details["gap_due_timing"],
+                gap_due_date=details["gap_due_date"],
+                first_payment=None,
+                total_received=None,
+                remaining=None,
+                acte_min_paid_pct=details["acte_min_paid_pct"],
+                acte_threshold_amount=None,
+                acte_available=readiness.available,
+                installments=lines,
+                updated_at=details["updated_at"],
+            )
         return FinancialSummaryResponse(
+            legacy=False,
             catalogue_price=details["lot_price"],
             agreed_total_price=agreed,
             acte_price=price,

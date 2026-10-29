@@ -16,7 +16,7 @@ import EngagementAmountsFields from './lots/EngagementAmountsFields';
 import PaymentsPanel from './lots/PaymentsPanel';
 import EditEngagementForm from './lots/EditEngagementForm';
 import ReservationChangesHistory from './lots/ReservationChangesHistory';
-import { acteThresholdMessage } from '../services/reservationFinanceService';
+import { acteThresholdMessage, LEGACY_FINANCE_MESSAGE } from '../services/reservationFinanceService';
 import NotifyClientPanel from './notifications/NotifyClientPanel';
 import NotificationHistory from './notifications/NotificationHistory';
 
@@ -1426,8 +1426,10 @@ function LotDetailModalContent({
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
   })();
 
+  // Engaged before E4-T5 (no agreed total price): amounts unknown, no edit nor payment
+  const financeLegacy = financeSummary?.legacy === true;
   // First deposit installment (financial summary) — for the overdue alert
-  const firstDepositInstallment = financeSummary?.installments
+  const firstDepositInstallment = financeLegacy ? null : financeSummary?.installments
     ?.filter(i => i.payment_type === 'deposit')
     .sort((a, b) => a.installment_number - b.installment_number)[0] ?? null;
   const firstPaymentIsOverdue = firstDepositInstallment != null && firstDepositInstallment.status !== 'paid'
@@ -1438,7 +1440,8 @@ function LotDetailModalContent({
   const showFinance = ACTE_STATUSES.includes(lot.status) && !!lot.reservation_id;
   // Same rule as payments (backend: 403 / 400 otherwise). The form needs the loaded summary and
   // the reservation's notes (the edit replaces them: never open it with unknown notes).
-  const canEditEngagement = canRecordPayments && financeSummary != null && reservation?.id === lot.reservation_id;
+  const canEditEngagement = canRecordPayments && financeSummary != null && !financeLegacy
+    && reservation?.id === lot.reservation_id;
   const editingEngagement = mode === 'edit_engagement' && canEditEngagement && editingFor === lot.reservation_id;
   const lotStats = [
     lot.surface && { icon: <IcSurface />, value: `${lot.surface} m²`, label: 'Surface' },
@@ -1616,7 +1619,7 @@ function LotDetailModalContent({
                     </div>
                   )}
                   {/* Montants de la réservation engagée (spec E4-T5) */}
-                  {ACTE_STATUSES.includes(lot.status) && reservation?.sale_price != null && (
+                  {ACTE_STATUSES.includes(lot.status) && reservation?.sale_price != null && reservation.agreed_total_price != null && (
                     <>
                       <div className="ldm-ri-row">
                         <span className="ldm-ri-key">Prix figurant sur l'acte</span>
@@ -1922,7 +1925,8 @@ function LotDetailModalContent({
                 )}
                 {can('solde') && (() => {
                   // Soldable only once nothing is left to pay (gap included) — checked again by the backend
-                  const allPaid = financeSummary != null && financeSummary.remaining <= 0;
+                  // (a legacy reservation has no known amount left: never offered here)
+                  const allPaid = financeSummary != null && !financeLegacy && financeSummary.remaining <= 0;
                   return (
                     <button
                       className="btn btn-success"
@@ -1930,7 +1934,7 @@ function LotDetailModalContent({
                       onClick={() => allPaid && handleSetMode('to_soldee')}
                       disabled={!allPaid}
                       title={!allPaid
-                        ? (financeSummary ? `Reste à payer : ${formatMad(financeSummary.remaining)} — la réservation ne peut pas être soldée.` : financeFailed ? 'Échéancier indisponible.' : "Chargement de l'échéancier…")
+                        ? (financeLegacy ? LEGACY_FINANCE_MESSAGE : financeSummary ? `Reste à payer : ${formatMad(financeSummary.remaining)} — la réservation ne peut pas être soldée.` : financeFailed ? 'Échéancier indisponible.' : "Chargement de l'échéancier…")
                         : 'Marquer le lot comme soldé'}
                     >
                       <IcCheck /> Marquer soldé

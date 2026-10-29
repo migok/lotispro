@@ -61,9 +61,20 @@ export function installmentLabel(installment) {
   return `${kind} ${installment.installment_number}`;
 }
 
-/** Message affiché tant que le seuil d'émission de l'acte n'est pas atteint (même texte que le backend). */
+/**
+ * Réservation engagée avant E4-T5 (`summary.legacy`, sans prix total convenu) : ses montants
+ * ne sont pas connus dans le nouveau modèle, on l'explique au lieu d'afficher des montants faux.
+ */
+export const LEGACY_FINANCE_MESSAGE =
+  'Réservation engagée avant la nouvelle gestion des montants : les montants ne peuvent pas être affichés ici.';
+
+/**
+ * Message affiché tant que le seuil d'émission de l'acte n'est pas atteint (même texte que le
+ * backend) ; sans les montants quand ils sont inconnus (réservation antérieure à E4-T5).
+ */
 export function acteThresholdMessage(summary) {
   const pct = String(summary.acte_min_paid_pct).replace('.', ',');
-  return `L'acte sera disponible quand ${pct} % du prix total convenu aura été encaissé `
-    + `(${formatMad(summary.total_received)} sur ${formatMad(summary.acte_threshold_amount)}).`;
+  const text = `L'acte sera disponible quand ${pct} % du prix total convenu aura été encaissé`;
+  if (summary.total_received == null || summary.acte_threshold_amount == null) return `${text}.`;
+  return `${text} (${formatMad(summary.total_received)} sur ${formatMad(summary.acte_threshold_amount)}).`;
 }

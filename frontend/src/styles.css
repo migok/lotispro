@@ -13415,3 +13415,11 @@ body {
   font-size: 0.8rem;
   color: var(--text-secondary);
 }
+
+/* ── Réservation engagée avant E4-T5 : montants non affichés ── */
+.alert-warning {
+  background-color: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  color: var(--color-warning);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
+.finance-legacy-notice { margin-bottom: 10px; }

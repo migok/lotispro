@@ -4,6 +4,7 @@ import {
   getReservation,
   installmentLabel,
   INSTALLMENT_STATUS_LABELS,
+  LEGACY_FINANCE_MESSAGE,
   listPayments,
   listReservationChanges,
   recordPayment,
@@ -75,6 +76,17 @@ describe('reservationFinanceService', () => {
       .toBe("L'acte sera disponible quand 10 % du prix total convenu aura été encaissé (30 000 MAD sur 50 000 MAD).")
     expect(acteThresholdMessage({ acte_min_paid_pct: 12.5, total_received: 0, acte_threshold_amount: 62500 }))
       .toBe("L'acte sera disponible quand 12,5 % du prix total convenu aura été encaissé (0 MAD sur 62 500 MAD).")
+  })
+
+  it('never shows unknown amounts in the deed threshold message (legacy reservation)', () => {
+    expect(acteThresholdMessage({ legacy: true, acte_min_paid_pct: 10, total_received: null, acte_threshold_amount: null }))
+      .toBe("L'acte sera disponible quand 10 % du prix total convenu aura été encaissé.")
+  })
+
+  it('explains why the amounts of a legacy reservation are not shown', () => {
+    expect(LEGACY_FINANCE_MESSAGE).toBe(
+      'Réservation engagée avant la nouvelle gestion des montants : les montants ne peuvent pas être affichés ici.'
+    )
   })
 
   it('labels installments and their computed statuses', () => {

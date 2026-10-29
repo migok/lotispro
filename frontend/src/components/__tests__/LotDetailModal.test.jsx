@@ -734,6 +734,49 @@ describe('LotDetailModal', () => {
     })
   })
 
+  describe('legacy reservation, engaged before the new amounts (E4-T5)', () => {
+    const LEGACY_TEXT = 'Réservation engagée avant la nouvelle gestion des montants : les montants ne peuvent pas être affichés ici.'
+    const ENGAGED = {
+      id: 5, numero: '3', status: 'reservation_engagee', price: 399000, reservation_id: 11,
+      client_name: 'Fatima Benali', reserved_by_user_id: 2,
+    }
+    const RESERVATION = {
+      id: 11, reserved_by_user_id: 2, notes: null, sale_price: 399000, agreed_total_price: null,
+      gap_amount: 0, gap_due_timing: null, first_payment: 0,
+    }
+    const SUMMARY = {
+      legacy: true, catalogue_price: 399000, agreed_total_price: null, acte_price: null, gap_amount: null,
+      gap_due_timing: null, gap_due_date: null, first_payment: null, total_received: null, remaining: null,
+      acte_min_paid_pct: 10, acte_threshold_amount: null, acte_available: false,
+      installments: [
+        { id: 1, payment_type: 'deposit', installment_number: 1, amount: 0, due_date: '2020-01-01T00:00:00', received: 0, remaining: 0, status: 'pending' },
+      ],
+      updated_at: '2026-10-28T10:00:00',
+    }
+    const routes = {
+      '/api/reservations/11/financial-summary': SUMMARY,
+      '/api/reservations/11': RESERVATION,
+      '/api/lots/5/documents': [],
+    }
+
+    it('shows the warning instead of wrong amounts, and no edit nor payment action', async () => {
+      mockFetch(routes)
+      renderModal(ENGAGED)
+
+      expect(await screen.findByText(LEGACY_TEXT)).toBeInTheDocument()
+      // the deed footer button shows the modal has the summary and the reservation
+      await screen.findByRole('button', { name: /Marquer soldé/ })
+      await waitFor(() => expect(screen.getByRole('button', { name: /Marquer soldé/ })).toBeDisabled())
+      expect(screen.queryByRole('button', { name: 'Modifier la réservation' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Enregistrer un encaissement' })).not.toBeInTheDocument()
+      expect(screen.queryByText('Reste à payer')).not.toBeInTheDocument()
+      expect(screen.queryByText('Premier versement en retard')).not.toBeInTheDocument()
+      expect(screen.queryByText('Premier acompte reçu')).not.toBeInTheDocument()
+      expect(screen.queryByText(/sur — /)).not.toBeInTheDocument()
+      expect(screen.getByText("L'acte sera disponible quand 10 % du prix total convenu aura été encaissé.")).toBeInTheDocument()
+    })
+  })
+
   describe('payment plan preview of an engagement (E4 final review)', () => {
     it('shows the engagement schedule amounts at the cent, in the MAD format of the E4 screens', async () => {
       mockFetch({ '/api/clients': [{ id: 7, name: 'Fatima Benali' }] })
