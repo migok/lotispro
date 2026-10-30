@@ -181,12 +181,25 @@ class AverageDurations(BaseSchema):
     )
 
 
+class PeriodBucket(BaseSchema):
+    """Flow KPIs of one bucket (day, ISO week or month) of a period."""
+
+    key: str
+    lots_vendus: int = 0
+    ca: float = 0
+    reservations_creees: int = 0
+    encaissements: float = 0
+
+
 class PerformanceData(BaseSchema):
     """Schema for performance analytics."""
 
     sales_by_period: list[SalesByPeriod]
     reservations_vs_sales: list[ReservationsVsSales]
     average_durations: AverageDurations
+    period: PeriodRange | None = None
+    granularity: str | None = None
+    series: list[PeriodBucket] = Field(default_factory=list)
 
 
 class ClientPipeline(BaseSchema):

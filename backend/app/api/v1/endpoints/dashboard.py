@@ -100,12 +100,19 @@ async def get_performance(
     project_id: int | None = Query(default=None, description="Filter by project"),
     user_id: int | None = Query(default=None, description="Filter by user"),
     period: str = Query(default="month", description="Aggregation period"),
+    date_from: date | None = Query(
+        default=None, description="Period start (inclusive, default: month start)"
+    ),
+    date_to: date | None = Query(
+        default=None, description="Period end (inclusive, default: month end)"
+    ),
 ) -> PerformanceData:
-    """Get performance analytics data."""
+    """Get performance analytics data; ``series`` covers the given period."""
     return await dashboard_service.get_performance_data(
         project_id=project_id,
         user_id=user_id,
         period=period,
+        date_range=resolve_period(date_from, date_to, business_today()),
     )
 
 

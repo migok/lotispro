@@ -18,6 +18,7 @@ from app.domain.schemas.dashboard import (
     DashboardStats,
     DashboardSurfaces,
     PerformanceData,
+    PeriodRange,
     ReservationsVsSales,
     SalesByPeriod,
 )
@@ -623,13 +624,15 @@ class DashboardService:
         project_id: int | None = None,
         user_id: int | None = None,
         period: str = "month",
+        date_range: Period | None = None,
     ) -> PerformanceData:
         """Get performance analytics data.
 
         Args:
             project_id: Optional project filter
             user_id: Optional user filter (for commercial view)
-            period: Aggregation period
+            period: Aggregation period of the legacy ``sales_by_period``
+            date_range: Period of the bucketed series (default: current month)
 
         Returns:
             Performance data
@@ -660,10 +663,21 @@ class DashboardService:
             user_id=user_id,
         )
 
+        if date_range is None:
+            date_range = resolve_period(None, None, business_today())
+        granularity, series = await DashboardPeriodService(self.session).series(
+            date_range, project_id, user_id
+        )
+
         return PerformanceData(
             sales_by_period=sales_by_period,
             reservations_vs_sales=reservations_vs_sales,
             average_durations=average_durations,
+            period=PeriodRange(
+                date_from=date_range.date_from, date_to=date_range.date_to
+            ),
+            granularity=granularity,
+            series=series,
         )
 
     async def _get_sales_by_period(

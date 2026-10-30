@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55 ; E6-T1 en cours)_
+_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55 ; E6-T1 en revue)_
 
 ## Vue d'ensemble
 
@@ -58,7 +58,7 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E5-T1 | Endpoint `lots-matrix` | 🟨 | [#35](https://github.com/migok/lotispro/issues/35) | [#55](https://github.com/migok/lotispro/pull/55) | |
 | E5-T2 | Onglet Lots (grille + navigation) | 🟨 | [#36](https://github.com/migok/lotispro/issues/36) | [#55](https://github.com/migok/lotispro/pull/55) | |
 | E5-T3 | Filtres persistés | 🟨 | [#37](https://github.com/migok/lotispro/issues/37) | [#55](https://github.com/migok/lotispro/pull/55) | |
-| E6-T1 | Backend période + KPIs | 🟦 | [#39](https://github.com/migok/lotispro/issues/39) | | |
+| E6-T1 | Backend période + KPIs | 🟨 | [#39](https://github.com/migok/lotispro/issues/39) | | |
 | E6-T2 | Sélecteur de période + découpage Dashboard | ⬜ | [#40](https://github.com/migok/lotispro/issues/40) | | |
 | E6-T3 | Export Excel | ⬜ | [#41](https://github.com/migok/lotispro/issues/41) | | |
 | E7-T1 | Décision fournisseur | ⛔ | [#43](https://github.com/migok/lotispro/issues/43) | | |

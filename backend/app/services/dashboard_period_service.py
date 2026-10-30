@@ -11,11 +11,15 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.dashboard_period import (
+    Granularity,
     Period,
+    bucket_key,
+    bucket_keys,
+    granularity_for,
     previous_period,
     to_business_date,
     utc_bounds,
@@ -24,6 +28,7 @@ from app.domain.dashboard_period import (
 from app.domain.schemas.dashboard import (
     FlowKpis,
     FlowVariations,
+    PeriodBucket,
     PeriodRange,
     StateKpis,
 )
@@ -142,38 +147,26 @@ class DashboardPeriodService:
     ) -> FlowKpis:
         """Flow KPIs of the period (filters: project, commercial)."""
         sold = await self.sold_lots(period, project_id, user_id)
-        start, end = utc_bounds(period)
-
-        created_query = select(func.count(ReservationModel.id)).where(
-            ReservationModel.reservation_date >= start,
-            ReservationModel.reservation_date < end,
-        )
-        paid_query = (
-            select(func.coalesce(func.sum(ReservationPaymentModel.amount), 0))
-            .join(
-                ReservationModel,
-                ReservationModel.id == ReservationPaymentModel.reservation_id,
+        created = (
+            await self.session.execute(
+                self._created_query(
+                    select(func.count(ReservationModel.id)),
+                    period,
+                    project_id,
+                    user_id,
+                )
             )
-            .where(
-                ReservationPaymentModel.paid_on >= period.date_from,
-                ReservationPaymentModel.paid_on <= period.date_to,
+        ).scalar_one()
+        paid = (
+            await self.session.execute(
+                self._paid_query(
+                    select(func.coalesce(func.sum(ReservationPaymentModel.amount), 0)),
+                    period,
+                    project_id,
+                    user_id,
+                )
             )
-        )
-        if project_id is not None:
-            created_query = created_query.where(
-                ReservationModel.project_id == project_id
-            )
-            paid_query = paid_query.where(ReservationModel.project_id == project_id)
-        if user_id is not None:
-            created_query = created_query.where(
-                ReservationModel.reserved_by_user_id == user_id
-            )
-            paid_query = paid_query.where(
-                ReservationModel.reserved_by_user_id == user_id
-            )
-
-        created = (await self.session.execute(created_query)).scalar_one()
-        paid = (await self.session.execute(paid_query)).scalar_one()
+        ).scalar_one()
         sold_count = len(sold)
         return FlowKpis(
             lots_vendus=sold_count,
@@ -182,6 +175,80 @@ class DashboardPeriodService:
             taux_conversion=round(sold_count / created * 100, 1) if created else 0,
             encaissements=round(float(paid), 2),
         )
+
+    @staticmethod
+    def _created_query(
+        query: Select[Any], period: Period, project_id: int | None, user_id: int | None
+    ) -> Select[Any]:
+        """Restrict a ``reservations`` query to those created in the period."""
+        start, end = utc_bounds(period)
+        query = query.where(
+            ReservationModel.reservation_date >= start,
+            ReservationModel.reservation_date < end,
+        )
+        if project_id is not None:
+            query = query.where(ReservationModel.project_id == project_id)
+        if user_id is not None:
+            query = query.where(ReservationModel.reserved_by_user_id == user_id)
+        return query
+
+    @staticmethod
+    def _paid_query(
+        query: Select[Any], period: Period, project_id: int | None, user_id: int | None
+    ) -> Select[Any]:
+        """Restrict a payments query to those paid in the period (joins reservations)."""
+        query = query.join(
+            ReservationModel,
+            ReservationModel.id == ReservationPaymentModel.reservation_id,
+        ).where(
+            ReservationPaymentModel.paid_on >= period.date_from,
+            ReservationPaymentModel.paid_on <= period.date_to,
+        )
+        if project_id is not None:
+            query = query.where(ReservationModel.project_id == project_id)
+        if user_id is not None:
+            query = query.where(ReservationModel.reserved_by_user_id == user_id)
+        return query
+
+    async def series(
+        self, period: Period, project_id: int | None, user_id: int | None
+    ) -> tuple[Granularity, list[PeriodBucket]]:
+        """Flow KPIs per bucket (empty buckets included) over the period."""
+        granularity = granularity_for(period)
+        buckets = {
+            key: PeriodBucket(key=key) for key in bucket_keys(period, granularity)
+        }
+
+        for sold in await self.sold_lots(period, project_id, user_id):
+            bucket = buckets[bucket_key(sold.engaged_on, granularity)]
+            bucket.lots_vendus += 1
+            bucket.ca += sold.agreed_total_price
+
+        created_dates = await self.session.execute(
+            self._created_query(
+                select(ReservationModel.reservation_date), period, project_id, user_id
+            )
+        )
+        for (reserved_at,) in created_dates.all():
+            buckets[
+                bucket_key(to_business_date(reserved_at), granularity)
+            ].reservations_creees += 1
+
+        payments = await self.session.execute(
+            self._paid_query(
+                select(ReservationPaymentModel.paid_on, ReservationPaymentModel.amount),
+                period,
+                project_id,
+                user_id,
+            )
+        )
+        for paid_on, amount in payments.all():
+            buckets[bucket_key(paid_on, granularity)].encaissements += float(amount)
+
+        for bucket in buckets.values():
+            bucket.ca = round(bucket.ca, 2)
+            bucket.encaissements = round(bucket.encaissements, 2)
+        return granularity, list(buckets.values())
 
     async def state_at(self, day: date, project_id: int | None) -> StateKpis:
         """Available / option lot counts at the end of ``day`` (no user filter).
