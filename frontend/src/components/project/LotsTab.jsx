@@ -21,8 +21,9 @@ const describeFilters = (filters) => {
 /**
  * Onglet « Lots » de la page projet (E5) : grille type × statut (toujours tout le projet)
  * et liste filtrée côté client ; le détail d'un lot s'ouvre par-dessus la liste, qui reste montée.
+ * `onLotsChanged` (optionnel) prévient le parent qu'une transition a modifié des lots (la carte doit se recharger).
  */
-export default function LotsTab({ projectId, enabledOptional }) {
+export default function LotsTab({ projectId, enabledOptional, onLotsChanged }) {
   // The parent keys this tab by project, so the persisted filters are read once per project.
   const [filters, setFilters] = useState(() => loadFilters(projectId));
   const [matrix, setMatrix] = useState(null);
@@ -47,7 +48,10 @@ export default function LotsTab({ projectId, enabledOptional }) {
     return () => { cancelled = true; };
   }, [projectId, reloadKey]);
 
-  const refresh = () => setReloadKey((key) => key + 1);
+  const refresh = () => {
+    setReloadKey((key) => key + 1);
+    onLotsChanged?.();
+  };
 
   const updateFilters = (next) => {
     setFilters(next);
@@ -56,11 +60,11 @@ export default function LotsTab({ projectId, enabledOptional }) {
 
   const visibleLots = useMemo(() => (lots ? applyLotsFilters(lots, filters) : []), [lots, filters]);
 
-  // Types of the grid rows; a persisted type the grid no longer has stays selectable so the select never lies.
+  // Types of the grid rows; a persisted type (or « Non renseigné ») the grid no longer has stays selectable so the select never lies.
   const typeOptions = useMemo(() => {
     const types = matrix ? matrix.rows.map((row) => row.type_lot) : [];
-    if (filters.typeLot !== null && filters.typeLot !== NO_TYPE && !types.includes(filters.typeLot)) {
-      types.push(filters.typeLot);
+    if (filters.typeLot !== null && !types.includes(filters.typeLot === NO_TYPE ? null : filters.typeLot)) {
+      types.push(filters.typeLot === NO_TYPE ? null : filters.typeLot);
     }
     return types;
   }, [matrix, filters.typeLot]);

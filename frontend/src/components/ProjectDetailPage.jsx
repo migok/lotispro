@@ -127,6 +127,7 @@ export default function ProjectDetailPage() {
   // Selection mode for bulk metadata edit (manager only)
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedLotIds, setSelectedLotIds] = useState(new Set());
+  const mapStaleRef = useRef(false); // lots changed from the Lots tab while the map was hidden
   const selectionModeRef = useRef(false);
   const selectedLotIdsRef = useRef(new Set());
   const selectedLotLayersRef = useRef(new Map()); // db_id -> { lyr, normalStyle }
@@ -176,6 +177,11 @@ export default function ProjectDetailPage() {
         setTimeout(() => {
           mapRef.current?.invalidateSize();
         }, 100);
+        // Des lots ont changé depuis l'onglet Lots : la carte (visible ici) se recharge
+        if (mapStaleRef.current) {
+          mapStaleRef.current = false;
+          loadLots();
+        }
       }
     };
 
@@ -645,7 +651,15 @@ export default function ProjectDetailPage() {
           />
         </div>
 
-        {activeTab === 'lots' && <LotsTab key={projectId} projectId={parseInt(projectId)} enabledOptional={enabledOptional} />}
+        {activeTab === 'lots' && <LotsTab
+            key={projectId}
+            projectId={parseInt(projectId)}
+            enabledOptional={enabledOptional}
+            onLotsChanged={() => {
+              mapStaleRef.current = true;
+              loadProject(true);
+            }}
+          />}
 
         {activeTab === 'kpis' && <KPIsTab project={project} />}
 

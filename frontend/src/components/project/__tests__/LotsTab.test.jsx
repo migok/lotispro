@@ -65,8 +65,8 @@ function mockApi(state) {
   return fetchMock
 }
 
-const renderTab = (projectId = 7) =>
-  renderWithProviders(<LotsTab projectId={projectId} enabledOptional={['option']} />, { user: { id: 1, role: 'manager' } })
+const renderTab = (projectId = 7, props = {}) =>
+  renderWithProviders(<LotsTab projectId={projectId} enabledOptional={['option']} {...props} />, { user: { id: 1, role: 'manager' } })
 
 const listedNumbers = () => {
   const list = screen.getByRole('table', { name: 'Liste des lots' })
@@ -154,6 +154,33 @@ describe('LotsTab', () => {
     await user.click(screen.getByRole('button', { name: 'close' }))
     expect(screen.getByRole('button', { name: 'Villa — Disponible : 1 lot' })).toHaveAttribute('aria-pressed', 'true')
     expect(listedNumbers()).toEqual(['LOT-1'])
+  })
+
+  it('tells the parent when a transition changed the lots', async () => {
+    const state = { matrix: { body: MATRIX }, lots: { body: GEOJSON } }
+    mockApi(state)
+    const onLotsChanged = vi.fn()
+    const user = userEvent.setup()
+    renderTab(7, { onLotsChanged })
+
+    await user.click(await screen.findByText('LOT-2'))
+    expect(onLotsChanged).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'refresh' }))
+
+    expect(onLotsChanged).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes without an onLotsChanged callback', async () => {
+    const state = { matrix: { body: MATRIX }, lots: { body: GEOJSON } }
+    mockApi(state)
+    const user = userEvent.setup()
+    renderTab()
+
+    await user.click(await screen.findByText('LOT-2'))
+    state.matrix = { body: MATRIX_AFTER }
+    await user.click(screen.getByRole('button', { name: 'refresh' }))
+
+    expect(await screen.findByRole('button', { name: 'Villa — Disponible : 1 lot' })).toBeInTheDocument()
   })
 
   it('shows an error when the matrix fails to load', async () => {
@@ -325,6 +352,16 @@ describe('LotsTab filters', () => {
 
     expect(await screen.findByRole('heading', { name: 'Tous les lots — 4 lots' })).toBeInTheDocument()
     expect(badge()).not.toBeInTheDocument()
+  })
+
+  it('keeps « Non renseigné » selected when the grid has no untyped row', async () => {
+    sessionStorage.setItem('lotsFilters:7', JSON.stringify({ statuses: [], typeLot: '__none__', search: '' }))
+    const matrix = { ...MATRIX, rows: [MATRIX.rows[0]], grand_total: 3 }
+    mockApi({ matrix: { body: matrix }, lots: { body: GEOJSON } })
+    renderTab()
+
+    await screen.findByRole('table', { name: 'Lots par type et statut' })
+    expect(screen.getByRole('combobox', { name: /type/i })).toHaveDisplayValue('Non renseigné')
   })
 
   it('ignores unparsable persisted filters', async () => {
