@@ -322,7 +322,12 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         <div className="period-error" role="alert">{periodError}</div>
       )}
       <KpiCards stats={periodStats} loading={periodLoading} />
-      <MonthlyChart performance={periodPerformance} loading={periodLoading} />
+      <MonthlyChart
+        performance={periodPerformance}
+        loading={periodLoading}
+        flowKpisAvailable={periodStats?.flow_kpis_available}
+        historyStart={periodStats?.history_start}
+      />
 
       {/* KPIs cumulés (managers avec projet) / performance financière */}
       <CumulativeKpis stats={stats} projectKpis={projectKpis} projectId={propsProjectId} isManager={isManager} isCommercial={isCommercial} />

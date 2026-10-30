@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatPrice } from '../../utils/formatters';
-import { bucketLabel } from './period';
+import { bucketLabel, formatFlowUnavailableNotice } from './period';
 
 const TITLE = 'Évolution sur la période';
 // Beyond this many buckets (e.g. 31 days) only every n-th label is printed.
@@ -23,8 +23,12 @@ function Header({ children }) {
  * Bar chart of the period series (`performance.series`): « Vendus » = lots sold,
  * « Réservés » = reservations created, « Montant » mode = CA. One bar group per
  * day, ISO week or month depending on the period length.
+ *
+ * When `flowKpisAvailable === false` (period starting before `historyStart`),
+ * sales and CA are unknown, as on the KPI cards: a notice replaces them, only
+ * the « Réservés » bars are drawn and « Montant » mode shows no bars.
  */
-export default function MonthlyChart({ performance, loading }) {
+export default function MonthlyChart({ performance, loading, flowKpisAvailable, historyStart }) {
   const [hovered, setHovered] = useState(null);
   const [chartMode, setChartMode] = useState('nombre'); // 'nombre' | 'montant'
 
@@ -42,19 +46,30 @@ export default function MonthlyChart({ performance, loading }) {
   }
   if (!performance) return null;
 
+  const salesAvailable = flowKpisAvailable !== false;
+  const notice = salesAvailable ? null : (
+    <p className="period-chart-notice">{formatFlowUnavailableNotice(historyStart)}</p>
+  );
   const series = performance.series || [];
-  const hasData = series.some((b) => b.lots_vendus || b.reservations_creees || b.ca);
+  const hasData = series.some(
+    (b) => b.reservations_creees || (salesAvailable && (b.lots_vendus || b.ca)),
+  );
   if (!hasData) {
     return (
       <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
         <Header />
+        {notice}
         <p className="period-chart-empty">Aucune donnée sur la période</p>
       </div>
     );
   }
 
+  // Without sales history, « Montant » mode has nothing to draw: the notice stands alone.
+  const showBars = salesAvailable || chartMode === 'nombre';
   const maxVal = chartMode === 'nombre'
-    ? Math.max(1, ...series.flatMap((b) => [b.lots_vendus, b.reservations_creees]))
+    ? Math.max(1, ...series.flatMap((b) => (salesAvailable
+      ? [b.lots_vendus, b.reservations_creees]
+      : [b.reservations_creees])))
     : Math.max(1, ...series.map((b) => b.ca));
   const totalSold = series.reduce((s, b) => s + b.lots_vendus, 0);
   const totalReserved = series.reduce((s, b) => s + b.reservations_creees, 0);
@@ -89,99 +104,114 @@ export default function MonthlyChart({ performance, loading }) {
             </button>
           </div>
           <div className="monthly-kpi-row">
-            <div className="monthly-kpi">
-              <span className="monthly-kpi-num num">{totalSold}</span>
-              <span className="monthly-kpi-label">Vendus</span>
-            </div>
-            <div className="monthly-kpi-sep"/>
+            {salesAvailable && (
+              <>
+                <div className="monthly-kpi">
+                  <span className="monthly-kpi-num num">{totalSold}</span>
+                  <span className="monthly-kpi-label">Vendus</span>
+                </div>
+                <div className="monthly-kpi-sep"/>
+              </>
+            )}
             <div className="monthly-kpi">
               <span className="monthly-kpi-num num">{totalReserved}</span>
               <span className="monthly-kpi-label">Réservés</span>
             </div>
-            <div className="monthly-kpi-sep"/>
-            <div className="monthly-kpi accent">
-              <span className="monthly-kpi-num num">{formatPrice(totalCA)}</span>
-              <span className="monthly-kpi-label">CA total</span>
-            </div>
+            {salesAvailable && (
+              <>
+                <div className="monthly-kpi-sep"/>
+                <div className="monthly-kpi accent">
+                  <span className="monthly-kpi-num num">{formatPrice(totalCA)}</span>
+                  <span className="monthly-kpi-label">CA total</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </Header>
 
-      <div className="monthly-chart-body" style={{ padding: '0 var(--spacing-lg) var(--spacing-sm)' }}>
-        <div className={`monthly-chart-bars${dense ? ' is-dense' : ''}`}>
-          {series.map((bucket, idx) => {
-            const barH = chartMode === 'nombre'
-              ? (bucket.lots_vendus / maxVal) * 100
-              : (bucket.ca / maxVal) * 100;
-            const resH = chartMode === 'nombre' ? (bucket.reservations_creees / maxVal) * 100 : 0;
-            const isHovered = hovered === idx;
-            const label = bucketLabel(bucket.key);
-            return (
-              <div
-                key={bucket.key}
-                className={`chart-month-group${isHovered ? ' hovered' : ''}`}
-                onMouseEnter={() => setHovered(idx)}
-                onMouseLeave={() => setHovered(null)}
-              >
-                <div className="chart-bars-group">
-                  {chartMode === 'nombre' ? (
-                    <>
-                      <div className="chart-bar sold"     style={{ height: `${barH}%` }}/>
-                      <div className="chart-bar reserved" style={{ height: `${resH}%` }}/>
-                    </>
-                  ) : (
-                    <div className="chart-bar amount" style={{ height: `${barH}%` }}/>
-                  )}
-                </div>
-                <div className="chart-month-label">{idx % labelStep === 0 || isHovered ? label : ''}</div>
-                {!dense && chartMode === 'nombre' && bucket.ca > 0 && (
-                  <div className="chart-month-amount num">{formatPrice(bucket.ca)}</div>
-                )}
-                {isHovered && (
-                  <div className="chart-tooltip">
-                    <div className="chart-tooltip-period">{label}</div>
+      {notice}
+      {showBars && (
+        <div className="monthly-chart-body" style={{ padding: '0 var(--spacing-lg) var(--spacing-sm)' }}>
+          <div className={`monthly-chart-bars${dense ? ' is-dense' : ''}`}>
+            {series.map((bucket, idx) => {
+              const barH = chartMode === 'nombre'
+                ? (bucket.lots_vendus / maxVal) * 100
+                : (bucket.ca / maxVal) * 100;
+              const resH = chartMode === 'nombre' ? (bucket.reservations_creees / maxVal) * 100 : 0;
+              const isHovered = hovered === idx;
+              const label = bucketLabel(bucket.key);
+              return (
+                <div
+                  key={bucket.key}
+                  className={`chart-month-group${isHovered ? ' hovered' : ''}`}
+                  onMouseEnter={() => setHovered(idx)}
+                  onMouseLeave={() => setHovered(null)}
+                >
+                  <div className="chart-bars-group">
                     {chartMode === 'nombre' ? (
                       <>
-                        <div className="chart-tooltip-row">
-                          <span className="chart-tooltip-dot sold"/>
-                          <span>{bucket.lots_vendus} vendu{bucket.lots_vendus > 1 ? 's' : ''}</span>
-                        </div>
-                        <div className="chart-tooltip-row">
-                          <span className="chart-tooltip-dot reserved"/>
-                          <span>{bucket.reservations_creees} réservé{bucket.reservations_creees > 1 ? 's' : ''}</span>
-                        </div>
-                        {bucket.ca > 0 && (
-                          <div className="chart-tooltip-ca">{formatPrice(bucket.ca)}</div>
-                        )}
+                        {salesAvailable && <div className="chart-bar sold" style={{ height: `${barH}%` }}/>}
+                        <div className="chart-bar reserved" style={{ height: `${resH}%` }}/>
                       </>
                     ) : (
-                      <>
-                        <div className="chart-tooltip-row">
-                          <span className="chart-tooltip-dot" style={{ background: 'var(--color-primary)' }}/>
-                          <span>CA</span>
-                        </div>
-                        <div className="chart-tooltip-ca">{formatPrice(bucket.ca)}</div>
-                      </>
+                      <div className="chart-bar amount" style={{ height: `${barH}%` }}/>
                     )}
                   </div>
-                )}
+                  <div className="chart-month-label">{idx % labelStep === 0 || isHovered ? label : ''}</div>
+                  {!dense && salesAvailable && chartMode === 'nombre' && bucket.ca > 0 && (
+                    <div className="chart-month-amount num">{formatPrice(bucket.ca)}</div>
+                  )}
+                  {isHovered && (
+                    <div className="chart-tooltip">
+                      <div className="chart-tooltip-period">{label}</div>
+                      {chartMode === 'nombre' ? (
+                        <>
+                          {salesAvailable && (
+                            <div className="chart-tooltip-row">
+                              <span className="chart-tooltip-dot sold"/>
+                              <span>{bucket.lots_vendus} vendu{bucket.lots_vendus > 1 ? 's' : ''}</span>
+                            </div>
+                          )}
+                          <div className="chart-tooltip-row">
+                            <span className="chart-tooltip-dot reserved"/>
+                            <span>{bucket.reservations_creees} réservé{bucket.reservations_creees > 1 ? 's' : ''}</span>
+                          </div>
+                          {salesAvailable && bucket.ca > 0 && (
+                            <div className="chart-tooltip-ca">{formatPrice(bucket.ca)}</div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <div className="chart-tooltip-row">
+                            <span className="chart-tooltip-dot" style={{ background: 'var(--color-primary)' }}/>
+                            <span>CA</span>
+                          </div>
+                          <div className="chart-tooltip-ca">{formatPrice(bucket.ca)}</div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="chart-grid-lines">
+            {[100, 75, 50, 25].map((p) => (
+              <div key={p} className="chart-grid-line" style={{ bottom: `${p}%` }}>
+                <span className="chart-grid-label">{fmtGridVal(maxVal * p / 100)}</span>
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
-        <div className="chart-grid-lines">
-          {[100, 75, 50, 25].map((p) => (
-            <div key={p} className="chart-grid-line" style={{ bottom: `${p}%` }}>
-              <span className="chart-grid-label">{fmtGridVal(maxVal * p / 100)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
-      <div className="chart-legend" style={{ padding: '0 var(--spacing-lg) var(--spacing-md)' }}>
-        <span className="legend-item"><span className="legend-dot sold"/>Vendus</span>
-        <span className="legend-item"><span className="legend-dot reserved"/>Réservés</span>
-      </div>
+      {showBars && (
+        <div className="chart-legend" style={{ padding: '0 var(--spacing-lg) var(--spacing-md)' }}>
+          {salesAvailable && <span className="legend-item"><span className="legend-dot sold"/>Vendus</span>}
+          <span className="legend-item"><span className="legend-dot reserved"/>Réservés</span>
+        </div>
+      )}
     </div>
   );
 }

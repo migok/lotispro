@@ -116,6 +116,10 @@ export const formatIsoDate = (value) => {
   return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
 };
 
+/** Notice shown instead of sales, CA and conversion before the status history starts. */
+export const formatFlowUnavailableNotice = (historyStart) =>
+  `Ventes, CA et conversion disponibles à partir du ${formatIsoDate(historyStart)}`;
+
 export const formatPeriodLabel = (period) =>
   `Période : du ${formatIsoDate(period.dateFrom)} au ${formatIsoDate(period.dateTo)}`;
 

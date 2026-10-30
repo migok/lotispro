@@ -13728,6 +13728,12 @@ body {
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+.period-chart-notice {
+  margin: 0;
+  padding: 0 var(--spacing-lg) var(--spacing-sm);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
 
 /* Day buckets (up to 31) need narrower bar groups */
 .monthly-chart-bars.is-dense { gap: 3px; }

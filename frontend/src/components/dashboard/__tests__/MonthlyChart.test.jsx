@@ -32,6 +32,65 @@ describe('MonthlyChart', () => {
     expect(screen.getByRole('button', { name: /Montant/ })).toHaveClass('active')
   })
 
+  describe('when sales are unavailable before the history start', () => {
+    const NOTICE = 'Ventes, CA et conversion disponibles à partir du 15/10/2026'
+    const renderUnavailable = () => render(
+      <MonthlyChart
+        performance={PERFORMANCE}
+        loading={false}
+        flowKpisAvailable={false}
+        historyStart="2026-10-15"
+      />,
+    )
+
+    it('« Nombre » mode: shows the notice and only the « Réservés » bars, total and legend', () => {
+      const { container } = renderUnavailable()
+
+      expect(screen.getByText(NOTICE)).toBeInTheDocument()
+      const totals = [...container.querySelectorAll('.monthly-kpi')].map((el) => el.textContent)
+      expect(totals).toEqual(['8Réservés'])
+      expect(container.querySelectorAll('.chart-bar.sold')).toHaveLength(0)
+      expect(container.querySelectorAll('.chart-bar.reserved')).toHaveLength(2)
+      expect(container.querySelector('.chart-month-amount')).toBeNull()
+      expect(container.querySelector('.legend-dot.sold')).toBeNull()
+      expect(container.querySelector('.legend-dot.reserved')).not.toBeNull()
+      expect(screen.queryByText('Vendus')).toBeNull()
+      expect(screen.queryByText('CA total')).toBeNull()
+    })
+
+    it('« Montant » mode: shows the notice instead of the bars', async () => {
+      const { container } = renderUnavailable()
+      await userEvent.click(screen.getByRole('button', { name: /Montant/ }))
+
+      expect(screen.getByText(NOTICE)).toBeInTheDocument()
+      expect(container.querySelectorAll('.chart-bar')).toHaveLength(0)
+      expect(container.querySelector('.chart-legend')).toBeNull()
+      expect(screen.queryByText('CA total')).toBeNull()
+    })
+  })
+
+  it('draws sold bars and every total when sales are available', async () => {
+    const { container } = render(
+      <MonthlyChart
+        performance={PERFORMANCE}
+        loading={false}
+        flowKpisAvailable
+        historyStart="2026-01-01"
+      />,
+    )
+
+    expect(screen.queryByText(/disponibles à partir du/)).toBeNull()
+    const totals = [...container.querySelectorAll('.monthly-kpi')].map((el) => el.textContent)
+    expect(totals).toHaveLength(3)
+    expect(totals.slice(0, 2)).toEqual(['3Vendus', '8Réservés'])
+    expect(screen.getByText('CA total')).toBeInTheDocument()
+    expect(container.querySelectorAll('.chart-bar.sold')).toHaveLength(2)
+    expect(container.querySelector('.legend-dot.sold')).not.toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: /Montant/ }))
+    expect(container.querySelectorAll('.chart-bar.amount')).toHaveLength(2)
+  })
+
   it('shows « Aucune donnée sur la période » for an empty series', () => {
     render(<MonthlyChart performance={{ granularity: 'day', series: [] }} loading={false} />)
     expect(screen.getByText('Aucune donnée sur la période')).toBeInTheDocument()

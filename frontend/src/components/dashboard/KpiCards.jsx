@@ -1,5 +1,10 @@
 import { formatNumber } from '../../utils/formatters';
-import { formatIsoDate, formatPercentNumber, formatVariation } from './period';
+import {
+  formatFlowUnavailableNotice,
+  formatIsoDate,
+  formatPercentNumber,
+  formatVariation,
+} from './period';
 
 const FLOW_CARDS = [
   {
@@ -71,7 +76,7 @@ export default function KpiCards({ stats, loading }) {
   const variations = stats.variations || {};
   const historyStart = formatIsoDate(stats.history_start);
   const stateDate = formatIsoDate(stats.period?.date_to);
-  const flowNotice = `Ventes, CA et conversion disponibles à partir du ${historyStart}`;
+  const flowNotice = formatFlowUnavailableNotice(stats.history_start);
   const stateNotice = `Situation des lots disponible à partir du ${historyStart}`;
 
   return (
