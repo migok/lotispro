@@ -129,6 +129,27 @@ class LotRepository(BaseRepository[LotModel]):
 
         return counts
 
+    async def count_by_type_and_status(
+        self, project_id: int
+    ) -> list[tuple[str | None, str, int]]:
+        """Count lots by (trimmed) lot type and status for a project.
+
+        Blank or whitespace-only types are grouped under ``None``.
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            List of ``(type_lot, status, count)`` triples
+        """
+        type_key = func.nullif(func.trim(LotModel.type_lot), "")
+        result = await self.session.execute(
+            select(type_key, LotModel.status, func.count())
+            .where(LotModel.project_id == project_id)
+            .group_by(type_key, LotModel.status)
+        )
+        return [(type_lot, status, count) for type_lot, status, count in result.all()]
+
     async def numero_exists(
         self,
         project_id: int,
