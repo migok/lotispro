@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55, recette en cours)_
+_Dernière mise à jour : 2026-10-30 (E5 validé en recette et fusionné, PR #55)_
 
 ## Vue d'ensemble
 
@@ -21,7 +21,7 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E2 👤 #7 Fiche client | ✅ | 6 / 6 | [#18](https://github.com/migok/lotispro/issues/18) | [#48](https://github.com/migok/lotispro/pull/48) |
 | E3 Statuts par projet + états des lieux | ✅ | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | [#51](https://github.com/migok/lotispro/pull/51) |
 | E4 🔄 #8 Réservation | ✅ | 6 / 6 | [#29](https://github.com/migok/lotispro/issues/29) | [#54](https://github.com/migok/lotispro/pull/54) |
-| E5 📊 #3 Vue projet | 🟨 | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | [#55](https://github.com/migok/lotispro/pull/55) |
+| E5 📊 #3 Vue projet | ✅ | 3 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | [#55](https://github.com/migok/lotispro/pull/55) |
 | E6 📅 #4 Dashboard par période | ⬜ | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | |
 | E7 SMS / WhatsApp | ⛔ fournisseur à choisir | 0 / 3 | [#42](https://github.com/migok/lotispro/issues/42) | |
 
@@ -55,9 +55,9 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E4-T3 | UI notifications + historique | ✅ | [#32](https://github.com/migok/lotispro/issues/32) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
 | E4-T4 | Rappels d'expiration | ✅ | [#33](https://github.com/migok/lotispro/issues/33) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
 | E4-T5 | Modifier une réservation engagée | ✅ | [#52](https://github.com/migok/lotispro/issues/52) | [#54](https://github.com/migok/lotispro/pull/54) | 2026-10-29 |
-| E5-T1 | Endpoint `lots-matrix` | 🟨 | [#35](https://github.com/migok/lotispro/issues/35) | [#55](https://github.com/migok/lotispro/pull/55) | |
-| E5-T2 | Onglet Lots (grille + navigation) | 🟨 | [#36](https://github.com/migok/lotispro/issues/36) | [#55](https://github.com/migok/lotispro/pull/55) | |
-| E5-T3 | Filtres persistés | 🟨 | [#37](https://github.com/migok/lotispro/issues/37) | [#55](https://github.com/migok/lotispro/pull/55) | |
+| E5-T1 | Endpoint `lots-matrix` | ✅ | [#35](https://github.com/migok/lotispro/issues/35) | [#55](https://github.com/migok/lotispro/pull/55) | 2026-10-30 |
+| E5-T2 | Onglet Lots (grille + navigation) | ✅ | [#36](https://github.com/migok/lotispro/issues/36) | [#55](https://github.com/migok/lotispro/pull/55) | 2026-10-30 |
+| E5-T3 | Filtres persistés | ✅ | [#37](https://github.com/migok/lotispro/issues/37) | [#55](https://github.com/migok/lotispro/pull/55) | 2026-10-30 |
 | E6-T1 | Backend période + KPIs | ⬜ | [#39](https://github.com/migok/lotispro/issues/39) | | |
 | E6-T2 | Sélecteur de période + découpage Dashboard | ⬜ | [#40](https://github.com/migok/lotispro/issues/40) | | |
 | E6-T3 | Export Excel | ⬜ | [#41](https://github.com/migok/lotispro/issues/41) | | |
@@ -141,6 +141,11 @@ Dette relevée en fin d'E2 (revue finale, 2026-10-25) :
 - Badge « Actes » de la fiche client choisi par comparaison de chaînes (`ClientDetailPage.jsx`) : comparer la clé (`morocco`/`abroad`) serait plus robuste.
 - Adresses héritées contenant déjà la ville : la ville apparaîtra deux fois après saisie de la ville (pas de migration de découpage, décision utilisateur).
 - `pydantic_validation_handler` renvoie encore « Data validation failed » (anglais).
+
+Dette relevée en fin d'E5 (revue finale, 2026-10-30) :
+- Quatre messages « You don't have access to this project » restent en anglais dans `project_service.py` (`get_project`, `get_project_kpis`, `get_project_performance`, `get_project_history`) ; celui de l'export GeoJSON est passé en français dans E5.
+- `export_geojson` lit `lot.get("reserved_by")` alors que le dépôt renvoie `reserved_by_name` : le nom du commercial ayant réservé manque dans la popup de la carte et dans la liste de l'onglet Lots.
+- Onglet Lots : pas de bouton « Réessayer » après un échec de chargement ; une ligne de lot cliquable est un `<tr tabIndex=0>` sans rôle de bouton.
 
 ## Anomalies constatées
 
