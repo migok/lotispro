@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55 ; E6 en revue : T1, T2 et T3 implémentées, corrections de la revue finale faites, recette à faire)_
+_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55 ; E6 en revue, PR #57 : T1, T2 et T3 implémentées, corrections de la revue finale faites, recette à faire)_
 
 ## Vue d'ensemble
 
@@ -22,7 +22,7 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E3 Statuts par projet + états des lieux | ✅ | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | [#51](https://github.com/migok/lotispro/pull/51) |
 | E4 🔄 #8 Réservation | ✅ | 6 / 6 | [#29](https://github.com/migok/lotispro/issues/29) | [#54](https://github.com/migok/lotispro/pull/54) |
 | E5 📊 #3 Vue projet | 🟨 | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | [#55](https://github.com/migok/lotispro/pull/55) |
-| E6 📅 #4 Dashboard par période | 🟨 | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | |
+| E6 📅 #4 Dashboard par période | 🟨 | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | [#57](https://github.com/migok/lotispro/pull/57) |
 | E7 SMS / WhatsApp | ⛔ fournisseur à choisir | 0 / 3 | [#42](https://github.com/migok/lotispro/issues/42) | |
 
 ## Détail des tâches
@@ -58,9 +58,9 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E5-T1 | Endpoint `lots-matrix` | 🟨 | [#35](https://github.com/migok/lotispro/issues/35) | [#55](https://github.com/migok/lotispro/pull/55) | |
 | E5-T2 | Onglet Lots (grille + navigation) | 🟨 | [#36](https://github.com/migok/lotispro/issues/36) | [#55](https://github.com/migok/lotispro/pull/55) | |
 | E5-T3 | Filtres persistés | 🟨 | [#37](https://github.com/migok/lotispro/issues/37) | [#55](https://github.com/migok/lotispro/pull/55) | |
-| E6-T1 | Backend période + KPIs | 🟨 | [#39](https://github.com/migok/lotispro/issues/39) | | |
-| E6-T2 | Sélecteur de période + découpage Dashboard | 🟨 | [#40](https://github.com/migok/lotispro/issues/40) | | |
-| E6-T3 | Export Excel | 🟨 | [#41](https://github.com/migok/lotispro/issues/41) | | |
+| E6-T1 | Backend période + KPIs | 🟨 | [#39](https://github.com/migok/lotispro/issues/39) | [#57](https://github.com/migok/lotispro/pull/57) | |
+| E6-T2 | Sélecteur de période + découpage Dashboard | 🟨 | [#40](https://github.com/migok/lotispro/issues/40) | [#57](https://github.com/migok/lotispro/pull/57) | |
+| E6-T3 | Export Excel | 🟨 | [#41](https://github.com/migok/lotispro/issues/41) | [#57](https://github.com/migok/lotispro/pull/57) | |
 | E7-T1 | Décision fournisseur | ⛔ | [#43](https://github.com/migok/lotispro/issues/43) | | |
 | E7-T2 | Canal SMS | ⬜ | [#44](https://github.com/migok/lotispro/issues/44) | | |
 | E7-T3 | Canal WhatsApp | ⬜ | [#45](https://github.com/migok/lotispro/issues/45) | | |
