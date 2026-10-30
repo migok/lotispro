@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55 ; E6 en revue : T1, T2 et T3 implémentées, recette à faire)_
+_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55 ; E6 en revue : T1, T2 et T3 implémentées, corrections de la revue finale faites, recette à faire)_
 
 ## Vue d'ensemble
 
@@ -135,6 +135,7 @@ Dette relevée en fin d'E3 (revue finale, statuts optionnels et état des lieux)
 - **E2, erreurs 422 non traduites** : le toast de repli anglais « Request validation failed » et les erreurs de parsing de date en anglais restent affichés sur les chemins 422 non couverts par `error_handlers.py`.
 - **E2, migration 0017 : downgrade destructif** : `downgrade()` supprime les colonnes ajoutées au profil client ; après usage réel, un retour arrière entraîne une perte de données.
 - **E2, ordre de déploiement** : déployer Railway (backend) puis Vercel (frontend) immédiatement après, car l'ancienne interface envoie `POST {name}`, qui reçoit un 422 sur le nouveau backend.
+- **E6, coût de `/dashboard/stats`** : chaque appel calcule aussi le bloc période (≈ 9 requêtes de plus) et `state_at` charge tous les lots et tout l'historique (tous projets sans `project_id`, cas de `GlobalDashboard`, qui n'utilise pas ces champs) ; `Dashboard` appelle `/stats` deux fois au chargement. Piste : paramètre opt-in ou endpoint dédié, et ne lire que la dernière ligne d'historique avant la date de fin.
 
 Dette relevée en fin d'E2 (revue finale, 2026-10-25) :
 - ~~**PDF d'acte / reçu en erreur 500** si une adresse, une ville, un pays ou un nom contient un caractère hors latin-1 (apostrophe typographique ’ insérée par les claviers de téléphone, écriture arabe). Préexistant, plus probable avec les nouveaux champs. Correctif : police Unicode (DejaVuSans via `pdf.add_font`) dans `certificate_service.py`, ou au minimum remplacer ’‘“” avant impression. → planifié en **E4-T0** ([#49](https://github.com/migok/lotispro/issues/49)), première tâche d'E4.~~ **Résolu par E4-T0** : DejaVu Sans embarquée (`app/assets/fonts/`) + mise en forme du texte arabe via `uharfbuzz`.
