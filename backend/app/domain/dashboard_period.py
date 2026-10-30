@@ -14,10 +14,14 @@ from app.core.config import settings
 from app.core.exceptions import ValidationError
 
 MAX_PERIOD_DAYS = 3660
+# Outside this range the previous period / UTC bounds can overflow ``date``.
+MIN_DATE = date(1900, 1, 1)
+MAX_DATE = date(2100, 12, 31)
 
 SINGLE_BOUND_MESSAGE = "Indiquez la date de début et la date de fin."
 INVERTED_MESSAGE = "La date de début doit être antérieure ou égale à la date de fin."
 TOO_LONG_MESSAGE = "La période ne peut pas dépasser 10 ans."
+OUT_OF_RANGE_MESSAGE = "Les dates doivent être comprises entre 1900 et 2100."
 
 Granularity = Literal["day", "week", "month"]
 
@@ -54,6 +58,8 @@ def resolve_period(date_from: date | None, date_to: date | None, today: date) ->
         return Period(today.replace(day=1), today.replace(day=last_day))
     if date_from is None or date_to is None:
         raise ValidationError(SINGLE_BOUND_MESSAGE, field="date_from")
+    if not (MIN_DATE <= date_from <= MAX_DATE and MIN_DATE <= date_to <= MAX_DATE):
+        raise ValidationError(OUT_OF_RANGE_MESSAGE, field="date_from")
     if date_from > date_to:
         raise ValidationError(INVERTED_MESSAGE, field="date_from")
     period = Period(date_from, date_to)

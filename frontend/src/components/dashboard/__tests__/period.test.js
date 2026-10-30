@@ -7,6 +7,7 @@ import {
   formatVariation,
   loadPeriod,
   matchingShortcut,
+  parseIsoDate,
   periodParams,
   savePeriod,
   shortcutRange,
@@ -55,6 +56,20 @@ describe('matchingShortcut', () => {
   })
 })
 
+describe('parseIsoDate', () => {
+  it('rejects years outside 1900–2100 (a year still being typed)', () => {
+    expect(parseIsoDate('0202-10-01')).toBeNull()
+    expect(parseIsoDate('0002-10-01')).toBeNull()
+    expect(parseIsoDate('1899-12-31')).toBeNull()
+    expect(parseIsoDate('2101-01-01')).toBeNull()
+  })
+
+  it('accepts the 1900 and 2100 bounds', () => {
+    expect(parseIsoDate('1900-01-01')).toEqual(new Date(1900, 0, 1))
+    expect(parseIsoDate('2100-12-31')).toEqual(new Date(2100, 11, 31))
+  })
+})
+
 describe('loadPeriod / savePeriod', () => {
   const MONTH = { dateFrom: '2026-10-01', dateTo: '2026-10-31' }
 
@@ -83,6 +98,11 @@ describe('loadPeriod / savePeriod', () => {
     sessionStorage.setItem(PERIOD_STORAGE_KEY, JSON.stringify({ dateFrom: '2026-02-30', dateTo: '2026-03-01' }))
     expect(loadPeriod(TODAY)).toEqual(MONTH)
     sessionStorage.setItem(PERIOD_STORAGE_KEY, JSON.stringify(null))
+    expect(loadPeriod(TODAY)).toEqual(MONTH)
+  })
+
+  it('loadPeriod falls back to the current month when a stored year is out of range', () => {
+    sessionStorage.setItem(PERIOD_STORAGE_KEY, JSON.stringify({ dateFrom: '0202-10-01', dateTo: '2026-10-31' }))
     expect(loadPeriod(TODAY)).toEqual(MONTH)
   })
 

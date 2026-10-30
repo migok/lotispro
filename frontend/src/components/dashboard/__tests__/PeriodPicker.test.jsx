@@ -80,6 +80,17 @@ describe('PeriodPicker', () => {
     expect(onChange).toHaveBeenCalledWith({ dateFrom: '2026-11-05', dateTo: '2026-11-30' })
   })
 
+  it('an out-of-range year being typed is not applied and shows no error', () => {
+    const onChange = vi.fn()
+    render(<Harness initial={{ dateFrom: '2026-10-01', dateTo: '2026-10-31' }} onChange={onChange} />)
+
+    fireEvent.change(screen.getByLabelText('Du'), { target: { value: '0202-10-01' } })
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByText('Période : du 01/10/2026 au 31/10/2026')).toBeInTheDocument()
+  })
+
   it('renders the actions slot', () => {
     render(
       <Harness initial={{ dateFrom: '2026-10-01', dateTo: '2026-10-31' }} onChange={vi.fn()}>

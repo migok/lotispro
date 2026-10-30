@@ -71,6 +71,35 @@ def test_too_long_period_rejected_and_max_accepted():
         resolve_period(start, start + timedelta(days=MAX_PERIOD_DAYS), TODAY)
 
 
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        (date(1899, 12, 31), date(1900, 1, 31)),
+        (date(2100, 12, 1), date(2101, 1, 1)),
+        (date(1, 10, 1), date(2, 10, 31)),
+        (date(9999, 12, 1), date(9999, 12, 31)),
+        # Checked before the inversion check.
+        (date(2101, 1, 1), date(2026, 10, 1)),
+    ],
+)
+def test_out_of_range_dates_rejected(bounds):
+    with pytest.raises(
+        ValidationError,
+        match=re.escape("Les dates doivent être comprises entre 1900 et 2100."),
+    ) as exc:
+        resolve_period(bounds[0], bounds[1], TODAY)
+    assert exc.value.field == "date_from"
+
+
+def test_range_bounds_accepted():
+    assert resolve_period(date(1900, 1, 1), date(1900, 1, 31), TODAY) == Period(
+        date(1900, 1, 1), date(1900, 1, 31)
+    )
+    assert resolve_period(date(2100, 12, 1), date(2100, 12, 31), TODAY) == Period(
+        date(2100, 12, 1), date(2100, 12, 31)
+    )
+
+
 def test_period_days_inclusive():
     assert Period(date(2026, 10, 1), date(2026, 10, 1)).days == 1
     assert Period(date(2026, 10, 1), date(2026, 10, 31)).days == 31

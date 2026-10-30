@@ -26,11 +26,20 @@ export const toIsoDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() 
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** `YYYY-MM-DD` → local `Date`, or `null` if malformed or not a real calendar day. */
+// Same bounds as the API; also rejects the intermediate years (`0002`, `0202`)
+// a native date input emits while the user types a year.
+const MIN_YEAR = 1900;
+const MAX_YEAR = 2100;
+
+/**
+ * `YYYY-MM-DD` → local `Date`, or `null` if malformed, not a real calendar day
+ * or outside the years 1900–2100.
+ */
 export const parseIsoDate = (value) => {
   const match = typeof value === 'string' ? ISO_DATE.exec(value) : null;
   if (!match) return null;
   const [year, month, day] = match.slice(1).map(Number);
+  if (year < MIN_YEAR || year > MAX_YEAR) return null;
   const date = new Date(year, month - 1, day);
   if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
   return date;

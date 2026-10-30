@@ -527,6 +527,10 @@ async def test_default_period_is_current_month(
             },
             "La période ne peut pas dépasser 10 ans.",
         ),
+        (
+            {"date_from": "0001-10-01", "date_to": "0002-10-31"},
+            "Les dates doivent être comprises entre 1900 et 2100.",
+        ),
     ],
 )
 async def test_invalid_periods_return_422(
