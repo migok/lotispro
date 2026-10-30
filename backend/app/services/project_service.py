@@ -1671,7 +1671,7 @@ class ProjectService:
             project_id, user_id, user_role
         )
         if not can_access:
-            raise AuthorizationError(message="You don't have access to this project")
+            raise AuthorizationError(message="Vous n'avez pas accès à ce projet.")
 
         # Get lots with details
         lots_data = await self.lot_repo.get_project_lots_with_details(project_id)

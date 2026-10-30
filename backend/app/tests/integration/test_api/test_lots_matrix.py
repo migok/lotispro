@@ -99,6 +99,24 @@ async def test_unassigned_commercial_forbidden(
     assert "Vous n'avez pas accès à ce projet." in response.text
 
 
+async def test_geojson_unassigned_commercial_forbidden_in_french(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    manager: UserModel,
+    commercial: UserModel,
+    auth_headers: Headers,
+) -> None:
+    """The Lots tab loads the matrix and the geojson together: both must say the same thing."""
+    project = await make_project(db_session, manager, visibility="private")
+
+    response = await client.get(
+        f"/api/projects/{project.id}/lots.geojson", headers=auth_headers(commercial)
+    )
+
+    assert response.status_code == 403
+    assert "Vous n'avez pas accès à ce projet." in response.text
+
+
 async def test_assigned_commercial_allowed(
     client: AsyncClient,
     db_session: AsyncSession,
