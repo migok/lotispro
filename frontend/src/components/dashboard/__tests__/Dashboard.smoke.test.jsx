@@ -3,8 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../../test/renderWithProviders'
 import { apiGet } from '../../../utils/api'
 import Dashboard from '../../Dashboard'
+import { exportDashboard } from '../exportDashboard'
 
 vi.mock('../../../utils/api', () => ({ apiGet: vi.fn(), apiPost: vi.fn() }))
+vi.mock('../exportDashboard', () => ({ exportDashboard: vi.fn() }))
 
 const STATS = {
   counts: { total: 10, available: 6, en_cours: 3 },
@@ -70,6 +72,7 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   apiGet.mockReset()
+  exportDashboard.mockReset()
   sessionStorage.clear()
 })
 
@@ -92,5 +95,42 @@ describe('Dashboard — sections', () => {
     await waitFor(() => expect(screen.getByText('Client Option')).toBeInTheDocument())
     expect(screen.getByText('#A2')).toBeInTheDocument()
     expect(screen.getByText('Options actives')).toBeInTheDocument()
+  })
+})
+
+describe('Dashboard — export', () => {
+  it('exports the selected project, the commercial own id and the active period', async () => {
+    let finish
+    exportDashboard.mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    renderWithProviders(<Dashboard projectId={7} />, { user: { id: 4, role: 'commercial' } })
+    await screen.findByText('Lots vendus')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Exporter' }))
+
+    expect(exportDashboard).toHaveBeenCalledWith({
+      projectId: 7,
+      userId: 4,
+      period: { dateFrom: '2026-10-01', dateTo: '2026-10-31' },
+    })
+    expect(screen.getByRole('button', { name: 'Export…' })).toBeDisabled()
+    finish()
+    expect(await screen.findByRole('button', { name: 'Exporter' })).toBeEnabled()
+  })
+
+  it('shows the API message when the export fails', async () => {
+    exportDashboard.mockRejectedValue(new Error("Vous n'avez pas accès à ce projet."))
+    renderWithProviders(<Dashboard projectId={7} />, { user: { id: 1, role: 'manager' } })
+    await screen.findByText('Lots vendus')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Exporter' }))
+
+    expect(await screen.findByText("Échec de l'export : Vous n'avez pas accès à ce projet.")).toBeInTheDocument()
+  })
+
+  it('hides the export button when no project is selected', async () => {
+    renderWithProviders(<Dashboard />, { user: { id: 1, role: 'manager' } })
+    await screen.findByText('Lots vendus')
+
+    expect(screen.queryByRole('button', { name: 'Exporter' })).not.toBeInTheDocument()
   })
 })

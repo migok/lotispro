@@ -12,6 +12,7 @@ import CategoryBreakdown from './dashboard/CategoryBreakdown';
 import OptionsTrackingTab from './dashboard/OptionsTrackingTab';
 import OverviewPanels from './dashboard/OverviewPanels';
 import usePeriodData from './dashboard/usePeriodData';
+import { exportDashboard } from './dashboard/exportDashboard';
 import { loadPeriod, savePeriod } from './dashboard/period';
 
 export default function Dashboard({ onSelectLot, onNavigate, projectId: propsProjectId }) {
@@ -52,6 +53,8 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
     setPeriod(next);
     savePeriod(next);
   };
+  // Pour les commerciaux, toujours filtrer par leur propre ID
+  const periodUserId = isCommercial() ? user?.id : selectedUserId;
   const {
     stats: periodStats,
     performance: periodPerformance,
@@ -59,10 +62,22 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
     error: periodError,
   } = usePeriodData({
     projectId: effectiveProjectId,
-    // Pour les commerciaux, toujours filtrer par leur propre ID
-    userId: isCommercial() ? user?.id : selectedUserId,
+    userId: periodUserId,
     period,
   });
+
+  // Export Excel (E6-T3) : mêmes projet, commercial et période que les KPIs
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportDashboard({ projectId: effectiveProjectId, userId: periodUserId, period });
+    } catch (err) {
+      toast.error(err?.message ? `Échec de l'export : ${err.message}` : "Échec de l'export");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (!propsProjectId) {
@@ -290,7 +305,19 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       </div>
 
       {/* Période (E6) : sélecteur, KPIs de flux et graphe */}
-      <PeriodPicker value={period} onChange={handlePeriodChange} />
+      <PeriodPicker value={period} onChange={handlePeriodChange}>
+        {effectiveProjectId && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={handleExport}
+            disabled={exporting}
+            aria-busy={exporting || undefined}
+          >
+            {exporting ? 'Export…' : 'Exporter'}
+          </button>
+        )}
+      </PeriodPicker>
       {periodError && (
         <div className="period-error" role="alert">{periodError}</div>
       )}

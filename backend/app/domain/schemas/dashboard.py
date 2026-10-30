@@ -107,6 +107,20 @@ class StateKpis(BaseSchema):
     option: int = 0
 
 
+class PeriodStats(BaseSchema):
+    """Period KPIs alone (``DashboardPeriodService.period_stats``), for the export."""
+
+    period: PeriodRange
+    previous_period: PeriodRange
+    flow: FlowKpis
+    flow_previous: FlowKpis
+    variations: FlowVariations
+    state: StateKpis
+    state_kpis_available: bool
+    flow_kpis_available: bool
+    history_start: date | None = None
+
+
 class DashboardStats(BaseSchema):
     """Schema for main dashboard statistics."""
 
