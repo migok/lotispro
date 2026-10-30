@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.domain.dashboard_period import Period, business_today, resolve_period
 from app.domain.lot_workflow import EDL_STATUSES, SOLD_STATUSES
 from app.domain.schemas.dashboard import (
     AlertsSummary,
@@ -34,6 +35,7 @@ from app.infrastructure.database.repositories import (
     ReservationRepository,
     SaleRepository,
 )
+from app.services.dashboard_period_service import DashboardPeriodService
 from app.services.payment_progress import payment_progress
 
 logger = get_logger(__name__)
@@ -64,12 +66,14 @@ class DashboardService:
         self,
         project_id: int | None = None,
         user_id: int | None = None,
+        period: Period | None = None,
     ) -> DashboardStats:
         """Get main dashboard statistics.
 
         Args:
             project_id: Optional project filter
             user_id: Optional user filter (for commercial view)
+            period: Period of the flow / state KPIs (default: current month)
 
         Returns:
             Dashboard statistics
@@ -448,6 +452,13 @@ class DashboardService:
         liberes_result = await self.session.execute(liberes_query)
         lots_liberes = liberes_result.scalar() or 0
 
+        today = business_today()
+        if period is None:
+            period = resolve_period(None, None, today)
+        period_fields = await DashboardPeriodService(self.session).period_stats(
+            period, project_id, user_id, today
+        )
+
         return DashboardStats(
             counts=counts,
             percentages=percentages,
@@ -461,6 +472,7 @@ class DashboardService:
             by_type_lot=by_type_lot,
             by_emplacement=by_emplacement,
             by_type_maison=by_type_maison,
+            **period_fields,
         )
 
     async def get_alerts(

@@ -1,8 +1,11 @@
 """Dashboard and analytics endpoints."""
 
+from datetime import date
+
 from fastapi import APIRouter, Query
 
 from app.api.dependencies import CurrentUser, DashboardServiceDep, ManagerUser
+from app.domain.dashboard_period import business_today, resolve_period
 from app.domain.schemas.dashboard import (
     CommercialPerformance,
     DashboardStats,
@@ -23,11 +26,18 @@ async def get_dashboard_stats(
     dashboard_service: DashboardServiceDep,
     project_id: int | None = Query(default=None, description="Filter by project"),
     user_id: int | None = Query(default=None, description="Filter by user"),
+    date_from: date | None = Query(
+        default=None, description="Period start (inclusive, default: month start)"
+    ),
+    date_to: date | None = Query(
+        default=None, description="Period end (inclusive, default: month end)"
+    ),
 ) -> DashboardStats:
-    """Get dashboard statistics."""
+    """Get dashboard statistics; flow / state KPIs cover the given period."""
     return await dashboard_service.get_dashboard_stats(
         project_id=project_id,
         user_id=user_id,
+        period=resolve_period(date_from, date_to, business_today()),
     )
 
 

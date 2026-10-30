@@ -5,6 +5,7 @@ Every factory takes the ``AsyncSession`` first, then ``add`` + ``commit`` +
 """
 
 import itertools
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +15,11 @@ from app.infrastructure.database.models import (
     AssignmentModel,
     ClientModel,
     LotModel,
+    LotStatusHistoryModel,
     NotaireModel,
     ProjectModel,
+    ReservationModel,
+    ReservationPaymentModel,
     UserModel,
 )
 
@@ -116,4 +120,71 @@ async def assign(
     return await _persist(
         session,
         AssignmentModel(user_id=user.id, project_id=project.id, assigned_by=user.id),
+    )
+
+
+async def make_reservation(
+    session: AsyncSession,
+    lot: LotModel,
+    client: ClientModel,
+    *,
+    user: UserModel | None = None,
+    reservation_date: datetime | None = None,
+    agreed_total_price: float | None = None,
+    sale_price: float | None = None,
+    **overrides: Any,
+) -> ReservationModel:
+    reserved_on = reservation_date or datetime.now(UTC)
+    fields: dict[str, Any] = {
+        "project_id": lot.project_id,
+        "lot_id": lot.id,
+        "client_id": client.id,
+        "reserved_by_user_id": user.id if user else None,
+        "reservation_date": reserved_on,
+        "expiration_date": reserved_on + timedelta(days=30),
+        "agreed_total_price": agreed_total_price,
+        "sale_price": sale_price,
+    }
+    return await _persist(session, ReservationModel(**{**fields, **overrides}))
+
+
+async def make_status_change(
+    session: AsyncSession,
+    lot: LotModel,
+    to_status: str,
+    changed_at: datetime,
+    *,
+    from_status: str = "available",
+    reservation: ReservationModel | None = None,
+    transition: str = "test",
+) -> LotStatusHistoryModel:
+    """A ``lot_status_history`` row only (the lot itself is left unchanged)."""
+    return await _persist(
+        session,
+        LotStatusHistoryModel(
+            lot_id=lot.id,
+            from_status=from_status,
+            to_status=to_status,
+            transition=transition,
+            reservation_id=reservation.id if reservation else None,
+            changed_at=changed_at,
+        ),
+    )
+
+
+async def make_reservation_payment(
+    session: AsyncSession,
+    reservation: ReservationModel,
+    amount: float,
+    paid_on: date,
+    method: str = "transfer",
+) -> ReservationPaymentModel:
+    return await _persist(
+        session,
+        ReservationPaymentModel(
+            reservation_id=reservation.id,
+            amount=amount,
+            paid_on=paid_on,
+            method=method,
+        ),
     )
