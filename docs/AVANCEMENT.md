@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55 ; E6-T1 en revue, E6-T2 en cours)_
+_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55 ; E6-T1 en revue, E6-T2 en revue)_
 
 ## Vue d'ensemble
 
@@ -116,7 +116,7 @@ Autre dette relevée en fin d'E0 (revue finale, 2026-10-24) :
 
 - **Tests manquants avant les refactors E3 / E4** : aucun test n'exerce `payment_plan` / les échéances ; l'effet de `engage` avec `guarantee_action=deduct` et les notes d'audit de `extend-option` ne sont pas assertés. À couvrir avant de toucher ces flux.
 - **`PLC0415` (imports différés)**, 44 occurrences, issues de `ruff check . --isolated --select PLC0415 --output-format concise` (depuis `backend/`) : `services/project_service.py` 14, `services/dashboard_service.py` 11, `repositories/lot_repository.py` 5, et 1 chacun dans `domain/schemas/lot.py`, `repositories/base.py`, `client_repository.py`, `project_repository.py`, `sale_repository.py`, `user_repository.py`, `database/session.py`, `services/email_service.py`, `lot_pricing_service.py`, `payment_service.py`, `reservation_service.py`, `user_service.py`, `tests/unit/test_domain/test_security.py`, `tests/unit/test_imports.py`.
-- ~~**`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.~~ Résolu en E6-T2 (`/performance` alimente le graphe de la période).
+- ~~**`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.~~ Résolu par E6-T2 (`/performance` alimente le graphe de la période).
 
 Dette relevée en fin d'E3 (revue finale, statuts optionnels et état des lieux) :
 
