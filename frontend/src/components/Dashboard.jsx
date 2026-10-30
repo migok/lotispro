@@ -4,6 +4,11 @@ import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost } from '../utils/api';
 import { formatPrice, formatDate, formatNumber } from '../utils/formatters';
 import { ACTIVE_LOT_STATUSES, STATUS_LABELS, PIPELINE_LABELS } from '../utils/constants';
+import PeriodPicker from './dashboard/PeriodPicker';
+import KpiCards from './dashboard/KpiCards';
+import MonthlyChart from './dashboard/MonthlyChart';
+import usePeriodData from './dashboard/usePeriodData';
+import { loadPeriod, savePeriod } from './dashboard/period';
 
 // Calculate days remaining until expiration
 const getDaysRemaining = (expirationDate) => {
@@ -23,7 +28,6 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [allLots, setAllLots] = useState([]);  // tous les lots du projet (pour le graphe catégorie)
   const [alerts, setAlerts] = useState({ reservations: [], summary: {} });
   const [notaireAlerts, setNotaireAlerts] = useState([]);
-  const [, setPerformance] = useState(null);
   const [clientsPipeline, setClientsPipeline] = useState([]);
   const [latePayments, setLatePayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,13 +53,26 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   // Répartition par catégorie
   const [catRepTab, setCatRepTab] = useState('type_lot'); // 'type_lot' | 'emplacement' | 'type_maison' | 'zone'
 
-  // Graphe mensuel
-  const [monthlyBreakdown, setMonthlyBreakdown] = useState([]);
-  const [hoveredMonth, setHoveredMonth] = useState(null);
-  const [chartMode, setChartMode] = useState('nombre'); // 'nombre' | 'montant'
-
   // Utiliser le projectId passé en props ou celui sélectionné
   const effectiveProjectId = propsProjectId || selectedProjectId;
+
+  // Période (E6) : KPIs de flux et graphe, rechargés sans le spinner pleine page
+  const [period, setPeriod] = useState(() => loadPeriod(new Date()));
+  const handlePeriodChange = (next) => {
+    setPeriod(next);
+    savePeriod(next);
+  };
+  const {
+    stats: periodStats,
+    performance: periodPerformance,
+    loading: periodLoading,
+    error: periodError,
+  } = usePeriodData({
+    projectId: effectiveProjectId,
+    // Pour les commerciaux, toujours filtrer par leur propre ID
+    userId: isCommercial() ? user?.id : selectedUserId,
+    period,
+  });
 
   useEffect(() => {
     if (!propsProjectId) {
@@ -110,13 +127,6 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
     }
   };
 
-  // Helper pour les tendances KPIs
-  const getTendanceIcon = (value) => {
-    if (value > 0) return { icon: '↑', color: 'var(--color-success)', label: `+${value}%` };
-    if (value < 0) return { icon: '↓', color: 'var(--color-danger)', label: `${value}%` };
-    return { icon: '→', color: 'var(--text-secondary)', label: '0%' };
-  };
-
   const loadDashboardData = async () => {
     setLoading(true);
     try {
@@ -134,38 +144,25 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       // Requêtes de base pour tous les utilisateurs
       const alertsParams = new URLSearchParams(params);
       alertsParams.set('days', '3');
-      const perfParams = new URLSearchParams(params);
-      perfParams.set('period', 'month');
 
       // Tous les lots du projet sans filtre user (pour le graphe de répartition par catégorie)
       const allLotsParams = new URLSearchParams();
       if (effectiveProjectId) allLotsParams.append('project_id', effectiveProjectId);
       const allLotsQueryString = allLotsParams.toString() ? `?${allLotsParams.toString()}` : '';
 
-      const baseRequests = [
+      const [statsData, lotsData, alertsData, clientsData, allLotsData] = await Promise.all([
         apiGet(`/api/dashboard/stats${queryString}`),
         apiGet(`/api/dashboard/lots${queryString}`),
         apiGet(`/api/dashboard/alerts?${alertsParams.toString()}`),
-        apiGet(`/api/dashboard/performance?${perfParams.toString()}`),
         apiGet(`/api/dashboard/clients-pipeline${queryString}`),
         apiGet(`/api/dashboard/lots${allLotsQueryString}`),
-      ];
-
-      const monthlyParams = new URLSearchParams(params);
-      monthlyParams.set('months_back', '6');
-
-      const [statsData, lotsData, alertsData, perfData, clientsData, allLotsData, monthlyData] = await Promise.all([
-        ...baseRequests,
-        apiGet(`/api/dashboard/monthly-breakdown?${monthlyParams.toString()}`),
       ]);
 
       setStats(statsData);
       setLots(lotsData);
       setAllLots(allLotsData);
       setAlerts(alertsData);
-      setPerformance(perfData);
       setClientsPipeline(clientsData);
-      setMonthlyBreakdown(monthlyData || []);
 
       // Late payments (non-blocking — load separately)
       try {
@@ -305,7 +302,15 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         )}
       </div>
 
-      {/* KPIs Stratégiques - Uniquement pour les managers avec un projet sélectionné */}
+      {/* Période (E6) : sélecteur, KPIs de flux et graphe */}
+      <PeriodPicker value={period} onChange={handlePeriodChange} />
+      {periodError && (
+        <div className="period-error" role="alert">{periodError}</div>
+      )}
+      <KpiCards stats={periodStats} loading={periodLoading} />
+      <MonthlyChart performance={periodPerformance} loading={periodLoading} />
+
+      {/* KPIs cumulés - Uniquement pour les managers avec un projet sélectionné */}
       {isManager() && propsProjectId && projectKpis && (
         <div className="manager-kpis-summary" style={{ marginBottom: 'var(--spacing-lg)' }}>
           <div className="kpis-section-header" style={{ marginBottom: 'var(--spacing-md)' }}>
@@ -318,7 +323,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                 <line x1="2" y1="10" x2="5.5" y2="10"/>
                 <line x1="14.5" y1="10" x2="18" y2="10"/>
               </svg>
-              Indicateurs Clés de Décision
+              Indicateurs clés — à ce jour
             </h3>
             {projectKpis?.ca_objectif > 0 && (
               <span className="kpis-section-badge" style={{
@@ -337,7 +342,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
 
           {/* Hero KPIs Cards */}
           <div className="kpis-hero">
-            <div className="kpis-hero-grid">
+            <div className="kpis-hero-grid kpis-hero-grid-2">
               <div className="kpis-hero-card gradient-success" style={{ '--card-accent': '#10b981' }}>
                 <div className="kpis-hero-icon">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -373,36 +378,6 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
                   <div className="kpis-hero-subtitle">Lots réservés</div>
                 </div>
               </div>
-
-              <div className="kpis-hero-card gradient-warning" style={{ '--card-accent': '#f59e0b' }}>
-                <div className="kpis-hero-icon">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 20V10M18 20V4M6 20v-4"/>
-                  </svg>
-                </div>
-                <div className="kpis-hero-content">
-                  <div className="kpis-hero-value">{projectKpis?.ventes_mois || 0}</div>
-                  <div className="kpis-hero-label">Ventes ce Mois <span className="kpis-info-icon" title="Nombre de lots vendus définitivement sur le mois en cours">ⓘ</span></div>
-                  <div className="kpis-hero-trend" style={{ color: getTendanceIcon(projectKpis?.tendance_ventes || 0).color }}>
-                    {getTendanceIcon(projectKpis?.tendance_ventes || 0).icon} {getTendanceIcon(projectKpis?.tendance_ventes || 0).label}
-                  </div>
-                </div>
-              </div>
-
-              <div className="kpis-hero-card gradient-info" style={{ '--card-accent': '#60a5fa' }}>
-                <div className="kpis-hero-icon">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                  </svg>
-                </div>
-                <div className="kpis-hero-content">
-                  <div className="kpis-hero-value">{formatNumber(projectKpis?.ca_mois, 'MAD')}</div>
-                  <div className="kpis-hero-label">CA ce Mois <span className="kpis-info-icon" title="Chiffre d'affaires généré par les ventes finalisées sur le mois en cours">ⓘ</span></div>
-                  <div className="kpis-hero-trend" style={{ color: getTendanceIcon(projectKpis?.tendance_ca || 0).color }}>
-                    {getTendanceIcon(projectKpis?.tendance_ca || 0).icon} {getTendanceIcon(projectKpis?.tendance_ca || 0).label}
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -428,7 +403,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         </div>
       )}
 
-      {/* Performance Financière - Masquer si Indicateurs Clés de Décision est affiché */}
+      {/* Performance financière - Masquer si les indicateurs clés sont affichés */}
       {!(isManager() && propsProjectId && projectKpis) && (
       <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
         <div className="kpis-section-header">
@@ -437,7 +412,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
               <path d="M10 2v2M10 16v2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M2 10h2M16 10h2M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42"/>
               <circle cx="10" cy="10" r="4"/>
             </svg>
-            {isCommercial() ? 'Ma Performance' : 'Performance Financière'}
+            {isCommercial() ? 'Ma performance — à ce jour' : 'Performance financière — à ce jour'}
           </h3>
           <span className="kpis-section-badge">
             {formatNumber(stats?.ca_total, 'MAD')} total
@@ -936,149 +911,6 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
         );
 
       })()}
-
-      {/* ── BRIQUE 2 : Évolution mensuelle ────────────────────────────── */}
-      {monthlyBreakdown.length > 0 && (() => {
-        const MONTH_NAMES = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
-        const getMonthLabel = (period) => {
-          const parts = period.split('-');
-          return parts.length >= 2 ? (MONTH_NAMES[parseInt(parts[1], 10) - 1] || period) : period;
-        };
-        const maxVal = chartMode === 'nombre'
-          ? Math.max(1, ...monthlyBreakdown.flatMap(d => [d.sold, d.reserved]))
-          : Math.max(1, ...monthlyBreakdown.map(d => d.total_amount));
-        const totalSold = monthlyBreakdown.reduce((s, d) => s + d.sold, 0);
-        const totalReserved = monthlyBreakdown.reduce((s, d) => s + d.reserved, 0);
-        const totalCA = monthlyBreakdown.reduce((s, d) => s + d.total_amount, 0);
-        const fmtGridVal = (val) => {
-          if (chartMode === 'nombre') return Math.round(val);
-          if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
-          if (val >= 1000) return `${Math.round(val / 1000)}k`;
-          return Math.round(val).toString();
-        };
-
-        return (
-          <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
-            {/* En-tête */}
-            <div className="kpis-section-header">
-              <h3>
-                <span className="kpis-section-icon">📈</span>
-                Évolution mensuelle
-              </h3>
-              <div className="chart-header-right">
-                <div className="chart-mode-toggle">
-                  <button
-                    className={`chart-mode-btn${chartMode === 'nombre' ? ' active' : ''}`}
-                    onClick={() => setChartMode('nombre')}
-                  >
-                    # Nombre
-                  </button>
-                  <button
-                    className={`chart-mode-btn${chartMode === 'montant' ? ' active' : ''}`}
-                    onClick={() => setChartMode('montant')}
-                  >
-                    ₊ Montant
-                  </button>
-                </div>
-                <div className="monthly-kpi-row">
-                  <div className="monthly-kpi">
-                    <span className="monthly-kpi-num num">{totalSold}</span>
-                    <span className="monthly-kpi-label">Vendus</span>
-                  </div>
-                  <div className="monthly-kpi-sep"/>
-                  <div className="monthly-kpi">
-                    <span className="monthly-kpi-num num">{totalReserved}</span>
-                    <span className="monthly-kpi-label">Réservés</span>
-                  </div>
-                  <div className="monthly-kpi-sep"/>
-                  <div className="monthly-kpi accent">
-                    <span className="monthly-kpi-num num">{formatPrice(totalCA)}</span>
-                    <span className="monthly-kpi-label">CA total</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Graphe barres */}
-            <div className="monthly-chart-body" style={{ padding: '0 var(--spacing-lg) var(--spacing-sm)' }}>
-              <div className="monthly-chart-bars">
-                {monthlyBreakdown.map((month, idx) => {
-                  const barH = chartMode === 'nombre'
-                    ? (month.sold / maxVal) * 100
-                    : (month.total_amount / maxVal) * 100;
-                  const resH = chartMode === 'nombre' ? (month.reserved / maxVal) * 100 : 0;
-                  const isHovered = hoveredMonth === idx;
-                  return (
-                    <div
-                      key={month.period}
-                      className={`chart-month-group${isHovered ? ' hovered' : ''}`}
-                      onMouseEnter={() => setHoveredMonth(idx)}
-                      onMouseLeave={() => setHoveredMonth(null)}
-                    >
-                      <div className="chart-bars-group">
-                        {chartMode === 'nombre' ? (
-                          <>
-                            <div className="chart-bar sold"     style={{ height: `${barH}%` }}/>
-                            <div className="chart-bar reserved" style={{ height: `${resH}%` }}/>
-                          </>
-                        ) : (
-                          <div className="chart-bar amount" style={{ height: `${barH}%` }}/>
-                        )}
-                      </div>
-                      <div className="chart-month-label">{getMonthLabel(month.period)}</div>
-                      {chartMode === 'nombre' && month.total_amount > 0 && (
-                        <div className="chart-month-amount num">{formatPrice(month.total_amount)}</div>
-                      )}
-                      {isHovered && (
-                        <div className="chart-tooltip">
-                          <div className="chart-tooltip-period">{getMonthLabel(month.period)}</div>
-                          {chartMode === 'nombre' ? (
-                            <>
-                              <div className="chart-tooltip-row">
-                                <span className="chart-tooltip-dot sold"/>
-                                <span>{month.sold} vendu{month.sold > 1 ? 's' : ''}</span>
-                              </div>
-                              <div className="chart-tooltip-row">
-                                <span className="chart-tooltip-dot reserved"/>
-                                <span>{month.reserved} réservé{month.reserved > 1 ? 's' : ''}</span>
-                              </div>
-                              {month.total_amount > 0 && (
-                                <div className="chart-tooltip-ca">{formatPrice(month.total_amount)}</div>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <div className="chart-tooltip-row">
-                                <span className="chart-tooltip-dot" style={{ background: 'var(--color-primary)' }}/>
-                                <span>CA mensuel</span>
-                              </div>
-                              <div className="chart-tooltip-ca">{formatPrice(month.total_amount)}</div>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="chart-grid-lines">
-                {[100, 75, 50, 25].map(p => (
-                  <div key={p} className="chart-grid-line" style={{ bottom: `${p}%` }}>
-                    <span className="chart-grid-label">{fmtGridVal(maxVal * p / 100)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Légende */}
-            <div className="chart-legend" style={{ padding: '0 var(--spacing-lg) var(--spacing-md)' }}>
-              <span className="legend-item"><span className="legend-dot sold"/>Vendus</span>
-              <span className="legend-item"><span className="legend-dot reserved"/>Réservés</span>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* ── Onglets principaux ── */}
       {(isManager() || isCommercial()) && (
         <div className="dash-main-tabs">

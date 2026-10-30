@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55 ; E6-T1 en revue)_
+_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55 ; E6-T1 en revue, E6-T2 en cours)_
 
 ## Vue d'ensemble
 
@@ -59,7 +59,7 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E5-T2 | Onglet Lots (grille + navigation) | 🟨 | [#36](https://github.com/migok/lotispro/issues/36) | [#55](https://github.com/migok/lotispro/pull/55) | |
 | E5-T3 | Filtres persistés | 🟨 | [#37](https://github.com/migok/lotispro/issues/37) | [#55](https://github.com/migok/lotispro/pull/55) | |
 | E6-T1 | Backend période + KPIs | 🟨 | [#39](https://github.com/migok/lotispro/issues/39) | | |
-| E6-T2 | Sélecteur de période + découpage Dashboard | ⬜ | [#40](https://github.com/migok/lotispro/issues/40) | | |
+| E6-T2 | Sélecteur de période + découpage Dashboard | 🟦 | [#40](https://github.com/migok/lotispro/issues/40) | | |
 | E6-T3 | Export Excel | ⬜ | [#41](https://github.com/migok/lotispro/issues/41) | | |
 | E7-T1 | Décision fournisseur | ⛔ | [#43](https://github.com/migok/lotispro/issues/43) | | |
 | E7-T2 | Canal SMS | ⬜ | [#44](https://github.com/migok/lotispro/issues/44) | | |
@@ -116,7 +116,7 @@ Autre dette relevée en fin d'E0 (revue finale, 2026-10-24) :
 
 - **Tests manquants avant les refactors E3 / E4** : aucun test n'exerce `payment_plan` / les échéances ; l'effet de `engage` avec `guarantee_action=deduct` et les notes d'audit de `extend-option` ne sont pas assertés. À couvrir avant de toucher ces flux.
 - **`PLC0415` (imports différés)**, 44 occurrences, issues de `ruff check . --isolated --select PLC0415 --output-format concise` (depuis `backend/`) : `services/project_service.py` 14, `services/dashboard_service.py` 11, `repositories/lot_repository.py` 5, et 1 chacun dans `domain/schemas/lot.py`, `repositories/base.py`, `client_repository.py`, `project_repository.py`, `sale_repository.py`, `user_repository.py`, `database/session.py`, `services/email_service.py`, `lot_pricing_service.py`, `payment_service.py`, `reservation_service.py`, `user_service.py`, `tests/unit/test_domain/test_security.py`, `tests/unit/test_imports.py`.
-- **`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.
+- ~~**`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.~~ Résolu en E6-T2 (`/performance` alimente le graphe de la période).
 
 Dette relevée en fin d'E3 (revue finale, statuts optionnels et état des lieux) :
 

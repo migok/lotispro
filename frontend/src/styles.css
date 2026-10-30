@@ -13603,3 +13603,147 @@ body {
   .lots-filters-field { flex: 1 1 200px; }
   .lots-filters-actions { margin-left: 0; }
 }
+
+/* ============================================================
+   DASHBOARD PERIOD (E6-T2) — picker, period KPI cards, skeletons
+   ============================================================ */
+.period-picker {
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  padding: 12px 20px;
+  margin-bottom: var(--spacing-lg);
+}
+.period-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--spacing-md);
+}
+.period-picker-fields { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); }
+.period-picker-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.period-picker-field .form-input { padding: 6px 10px; font-size: 0.85rem; min-width: 150px; }
+.period-picker-field .form-input[aria-invalid="true"] { border-color: var(--color-danger); }
+.period-picker-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: 2px;
+}
+.period-shortcut {
+  padding: 0.3rem 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.period-shortcut:hover { color: var(--text-primary); }
+.period-shortcut:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.period-shortcut.active {
+  background: var(--bg-surface);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+[data-theme="light"] .period-shortcut.active { background: var(--bg-secondary); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+.period-picker-actions { display: flex; align-items: center; gap: var(--spacing-sm); margin-left: auto; }
+.period-picker-label {
+  margin: var(--spacing-sm) 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+.period-picker-error,
+.period-error {
+  margin: var(--spacing-xs) 0 0;
+  font-size: 0.8rem;
+  color: var(--color-danger);
+}
+.period-error { margin: 0 0 var(--spacing-md); }
+
+.period-kpis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: var(--spacing-lg);
+}
+.kpis-stock-card.period-kpi-card {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: var(--spacing-md);
+  text-align: left;
+}
+.kpis-stock-card.period-kpi-card.flow { border-left-color: var(--color-primary); }
+.period-kpi-card .kpis-stock-label { margin: 0 0 2px; }
+.period-kpi-variation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.period-kpi-trend { font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.period-kpi-trend.up { color: var(--color-success); }
+.period-kpi-trend.down { color: var(--color-danger); }
+.period-kpi-notice { font-size: 0.78rem; line-height: 1.35; color: var(--text-secondary); }
+
+@keyframes period-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.kpis-stock-card.period-kpi-card.is-skeleton { min-height: 104px; gap: 10px; }
+.period-skeleton-line,
+.period-skeleton-bar {
+  display: block;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  animation: period-skeleton-pulse 1.4s ease-in-out infinite;
+}
+.period-skeleton-line { height: 10px; width: 55%; }
+.period-skeleton-line.wide { width: 80%; height: 22px; }
+.period-skeleton-line.short { width: 35%; }
+.period-chart-skeleton { gap: 8px; padding: 0 var(--spacing-lg) var(--spacing-md); }
+.period-skeleton-bar { flex: 1; max-width: 48px; border-radius: 2px 2px 0 0; }
+.period-chart-empty {
+  margin: 0;
+  padding: var(--spacing-lg);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Day buckets (up to 31) need narrower bar groups */
+.monthly-chart-bars.is-dense { gap: 3px; }
+.monthly-chart-bars.is-dense .chart-month-group { min-width: 0; }
+.monthly-chart-bars.is-dense .chart-bar { min-width: 2px; }
+.monthly-chart-bars.is-dense .chart-month-label { font-size: 0.6rem; overflow: visible; }
+
+/* « Indicateurs clés — à ce jour » keeps two hero cards */
+.manager-kpis-summary .kpis-hero-grid.kpis-hero-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+@media (max-width: 768px) {
+  .period-picker-actions { margin-left: 0; }
+  .manager-kpis-summary .kpis-hero-grid.kpis-hero-grid-2 { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .period-skeleton-line,
+  .period-skeleton-bar { animation: none; }
+}
