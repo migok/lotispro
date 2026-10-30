@@ -13,7 +13,7 @@ import OptionsTrackingTab from './dashboard/OptionsTrackingTab';
 import OverviewPanels from './dashboard/OverviewPanels';
 import usePeriodData from './dashboard/usePeriodData';
 import { exportDashboard } from './dashboard/exportDashboard';
-import { loadPeriod, savePeriod } from './dashboard/period';
+import { businessToday, loadPeriod, savePeriod } from './dashboard/period';
 
 export default function Dashboard({ onSelectLot, onNavigate, projectId: propsProjectId }) {
   const { user, isManager, isCommercial } = useAuth();
@@ -48,7 +48,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const effectiveProjectId = propsProjectId || selectedProjectId;
 
   // Période (E6) : KPIs de flux et graphe, rechargés sans le spinner pleine page
-  const [period, setPeriod] = useState(() => loadPeriod(new Date()));
+  const [period, setPeriod] = useState(() => loadPeriod(businessToday()));
   const handlePeriodChange = (next) => {
     setPeriod(next);
     savePeriod(next);

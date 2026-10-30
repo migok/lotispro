@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   PERIOD_SHORTCUTS,
+  businessToday,
   formatPeriodLabel,
   matchingShortcut,
   parseIsoDate,
@@ -26,7 +27,7 @@ export default function PeriodPicker({ value, onChange, children }) {
 
   const complete = parseIsoDate(draft.dateFrom) !== null && parseIsoDate(draft.dateTo) !== null;
   const inverted = complete && draft.dateFrom > draft.dateTo;
-  const activeShortcut = matchingShortcut(value, new Date());
+  const activeShortcut = matchingShortcut(value, businessToday());
 
   const handleDateChange = (field) => (event) => {
     const next = { ...draft, [field]: event.target.value };
@@ -72,7 +73,7 @@ export default function PeriodPicker({ value, onChange, children }) {
               className={`period-shortcut${activeShortcut === key ? ' active' : ''}`}
               aria-pressed={activeShortcut === key}
               onClick={() => {
-                const next = shortcutRange(key, new Date());
+                const next = shortcutRange(key, businessToday());
                 setDraft(next);
                 onChange(next);
               }}

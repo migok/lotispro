@@ -52,6 +52,17 @@ describe('PeriodPicker', () => {
     expect(screen.getByLabelText('Au')).toHaveValue('2026-12-31')
   })
 
+  it("« Aujourd'hui » uses the Casablanca date, not the browser date", async () => {
+    // 23:30 UTC on 15/06 is already 16/06 in Casablanca (UTC+1 in summer), whatever the runner's zone.
+    vi.setSystemTime(new Date('2026-06-15T23:30:00Z'))
+    const onChange = vi.fn()
+    render(<Harness initial={{ dateFrom: '2026-10-01', dateTo: '2026-10-31' }} onChange={onChange} />)
+
+    await userEvent.click(screen.getByRole('button', { name: "Aujourd'hui" }))
+
+    expect(onChange).toHaveBeenCalledWith({ dateFrom: '2026-06-16', dateTo: '2026-06-16' })
+  })
+
   it('applies a valid manual date', () => {
     const onChange = vi.fn()
     render(<Harness initial={{ dateFrom: '2026-10-01', dateTo: '2026-10-31' }} onChange={onChange} />)

@@ -52,6 +52,30 @@ export const isValidPeriod = (period) =>
   && parseIsoDate(period.dateTo) !== null
   && period.dateFrom <= period.dateTo;
 
+/** The backend counts days in this zone, whatever the browser's zone. */
+export const BUSINESS_TIME_ZONE = 'Africa/Casablanca';
+
+/**
+ * Business date of `now` as a local-midnight `Date`: its year/month/day are the
+ * ones in `BUSINESS_TIME_ZONE`. Falls back to the browser's date if that zone
+ * is unsupported.
+ */
+export const businessToday = (now = new Date()) => {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: BUSINESS_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    const part = (type) => Number(parts.find((p) => p.type === type).value);
+    return new Date(part('year'), part('month') - 1, part('day'));
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+};
+
 const range = (from, to) => ({ dateFrom: toIsoDate(from), dateTo: toIsoDate(to) });
 
 /** Full calendar period containing `today` (the week runs Monday → Sunday). */

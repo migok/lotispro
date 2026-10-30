@@ -2,6 +2,7 @@ import {
   PERIOD_SHORTCUTS,
   PERIOD_STORAGE_KEY,
   bucketLabel,
+  businessToday,
   formatIsoDate,
   formatPeriodLabel,
   formatVariation,
@@ -11,6 +12,7 @@ import {
   periodParams,
   savePeriod,
   shortcutRange,
+  toIsoDate,
 } from '../period'
 
 // Thursday 30 October 2026, local time.
@@ -155,5 +157,27 @@ describe('formatting', () => {
     ['2026-10', 'Oct 2026'],
   ])('bucketLabel(%s) → %s', (key, label) => {
     expect(bucketLabel(key)).toBe(label)
+  })
+})
+
+describe('businessToday', () => {
+  it('uses the Africa/Casablanca date whatever the browser zone (late October, before the day rolls over in either UTC+0 or UTC+1)', () => {
+    const today = businessToday(new Date('2026-10-30T22:30:00Z'))
+    expect(toIsoDate(today)).toBe('2026-10-30')
+    expect(today.getHours()).toBe(0)
+  })
+
+  it('rolls over to the next day when Casablanca is UTC+1 (June 2026)', () => {
+    expect(toIsoDate(businessToday(new Date('2026-06-15T23:30:00Z')))).toBe('2026-06-16')
+  })
+
+  it('falls back to the local date when the time zone is unsupported', () => {
+    const real = Intl.DateTimeFormat
+    vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(function (locale, options) {
+      if (options && options.timeZone) throw new RangeError('Invalid time zone')
+      return new real(locale, options)
+    })
+    const now = new Date(2026, 9, 30, 15, 45)
+    expect(toIsoDate(businessToday(now))).toBe('2026-10-30')
   })
 })
