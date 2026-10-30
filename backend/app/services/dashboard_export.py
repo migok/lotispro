@@ -76,6 +76,18 @@ def _range_label(period: PeriodRange) -> str:
     return f"du {_fr(period.date_from)} au {_fr(period.date_to)}"
 
 
+def _append(sheet: Worksheet, values: tuple[Any, ...]) -> None:
+    """Append a row, keeping text that starts with ``=`` literal (no formula).
+
+    Project, lot, client and user names are user input: written as is, openpyxl
+    would store ``=HYPERLINK(...)`` as a live formula.
+    """
+    sheet.append(values)
+    for cell in sheet[sheet.max_row]:
+        if isinstance(cell.value, str) and cell.value.startswith("="):
+            cell.data_type = "s"
+
+
 def _bold_row(sheet: Worksheet, row: int) -> None:
     for cell in sheet[row]:
         cell.font = Font(bold=True)
@@ -96,11 +108,11 @@ def _write_kpis(sheet: Worksheet, project_name: str, stats: PeriodStats) -> None
         or stats.previous_period.date_from >= stats.history_start
     )
 
-    sheet.append(("Projet", project_name))
-    sheet.append(("Période", _range_label(stats.period)))
-    sheet.append(("Période précédente", _range_label(stats.previous_period)))
-    sheet.append(())
-    sheet.append(KPI_HEADER)
+    _append(sheet, ("Projet", project_name))
+    _append(sheet, ("Période", _range_label(stats.period)))
+    _append(sheet, ("Période précédente", _range_label(stats.previous_period)))
+    _append(sheet, ())
+    _append(sheet, KPI_HEADER)
     _bold_row(sheet, sheet.max_row)
 
     for label, field, needs_history in FLOW_ROWS:
@@ -111,23 +123,24 @@ def _write_kpis(sheet: Worksheet, project_name: str, stats: PeriodStats) -> None
             current, change = flow_notice, None
         if needs_history and not previous_available:
             previous, change = flow_notice, None
-        sheet.append((label, current, previous, change))
+        _append(sheet, (label, current, previous, change))
 
     state_date = _fr(stats.period.date_to)
     for label, value in (
         (f"Lots disponibles au {state_date}", stats.state.available),
         (f"Lots en option au {state_date}", stats.state.option),
     ):
-        sheet.append((label, value if stats.state_kpis_available else state_notice))
+        _append(sheet, (label, value if stats.state_kpis_available else state_notice))
 
     _set_widths(sheet, KPI_WIDTHS)
 
 
 def _write_lots(sheet: Worksheet, sold: list[SoldLot]) -> None:
-    sheet.append(LOTS_HEADER)
+    _append(sheet, LOTS_HEADER)
     _bold_row(sheet, 1)
     for row in sold:
-        sheet.append(
+        _append(
+            sheet,
             (
                 row.lot_numero,
                 row.zone,
@@ -139,7 +152,7 @@ def _write_lots(sheet: Worksheet, sold: list[SoldLot]) -> None:
                 row.agreed_total_price,
                 row.deed_price,
                 STATUS_LABELS.get(row.lot_status, row.lot_status),
-            )
+            ),
         )
         sheet.cell(row=sheet.max_row, column=7).number_format = DATE_FORMAT
     _set_widths(sheet, LOTS_WIDTHS)

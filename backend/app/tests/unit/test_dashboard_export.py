@@ -248,3 +248,18 @@ def test_previous_period_before_history_start_uses_the_notice() -> None:
 
     assert rows["Lots vendus"] == (3, FLOW_NOTICE, None)
     assert rows["Réservations créées"] == (4, 4, None)
+
+
+def test_user_text_starting_with_equals_stays_literal() -> None:
+    project_name = '=HYPERLINK("http://x","a")'
+    sold = [_sold(client_name="=1+1", lot_numero="=A1", commercial_name="=2*3")]
+
+    workbook = _load(build_dashboard_workbook(project_name, _stats(), sold))
+
+    project_cell = workbook["KPIs"]["B1"]
+    assert project_cell.value == project_name
+    assert project_cell.data_type == "s"
+    lots = workbook["Lots"]
+    for ref, text in (("A2", "=A1"), ("E2", "=1+1"), ("F2", "=2*3")):
+        assert lots[ref].value == text
+        assert lots[ref].data_type == "s"
