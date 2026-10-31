@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-30 (E5 en revue, PR #55, recette en cours)_
+_Dernière mise à jour : 2026-10-31 (E6 validé en recette et fusionné, PR #57)_
 
 ## Vue d'ensemble
 
@@ -22,7 +22,7 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E3 Statuts par projet + états des lieux | ✅ | 5 / 5 | [#23](https://github.com/migok/lotispro/issues/23) | [#51](https://github.com/migok/lotispro/pull/51) |
 | E4 🔄 #8 Réservation | ✅ | 6 / 6 | [#29](https://github.com/migok/lotispro/issues/29) | [#54](https://github.com/migok/lotispro/pull/54) |
 | E5 📊 #3 Vue projet | 🟨 | 0 / 3 | [#34](https://github.com/migok/lotispro/issues/34) | [#55](https://github.com/migok/lotispro/pull/55) |
-| E6 📅 #4 Dashboard par période | ⬜ | 0 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | |
+| E6 📅 #4 Dashboard par période | ✅ | 3 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | [#57](https://github.com/migok/lotispro/pull/57) |
 | E7 SMS / WhatsApp | ⛔ fournisseur à choisir | 0 / 3 | [#42](https://github.com/migok/lotispro/issues/42) | |
 
 ## Détail des tâches
@@ -58,9 +58,9 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E5-T1 | Endpoint `lots-matrix` | 🟨 | [#35](https://github.com/migok/lotispro/issues/35) | [#55](https://github.com/migok/lotispro/pull/55) | |
 | E5-T2 | Onglet Lots (grille + navigation) | 🟨 | [#36](https://github.com/migok/lotispro/issues/36) | [#55](https://github.com/migok/lotispro/pull/55) | |
 | E5-T3 | Filtres persistés | 🟨 | [#37](https://github.com/migok/lotispro/issues/37) | [#55](https://github.com/migok/lotispro/pull/55) | |
-| E6-T1 | Backend période + KPIs | ⬜ | [#39](https://github.com/migok/lotispro/issues/39) | | |
-| E6-T2 | Sélecteur de période + découpage Dashboard | ⬜ | [#40](https://github.com/migok/lotispro/issues/40) | | |
-| E6-T3 | Export Excel | ⬜ | [#41](https://github.com/migok/lotispro/issues/41) | | |
+| E6-T1 | Backend période + KPIs | ✅ | [#39](https://github.com/migok/lotispro/issues/39) | [#57](https://github.com/migok/lotispro/pull/57) | 2026-10-31 |
+| E6-T2 | Sélecteur de période + découpage Dashboard | ✅ | [#40](https://github.com/migok/lotispro/issues/40) | [#57](https://github.com/migok/lotispro/pull/57) | 2026-10-31 |
+| E6-T3 | Export Excel | ✅ | [#41](https://github.com/migok/lotispro/issues/41) | [#57](https://github.com/migok/lotispro/pull/57) | 2026-10-31 |
 | E7-T1 | Décision fournisseur | ⛔ | [#43](https://github.com/migok/lotispro/issues/43) | | |
 | E7-T2 | Canal SMS | ⬜ | [#44](https://github.com/migok/lotispro/issues/44) | | |
 | E7-T3 | Canal WhatsApp | ⬜ | [#45](https://github.com/migok/lotispro/issues/45) | | |
@@ -116,7 +116,7 @@ Autre dette relevée en fin d'E0 (revue finale, 2026-10-24) :
 
 - **Tests manquants avant les refactors E3 / E4** : aucun test n'exerce `payment_plan` / les échéances ; l'effet de `engage` avec `guarantee_action=deduct` et les notes d'audit de `extend-option` ne sont pas assertés. À couvrir avant de toucher ces flux.
 - **`PLC0415` (imports différés)**, 44 occurrences, issues de `ruff check . --isolated --select PLC0415 --output-format concise` (depuis `backend/`) : `services/project_service.py` 14, `services/dashboard_service.py` 11, `repositories/lot_repository.py` 5, et 1 chacun dans `domain/schemas/lot.py`, `repositories/base.py`, `client_repository.py`, `project_repository.py`, `sale_repository.py`, `user_repository.py`, `database/session.py`, `services/email_service.py`, `lot_pricing_service.py`, `payment_service.py`, `reservation_service.py`, `user_service.py`, `tests/unit/test_domain/test_security.py`, `tests/unit/test_imports.py`.
-- **`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.
+- ~~**`Dashboard.jsx`** : `setPerformance` n'est jamais lu (état en écriture seule) et son appel API (`loadDashboardData`) est mort ; à nettoyer avec le découpage de E6-T2.~~ Résolu par E6-T2 (`/performance` alimente le graphe de la période).
 
 Dette relevée en fin d'E3 (revue finale, statuts optionnels et état des lieux) :
 
@@ -135,6 +135,7 @@ Dette relevée en fin d'E3 (revue finale, statuts optionnels et état des lieux)
 - **E2, erreurs 422 non traduites** : le toast de repli anglais « Request validation failed » et les erreurs de parsing de date en anglais restent affichés sur les chemins 422 non couverts par `error_handlers.py`.
 - **E2, migration 0017 : downgrade destructif** : `downgrade()` supprime les colonnes ajoutées au profil client ; après usage réel, un retour arrière entraîne une perte de données.
 - **E2, ordre de déploiement** : déployer Railway (backend) puis Vercel (frontend) immédiatement après, car l'ancienne interface envoie `POST {name}`, qui reçoit un 422 sur le nouveau backend.
+- **E6, coût de `/dashboard/stats`** : chaque appel calcule aussi le bloc période (≈ 9 requêtes de plus) et `state_at` charge tous les lots et tout l'historique (tous projets sans `project_id`, cas de `GlobalDashboard`, qui n'utilise pas ces champs) ; `Dashboard` appelle `/stats` deux fois au chargement. Piste : paramètre opt-in ou endpoint dédié, et ne lire que la dernière ligne d'historique avant la date de fin.
 
 Dette relevée en fin d'E2 (revue finale, 2026-10-25) :
 - ~~**PDF d'acte / reçu en erreur 500** si une adresse, une ville, un pays ou un nom contient un caractère hors latin-1 (apostrophe typographique ’ insérée par les claviers de téléphone, écriture arabe). Préexistant, plus probable avec les nouveaux champs. Correctif : police Unicode (DejaVuSans via `pdf.add_font`) dans `certificate_service.py`, ou au minimum remplacer ’‘“” avant impression. → planifié en **E4-T0** ([#49](https://github.com/migok/lotispro/issues/49)), première tâche d'E4.~~ **Résolu par E4-T0** : DejaVu Sans embarquée (`app/assets/fonts/`) + mise en forme du texte arabe via `uharfbuzz`.

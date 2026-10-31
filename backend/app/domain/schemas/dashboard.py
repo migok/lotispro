@@ -1,6 +1,6 @@
 """Dashboard-related schemas for API responses."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import Field
 
@@ -73,6 +73,54 @@ class CategoryStats(BaseSchema):
     en_cours: int = 0
 
 
+class PeriodRange(BaseSchema):
+    """Inclusive range of business days."""
+
+    date_from: date
+    date_to: date
+
+
+class FlowKpis(BaseSchema):
+    """Flow KPIs over a period (see the E6 spec definitions)."""
+
+    lots_vendus: int = 0
+    ca: float = 0
+    reservations_creees: int = 0
+    taux_conversion: float = 0
+    encaissements: float = 0
+
+
+class FlowVariations(BaseSchema):
+    """Percent change of each flow KPI vs the previous period (None if n/a)."""
+
+    lots_vendus: float | None = None
+    ca: float | None = None
+    reservations_creees: float | None = None
+    taux_conversion: float | None = None
+    encaissements: float | None = None
+
+
+class StateKpis(BaseSchema):
+    """Lot counts by status at the end of the period (project level)."""
+
+    available: int = 0
+    option: int = 0
+
+
+class PeriodStats(BaseSchema):
+    """Period KPIs alone (``DashboardPeriodService.period_stats``), for the export."""
+
+    period: PeriodRange
+    previous_period: PeriodRange
+    flow: FlowKpis
+    flow_previous: FlowKpis
+    variations: FlowVariations
+    state: StateKpis
+    state_kpis_available: bool
+    flow_kpis_available: bool
+    history_start: date | None = None
+
+
 class DashboardStats(BaseSchema):
     """Schema for main dashboard statistics."""
 
@@ -106,6 +154,16 @@ class DashboardStats(BaseSchema):
         default_factory=dict,
         description="Statistics grouped by house type",
     )
+    # Period KPIs (E6)
+    period: PeriodRange | None = None
+    previous_period: PeriodRange | None = None
+    flow: FlowKpis | None = None
+    flow_previous: FlowKpis | None = None
+    variations: FlowVariations | None = None
+    state: StateKpis | None = None
+    state_kpis_available: bool = True
+    flow_kpis_available: bool = True
+    history_start: date | None = None
 
 
 class SalesByPeriod(BaseSchema):
@@ -137,12 +195,25 @@ class AverageDurations(BaseSchema):
     )
 
 
+class PeriodBucket(BaseSchema):
+    """Flow KPIs of one bucket (day, ISO week or month) of a period."""
+
+    key: str
+    lots_vendus: int = 0
+    ca: float = 0
+    reservations_creees: int = 0
+    encaissements: float = 0
+
+
 class PerformanceData(BaseSchema):
     """Schema for performance analytics."""
 
     sales_by_period: list[SalesByPeriod]
     reservations_vs_sales: list[ReservationsVsSales]
     average_durations: AverageDurations
+    period: PeriodRange | None = None
+    granularity: str | None = None
+    series: list[PeriodBucket] = Field(default_factory=list)
 
 
 class ClientPipeline(BaseSchema):
