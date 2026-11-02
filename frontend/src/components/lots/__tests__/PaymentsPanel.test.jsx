@@ -192,7 +192,7 @@ describe('PaymentsPanel', () => {
     expect(within(row(/Acompte 1/)).getByText('Reçu')).toBeInTheDocument()
     expect(within(row(/Solde 1/)).getByText('À recevoir')).toBeInTheDocument()
     expect(screen.queryByText('En retard')).not.toBeInTheDocument()
-    expect(onSummaryChange).toHaveBeenCalledWith(expect.objectContaining({ legacy: true }))
+    await waitFor(() => expect(onSummaryChange).toHaveBeenCalledWith(expect.objectContaining({ legacy: true })))
   })
 
   it('compact: only the three totals, without schedule nor payments', async () => {
