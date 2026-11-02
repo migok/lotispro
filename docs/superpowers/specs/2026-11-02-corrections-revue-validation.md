@@ -39,7 +39,7 @@ Premier contrôle local avant le push initial : lint code 0, aucune erreur ni av
 
 | Point | Commit correctif | Régression ajoutée / contrôle | Vérifié à l’écran |
 |---|---|---|---|
-| 58.1 | 1e9a022 | 12 couleurs Leaflet uniques ; 12 tokens uniques dans chaque thème (3 tests initialement rouges) | Non |
+| 58.1 | 1e9a022 puis db10310 | 12 couleurs uniques ; écart CIELAB ≥ 20 entre chaque paire dans les palettes carte/sombre/clair, contraste carte/blanc ≥ 3:1 (4 nouvelles régressions initialement rouges) | Non |
 | 58.2 | 1e9a022 | Relecture de CLAUDE.md contre constantes, tokens et architecture ; pas de test artificiel de prose | Non (documentation) |
 | 59.1 | 2d8dcc9 | Liens natifs couvrant carte et classement, href, clic et activation clavier vers la fiche | Non |
 | 59.2 | 2d8dcc9 | Amount compact sans espace initial, exact en aria-label/tooltip ; InfoTip au clavier | Non |
@@ -66,7 +66,7 @@ CI des mises à jour #58 et #59 : frontend, backend, migrations et Vercel verts.
 
 L’application et le backend répondent HTTP 200 sur localhost:5177 et localhost:8010. Ce contrôle ne vaut pas validation à l’écran. Lecture authentifiée du jeu réel : 610 lots GeoJSON, 599 disponibles, 3 options, 3 réservations à finaliser, 1 bloqué, 4 engagées. Les 599 disponibles de la liste globale dédupliquée égalent le compteur serveur. Aucun lot soldé, EDL, notaire ou propriétaire dans ce jeu : le scénario avancé demandé ne peut pas être déclaré vu à l’écran sur ces données.
 
-Aucune capture validée à ce stade. L’outil Computer Use avait interrompu l’accès Chrome Windows faute de déterminer l’URL avec confiance ; aucun autre moteur n’est utilisé pour contourner ce contrôle. Le contrôle natif est traité séparément ; faute de scénario effectivement observé, les points restent marqués Non. Les tests DOM/jsdom ne sont jamais présentés comme une recette visuelle. Le compte commercial demandé pour la recette n’a pas été fourni à ce stade ; aucun changement de droits ou d’identité pour simuler sa connexion.
+Aucune capture validée à ce stade. L’outil Computer Use avait interrompu l’accès Chrome Windows faute de déterminer l’URL avec confiance ; aucun autre moteur n’est utilisé pour contourner ce contrôle. Les tentatives natives suivantes échouent au clic (`coordinate input geometry is unavailable`) et à la capture (`window capture timed out: timed out waiting on channel`), même après resélection et activation de la fenêtre. Faute de scénario effectivement observé, les points restent marqués Non. Les tests DOM/jsdom ne sont jamais présentés comme une recette visuelle. Un compte commercial a ensuite été fourni : authentification réussie, rôle commercial confirmé par API. Lecture seule : 610 lots globaux uniques et pipeline personnel vide ; la répartition attendue pour ce compte est de 599 disponibles et 1 bloqué, soit 600 lots visibles. Cela ne valide pas les listes et compteurs à l’écran. Aucun changement de droits ou d’identité pour simuler sa connexion.
 
 Aucune modification backend, API, modèle, règle métier, calcul financier ou permission. Aucun e-mail/SMS/WhatsApp envoyé et aucune écriture métier effectuée pendant les contrôles API. Lot 4 non commencé.
 
@@ -78,3 +78,17 @@ L’[annonce officielle IANA 2026c](https://data.iana.org/time-zones/tzdb-2026c/
 
 
 Dernier passage avant le push de la fixture : `npm run lint` code 0 ; `npm test -- --maxWorkers=2 --testTimeout=15000 --reporter=verbose` : **678 tests / 60 fichiers verts, 274,08 s** ; `npm run build` : code 0, **15,44 s**. Les sept tests de dates ont également été exécutés explicitement sous Node 22.23.4 : 7/7 verts. Le code de production du correctif 2d04094 reste inchangé ; seuls les tests et ce rapport ont évolué après le premier push.
+
+## Complément — couleurs de statuts trop proches
+
+Le retour utilisateur et sa capture montrent des pastels difficiles à distinguer sur la carte : options/réservations à finaliser, engagées/soldées, ainsi que les trois EDL. Le correctif **db10310** est ajouté à #58 puis propagé par les merges **218287f** vers #59 et **fefed64** vers #60. Pas de rebase, amend ou force-push.
+
+Carte et points de légende partagent une palette plus soutenue. Les variantes des tokens sombre et clair conservent les mêmes familles de teintes : création ardoise, disponible vert, option ambre, réservation à finaliser violet, engagée bleu, soldée cyan, EDL programmé rouille, réalisé turquoise, finalisé indigo, notaire rose, propriétaire vert citron, bloqué rouge. Le texte du badge du popup utilise la variante du thème pour conserver sa lisibilité ; sa pastille reprend la couleur cartographique. CLAUDE.md répertorie les trois palettes.
+
+Quatre nouveaux tests échouaient avant correction : écart perceptuel trop faible dans chacune des trois palettes et contraste insuffisant des couleurs cartographiques sur blanc. Après correction : CIELAB ΔE76 ≥ 20 entre chaque paire des 12 statuts et contraste carte/blanc ≥ 3:1. Ces seuils ne remplacent pas la recette visuelle ni une vérification des déficiences de perception des couleurs ; les libellés sont conservés.
+
+Validation locale avant les pushes : #58, lint OK, **593 tests / 47 fichiers** (252,52 s), build OK (13,66 s) ; #59 après merge, lint OK, **621 tests / 50 fichiers** (215,37 s), build OK (9,80 s) ; #60 final après stabilisation du test, lint OK, **682 tests / 60 fichiers** (243,26 s), build OK (16,57 s).
+
+Le premier passage complet de #60 a signalé **1 échec / 682 tests** dans le test existant PaymentsPanel « legacy » : l’assertion du callback était synchrone alors que `usePaymentsData` appelle `onSummaryChange` dans un effet React après le rendu. Les 14 tests du fichier passent immédiatement en relance isolée sans changement, ce qui confirme le problème de synchronisation ; l’assertion attend maintenant le callback avec `waitFor`, sans changer sa condition. Les 14 tests passent ensuite aussi après cette stabilisation. Aucun code de production de paiement ni calcul financier modifié. Le résultat du nouveau passage complet est consigné dans le commentaire de #60.
+
+Recette visuelle de ce complément : **non validée**. La page projet est bien exposée sur localhost:5177, mais la tentative de capture de sa légende et de sa carte échoue encore avec `window capture timed out: timed out waiting on channel`. Aucun screenshot présenté comme réussi.
