@@ -56,7 +56,7 @@ Compte de test vérifié en mémoire contre l'API du worktree : connexion HTTP 2
 
 ## Lot 2 — primitives et premières migrations
 
-Branche `feature/ui-primitives`, dépend de la [PR #58](https://github.com/migok/lotispro/pull/58). PR demandée vers `dev`, à fusionner après le lot 1. Aucun lot 3 démarré.
+Branche `feature/ui-primitives`, dépend de la [PR #58](https://github.com/migok/lotispro/pull/58). PR demandée vers `dev`, à fusionner après le lot 1. Lot 3 autorisé ultérieurement par l’utilisateur ; compte rendu ci-dessous.
 
 - [x] Button (variantes, composition Slot, état occupé/désactivé), Card, StatusBadge, StatTile, EmptyState, Skeleton/LoadingSkeleton, DataTable, Dialog, Sheet, Tooltip, ConfirmDialog dans `frontend/src/components/ui/`.
 - [x] Chacune couverte par les tests de rendu et les interactions applicables : clavier, tri et pagination, état vide/erreur/chargement, focus, Escape, annulation, double exécution, échec asynchrone.
@@ -94,3 +94,60 @@ Duration    223.27s
 ```
 
 Les vérifications HTTP finales répondent 200 : frontend sur `http://127.0.0.1:5180/`, transformation Vite de `src/components/ui/confirm-dialog.jsx`, backend `/api/health` sur 8010. Cela vérifie les serveurs, pas le rendu des pages. L'aperçu local est laissé disponible pour la revue utilisateur.
+
+
+## Lot 3 — shell et dashboard global
+
+Branche `feature/ui-dashboard-global`, à la suite des PR #58 et #59 (encore ouvertes). Accord utilisateur « ok continue ». Le diff propre au lot 3 est relatif à `feature/ui-primitives`. Aucun fichier backend ni worktree protégé modifié.
+
+### Corrections proposées à la revue
+
+- **#1** : ressources indépendantes avec chargement, réponse valide, erreur et bouton Réessayer local. Une erreur masque les valeurs du bloc avec « — ». Les alertes partielles affichent « Liste incomplète » ; aucun bilan rassurant tant qu’une source manque. Validation des comptes par statut ; les réponses dépassées sont ignorées au changement de période, de tentative ou de compte (même si l’URL de l’endpoint ne change pas).
+- **#7, #8** : un panneau À traiter pour les options/réservations, échéances de paiement et dossiers notaire. Une expiration par lot, chaque échéance de paiement conservée par installment_id. Tri par échéance et urgence, nombre connu explicite, filtres, cinq lignes puis Voir tout. Liens natifs vers la fiche existante du lot via `?lot=ID` et téléphone cliquable. Aucune relance ou mutation automatique. Le badge DeadlineBadge et le calcul d’urgence sont partagés avec OptionsTrackingTab : dépassé / sous un jour / sous trois jours / plus tard / sans échéance. La restructuration du dashboard projet reste au lot 5.
+- **#14** : quatre KPI actuels (CA et potentiel, disponible et pourcentage, taux de vente, nombre et montant des retards), répartition de tous les statuts groupés par phase, compte des lots libérés rétrogradé. Chaque statut ouvre une liste filtrée en Sheet avec accès à la fiche du lot. Évolution E6 dans une section séparée avec sa propre période, comparaison serveur et historique indisponible respecté. Tableau des valeurs accessible en complément du graphique.
+- **#15** : disponibilité, taux de vente et CA par projet lus dans `/api/projects/{id}/kpis`. Le calcul `total - sold - reserved` a disparu. Lecture limitée aux six projets affichés ; accès à la liste complète. Les KPI et l’évolution sont rechargés après une action sur un lot.
+- **#16** : une seule action principale dans le header, Nouveau projet, ouvre immédiatement le formulaire existant migré vers Dialog. Labels associés, erreurs annoncées, payload et vérifications de rôle conservés.
+- **#20, #21** : sidebar compacte, rubrique active annoncée, lien d’évitement, SVG, menu mobile Radix (focus piégé, Escape, retour au déclencheur, fermeture à la sélection), menu de compte (rôle français, thème, déconnexion). Version codée en dur supprimée. Nouveaux styles limités aux trois points de rupture 640/1024/1280. Les anciens breakpoints des autres écrans restent à leur migration ultérieure.
+- **#5** : suppression complète du CSS injecté et découpage du dashboard global en composants ; adoption des primitives du lot 2.
+
+### Fichiers et dépendance
+
+`App.jsx`, `AccountMenu.jsx`, `GlobalDashboard.jsx`, `global/{useDashboardResource,ResourceError,TreatmentPanel,StockPanel,CommercialTrend,TrendChart,DashboardLot}`, `ui/deadline-badge.jsx`, `utils/deadlines.js`, `styles/{shell,global-dashboard}.css`, formulaire CreateProjectModal et badge d’OptionsTrackingTab. Tests de régression dans sept nouveaux fichiers, fixture historique uiMigration complétée avec le contrat réel des statuts.
+
+Ajout **Recharts 3.10.1**, prévu par la décision de bibliothèque, pour les séries E6. Import dynamique : le graphique est dans un chunk séparé ; animations désactivées ; navigation clavier et infobulles exactes testées. Référence API officielle consultée : https://recharts.github.io/en-US/api/BarChart/ . Aucun autre ajout direct.
+
+### Vérifications numériques et API réelles
+
+Connexion au compte de test fourni, uniquement des lectures après authentification ; aucun secret enregistré. Frontend `http://localhost:5177` HTTP 200 et backend 8010 disponible, scheduler désactivé.
+
+Les sept endpoints de lecture (projets, stats, alertes, options, paiements, notaire, performance) et les KPI du projet répondent 200. L’audit indiquait amount_due ; le contrat réel est **amount**, utilisé sans changer la définition financière. La somme des comptes par statut égale counts.total. Les sommes des séries de ventes et réservations égalent les totaux flow correspondants. Données observées : 4 échéances en retard, total 190 250 MAD ; 6 lots avec expiration distincte ; 10 dossiers en tout, notaire compris. Le lot testé possède bien une ligne correspondant à current_reservation_id ; la fiche refuse de charger une ancienne réservation à sa place.
+
+Fixture indépendante : 2 puis 3 ventes = 5, 3 puis 4 réservations = 7 ; KPI et cellules du tableau vérifiés séparément, infobulles du vrai graphique contrôlées au focus et avec les flèches. Deux échéances de 1 250 et 2 750 MAD = 4 000 MAD, plus une expiration dédupliquée = trois dossiers. Tests des limites temporelles (dépassé, exactement 1/3 jour, juste après, date absente), des erreurs, de l’absence de faux zéro, des réponses obsolètes et du clavier.
+
+### Recette et limites
+
+Validation automatisée finale (avant commit) :
+
+```text
+npm run lint
+> eslint .
+(code 0, aucune erreur ni avertissement)
+
+npm test -- --maxWorkers=2 --testTimeout=15000 --reporter=verbose
+Test Files  56 passed (56)
+Tests       647 passed (647)
+Duration    321.08s
+
+npm run build
+vite v7.3.1
+930 modules transformed
+built in 30.33s
+```
+
+Build : chunk graphique 380,77 ko (gzip 111,03 ko), chunk principal 1 143,61 ko (gzip 306,21 ko). Les avertissements de tests historiques jsdom/navigation, act et anciens téléphones sont conservés et ne font échouer aucun test. Aucun avertissement dans les nouveaux tests ciblés. Diff check sans erreur de whitespace ; trois worktrees protégés propres.
+
+Cycles rouges observés : shell sans dialogue mobile ni lien d’évitement ; ancien format J-1 critique au lieu du badge partagé ; stats incomplètes acceptées ; projets de l’ancien compte restant affichés sur changement de compte. Corrections suivies des passages ciblés puis de la suite complète. Une erreur de préparation des premiers mocks (retour involontaire du beforeEach interprété comme nettoyage par Vitest) a été corrigée ; elle n’a pas été comptée comme preuve fonctionnelle.
+
+Les captures avant/après et la recette visuelle aux largeurs 375/768/1440 dans les deux thèmes restent **non validées**. Lors des lots précédents, Computer Use a arrêté l’accès à Chrome : il ne pouvait pas déterminer l’URL Windows avec assez de confiance. L’inventaire de cette session ne fournit toujours aucun navigateur pilotable (`browsers: []`). Un contrôle HTTP ou jsdom n’est pas une validation visuelle. La PR reste donc en brouillon, sans déclaration du lot comme terminé.
+
+Risques maintenus : chunk principal supérieur à 500 ko (antérieur), 17 vulnérabilités déjà signalées par npm (même nombre avant/après l’ajout de Recharts), recette visuelle manquante. Aucun audit fix global. Les limites de droits demeurent celles des endpoints existants ; aucun contournement ajouté. L’adaptateur de fiche ouvre le composant historique, dont la conversion en Sheet reste au lot 5. Lots 4 et 5 non démarrés.

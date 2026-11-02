@@ -1,14 +1,10 @@
+import { deadline } from '../../utils/deadlines';
+import { DeadlineBadge } from '../ui/deadline-badge';
 import { formatDate } from '../../utils/formatters';
 export default function OptionsTrackingTab({ optionsTracking, optionsTrackingError, effectiveProjectId, onSelectLot, isManager }) {
-  const expired = optionsTracking.filter(o => o.is_expired);
-  const active = optionsTracking.filter(o => !o.is_expired);
+  const expired = optionsTracking.filter(o => deadline(o.expiration_date).level === 'overdue');
+  const active = optionsTracking.filter(o => deadline(o.expiration_date).level !== 'overdue');
 
-  const fmtDays = (days) => {
-    if (days < 0) return { label: `+${Math.abs(Math.ceil(days))}j dépassé`, cls: 'opt-badge--expired' };
-    if (days <= 1) return { label: `J-${Math.ceil(days)} critique`, cls: 'opt-badge--critical' };
-    if (days <= 3) return { label: `J-${Math.ceil(days)}`, cls: 'opt-badge--warn' };
-    return { label: `J-${Math.ceil(days)}`, cls: 'opt-badge--ok' };
-  };
 
   return (
     <div className="opt-tracking-section">
@@ -23,11 +19,11 @@ export default function OptionsTrackingTab({ optionsTracking, optionsTrackingErr
           <span className="opt-summary-label">Expirées</span>
         </div>
         <div className="opt-summary-tile opt-summary-tile--warn">
-          <span className="opt-summary-value">{active.filter(o => o.days_remaining <= 3).length}</span>
+          <span className="opt-summary-value">{active.filter(o => ['critical', 'soon'].includes(deadline(o.expiration_date).level)).length}</span>
           <span className="opt-summary-label">Expirent dans 3j</span>
         </div>
         <div className="opt-summary-tile opt-summary-tile--ok">
-          <span className="opt-summary-value">{active.filter(o => o.days_remaining > 3).length}</span>
+          <span className="opt-summary-value">{active.filter(o => ['later', 'undated'].includes(deadline(o.expiration_date).level)).length}</span>
           <span className="opt-summary-label">En cours</span>
         </div>
       </div>
@@ -62,15 +58,13 @@ export default function OptionsTrackingTab({ optionsTracking, optionsTrackingErr
             </thead>
             <tbody>
               {optionsTracking.map((o) => {
-                const { label, cls } = fmtDays(o.days_remaining);
+
                 return (
                   <tr
                     key={o.lot_id}
                     className={`opt-row${o.is_expired ? ' opt-row--expired' : ''}`}
-                    onClick={() => onSelectLot && onSelectLot({ id: o.lot_id })}
-                    style={{ cursor: onSelectLot ? 'pointer' : 'default' }}
                   >
-                    <td className="opt-cell-numero">#{o.lot_numero}</td>
+                    <td className="opt-cell-numero">{onSelectLot ? <button type="button" className="ui-lot-link" aria-label={`Ouvrir le lot ${o.lot_numero}`} onClick={() => onSelectLot({ id: o.lot_id })}>#{o.lot_numero}</button> : <span>#{o.lot_numero}</span>}</td>
                     {!effectiveProjectId && <td className="opt-cell-project">{o.project_name}</td>}
                     <td className="opt-cell-client">
                       <div className="opt-client-name">{o.client_name}</div>
@@ -84,7 +78,7 @@ export default function OptionsTrackingTab({ optionsTracking, optionsTrackingErr
                     </td>
                     <td className="opt-cell-date">{o.reservation_date ? formatDate(o.reservation_date, { dateStyle: 'short' }) : '—'}</td>
                     <td className="opt-cell-date">{formatDate(o.expiration_date, { dateStyle: 'short' })}</td>
-                    <td><span className={`opt-badge ${cls}`}>{label}</span></td>
+                    <td><DeadlineBadge date={o.expiration_date} /></td>
                   </tr>
                 );
               })}
