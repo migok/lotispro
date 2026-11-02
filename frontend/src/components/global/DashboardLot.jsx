@@ -1,0 +1,36 @@
+import { useEffect, useState } from 'react';
+import { apiGet } from '../../utils/api';
+import { fetchProjectLots } from '../../services/projectLotsService';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../ui/dialog';
+import { LoadingSkeleton } from '../ui/skeleton';
+import LotDetailModal from '../LotDetailModal';
+import ResourceError from './ResourceError';
+
+/** Open the existing lot form with its normal project configuration and reservation data. */
+export default function DashboardLot({ lotId, onClose, onRefresh }) {
+  const [attempt, setAttempt] = useState(0);
+  const [result, setResult] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve().then(async () => {
+      const lot = await apiGet(`/api/lots/${encodeURIComponent(lotId)}`);
+      const [project, rows] = await Promise.all([
+        apiGet(`/api/projects/${lot.project_id}`),
+        fetchProjectLots(lot.project_id),
+      ]);
+      const detail = rows.find((r) => r.id === lot.id);
+      if (!detail) throw new Error('Lot details unavailable');
+      if (!cancelled) setResult({ lotId, attempt, lot: detail, project });
+    }).catch(() => { if (!cancelled) setResult((previous) => ({ ...(previous?.lotId === lotId ? previous : {}), lotId, attempt, error: true })); });
+    return () => { cancelled = true; };
+  }, [lotId, attempt]);
+  const current = result?.lotId === lotId ? result : null;
+  const refreshing = current?.attempt !== attempt;
+  const refresh = () => { setAttempt((n) => n + 1); onRefresh(); };
+  if (current?.lot) return <>
+    <LotDetailModal lot={current.lot} enabledOptionalStatuses={current.project.enabled_optional_statuses} onClose={onClose} onRefresh={refresh} />
+    {refreshing && <span role="status" className="ui-sr-only">Actualisation de la fiche du lot</span>}
+    {current.error && <div className="global-lot-refresh-error"><ResourceError label="Actualisation de la fiche impossible" onRetry={() => setAttempt((n) => n + 1)} /></div>}
+  </>;
+  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent><DialogTitle>Fiche du lot</DialogTitle><DialogDescription>Lot {lotId}</DialogDescription>{current?.error ? <ResourceError label="Fiche du lot indisponible" onRetry={() => setAttempt((n) => n + 1)} /> : <LoadingSkeleton label="Chargement de la fiche du lot" rows={4} />}</DialogContent></Dialog>;
+}

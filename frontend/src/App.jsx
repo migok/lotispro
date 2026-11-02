@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import "./styles.css";
+import "./styles/shell.css";
+import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from './components/ui/dialog';
+import AccountMenu from './components/AccountMenu';
 import { useTheme } from "./hooks/useTheme";
 
 // Import contexts
@@ -89,14 +92,6 @@ const IconManagers = () => (
   </svg>
 );
 
-const IconLogout = () => (
-  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M13 3h4a1 1 0 011 1v12a1 1 0 01-1 1h-4"/>
-    <path d="M8 14l4-4-4-4"/>
-    <path d="M12 10H3"/>
-  </svg>
-);
-
 // Navigation items with role-based access
 const NAV_ITEMS = [
   {
@@ -130,13 +125,13 @@ const NAV_ITEMS = [
   {
     id: "managers",
     path: "/app/managers",
-    label: "Managers",
+    label: "Gestionnaires",
     Icon: IconManagers,
     allowedRoles: ["manager"]
   },
 ];
 
-function AppContent() {
+export function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -144,123 +139,41 @@ function AppContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Déterminer la page actuelle depuis l'URL (/app/projects → 'projects')
   const currentPage = location.pathname.split('/')[2] || 'dashboard';
-
-  const handleLogout = () => {
-    logout();
-    navigate("/");
-  };
-
-  const closeMobileMenu = () => {
-    setMobileMenuOpen(false);
-  };
-
+  const handleLogout = () => { logout(); navigate('/'); };
+  const navigation = (close) => <>
+    <nav className="sidebar-nav" aria-label="Rubriques">
+      {NAV_ITEMS.filter((item) => item.allowedRoles.includes(user?.role)).map((item) => <Link
+        key={item.id} to={item.path} className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
+        aria-current={currentPage === item.id ? 'page' : undefined} onClick={close}>
+        <item.Icon /><span className="nav-label">{item.label}</span>
+      </Link>)}
+    </nav>
+    <AccountMenu user={user} theme={theme} toggleTheme={toggleTheme} onLogout={handleLogout} />
+  </>;
   return (
-    <div className="app-container">
-      {/* Mobile Menu Toggle Button */}
-      <button
-        className="mobile-menu-toggle"
-        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        aria-label={mobileMenuOpen ? "Fermer le menu" : "Ouvrir le menu"}
-        aria-expanded={mobileMenuOpen}
-      >
-        {mobileMenuOpen ? '✕' : '☰'}
+    <div className={`app-container app-shell${sidebarCollapsed ? ' shell-collapsed' : ''}`}>
+      <a className="shell-skip-link" href="#main-content">Aller au contenu</a>
+      <button type="button" className="shell-sidebar-toggle" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} aria-label={sidebarCollapsed ? 'Afficher la navigation' : 'Masquer la navigation'} aria-expanded={!sidebarCollapsed}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M9 3v18" /></svg>
       </button>
-
-      {/* Sidebar re-open tab (visible when collapsed) */}
-      {sidebarCollapsed && (
-        <button
-          className="sidebar-reopen-tab"
-          onClick={() => setSidebarCollapsed(false)}
-          aria-label="Afficher la sidebar"
-          title="Afficher la sidebar"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 18l6-6-6-6"/>
-          </svg>
-        </button>
-      )}
-
-      {/* Sidebar */}
-      <aside className={`sidebar ${mobileMenuOpen ? 'sidebar-mobile-open' : ''} ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-        <div className="sidebar-header">
-          <div className="sidebar-logo">
-            <LogoIcon size={28} />
-            <span className="sidebar-logo-text">LotisPro</span>
-          </div>
-          <button
-            className="sidebar-collapse-btn"
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            aria-label={sidebarCollapsed ? 'Afficher la sidebar' : 'Masquer la sidebar'}
-            title={sidebarCollapsed ? 'Afficher la sidebar' : 'Masquer la sidebar'}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              {sidebarCollapsed
-                ? <path d="M9 18l6-6-6-6"/>
-                : <path d="M15 18l-6-6 6-6"/>}
-            </svg>
-          </button>
-        </div>
-
-        <nav className="sidebar-nav">
-          {NAV_ITEMS.filter(item =>
-            !item.allowedRoles || item.allowedRoles.includes(user?.role)
-          ).map((item) => (
-            <Link
-              key={item.id}
-              to={item.path}
-              className={`nav-item ${currentPage === item.id ? "active" : ""}`}
-              onClick={closeMobileMenu}
-            >
-              <item.Icon />
-              <span className="nav-label">{item.label}</span>
-            </Link>
-          ))}
-        </nav>
-
-        <div style={{ padding: 'var(--spacing-md)', borderTop: '1px solid var(--border-subtle)' }}>
-          {/* User Info */}
-          {user && (
-            <div style={{ marginBottom: 'var(--spacing-md)' }}>
-              <div style={{ fontSize: 'var(--type-body)', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '2px' }}>
-                {user.name}
-              </div>
-              <div style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)', marginBottom: '2px' }}>
-                {user.email}
-              </div>
-              <div style={{ fontSize: 'var(--type-label)', color: 'var(--color-primary)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 500 }}>
-                {user.role}
-              </div>
-            </div>
-          )}
-
-          {/* Theme Toggle */}
-          <button onClick={toggleTheme} className="theme-toggle" title={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}>
-            <span>{theme === 'dark' ? 'Mode clair' : 'Mode sombre'}</span>
-            <div className={`theme-toggle-track ${theme === 'light' ? 'on' : ''}`}>
-              <div className="theme-toggle-thumb" />
-            </div>
-          </button>
-
-          {/* Logout Button */}
-          <button
-            onClick={handleLogout}
-            className="nav-item"
-            style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 'var(--spacing-sm)' }}
-          >
-            <IconLogout />
-            <span className="nav-label">Déconnexion</span>
-          </button>
-
-          <div style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            v2.0
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className={`main-content ${sidebarCollapsed ? 'main-content-expanded' : ''}`}>
+      {!sidebarCollapsed && <aside className="sidebar shell-sidebar" aria-label="Navigation principale">
+        <div className="sidebar-header"><Link className="sidebar-logo" to="/app/dashboard" aria-label="LotisPro, tableau de bord"><LogoIcon /><span>LotisPro</span></Link></div>
+        {navigation()}
+      </aside>}
+      <div className="shell-mobile-bar">
+        <Dialog open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <DialogTrigger asChild><button type="button" className="shell-mobile-toggle" aria-label="Ouvrir le menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button></DialogTrigger>
+          <DialogContent className="shell-mobile-panel">
+            <DialogTitle>Navigation</DialogTitle><DialogDescription className="ui-sr-only">Rubriques et compte LotisPro</DialogDescription>
+            {navigation(() => setMobileMenuOpen(false))}
+          </DialogContent>
+        </Dialog>
+        <span>LotisPro</span>
+      </div>
+      <main id="main-content" tabIndex={-1} className="main-content shell-main">
         <Routes>
           <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
           <Route

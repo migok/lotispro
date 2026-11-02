@@ -54,7 +54,7 @@ it('announces loading clients with a skeleton', () => {
 it('provides a real project link on the global dashboard', async () => {
   apiGet.mockImplementation(async (url) => {
     if (url === '/api/projects') return [{ id: 7, name: 'Jardin blanc', total_lots: 10, sold_lots: 2, reserved_lots: 1, created_at: '2026-10-01' }];
-    if (url.startsWith('/api/dashboard/stats')) return { counts: { total: 10, available: 7 }, ca_realise: 200000, ca_potentiel: 100000 };
+    if (url.startsWith('/api/dashboard/stats')) return { counts: { total: 10, creation: 0, available: 7, option: 3, reservation_a_finaliser: 0, reservation_engagee: 0, reservation_soldee: 0, edl_programme: 0, edl_realise: 0, edl_finalise: 0, chez_notaire: 0, chez_proprietaire: 0, blocked: 0 }, ca_realise: 200000, ca_potentiel: 100000 };
     return [];
   });
   const { container } = renderWithProviders(<GlobalDashboard />, { user: { id: 1, role: 'manager' } });

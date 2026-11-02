@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { Button } from './ui/button';
 import { apiPost } from '../utils/api';
 
 export default function CreateProjectModal({ onClose, onCreated }) {
@@ -50,29 +52,28 @@ export default function CreateProjectModal({ onClose, onCreated }) {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Créer un nouveau projet</h2>
-          <button className="modal-close" onClick={onClose}>
-            ✕
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => { if (!open && !loading) onClose(); }}>
+      <DialogContent className="global-create-project" onEscapeKeyDown={(event) => { if (loading) event.preventDefault(); }} onPointerDownOutside={(event) => { if (loading) event.preventDefault(); }}>
+        <DialogHeader>
+          <DialogTitle>Créer un nouveau projet</DialogTitle>
+          <DialogDescription>Les champs marqués d’un astérisque sont obligatoires.</DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           <div className="modal-body">
             {error && (
-              <div className="alert alert-error" style={{ marginBottom: 'var(--spacing-md)' }}>
+              <div role="alert" className="alert alert-error" style={{ marginBottom: 'var(--spacing-md)' }}>
                 {error}
               </div>
             )}
 
             <div className="form-group">
-              <label className="form-label">
+              <label className="form-label" htmlFor="project-name">
                 Nom du projet <span className="text-danger">*</span>
               </label>
               <input
                 type="text"
+                id="project-name"
                 name="name"
                 className="form-input"
                 value={formData.name}
@@ -84,8 +85,9 @@ export default function CreateProjectModal({ onClose, onCreated }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Description</label>
+              <label className="form-label" htmlFor="project-description">Description</label>
               <textarea
+                id="project-description"
                 name="description"
                 className="form-input"
                 value={formData.description}
@@ -96,15 +98,16 @@ export default function CreateProjectModal({ onClose, onCreated }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Visibilité</label>
+              <label className="form-label" htmlFor="project-visibility">Visibilité</label>
               <select
+                id="project-visibility"
                 name="visibility"
                 className="form-input"
                 value={formData.visibility}
                 onChange={handleChange}
               >
-                <option value="private">🔒 Privé (visible uniquement par les managers et commerciaux assignés)</option>
-                <option value="public">🌐 Public (visible par tous les clients)</option>
+                <option value="private">Privé (visible uniquement par les managers et commerciaux assignés)</option>
+                <option value="public">Public (visible par tous les clients)</option>
               </select>
               <p className="form-help">
                 Les projets publics sont visibles par les clients sur leur interface.
@@ -112,9 +115,10 @@ export default function CreateProjectModal({ onClose, onCreated }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Objectif de CA (MAD)</label>
+              <label className="form-label" htmlFor="project-ca_objectif">Objectif de CA (MAD)</label>
               <input
                 type="number"
+                id="project-ca_objectif"
                 name="ca_objectif"
                 className="form-input"
                 value={formData.ca_objectif}
@@ -130,24 +134,24 @@ export default function CreateProjectModal({ onClose, onCreated }) {
           </div>
 
           <div className="modal-footer">
-            <button
+            <Button
               type="button"
-              className="btn btn-ghost"
+              variant="ghost"
               onClick={onClose}
               disabled={loading}
             >
               Annuler
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="btn btn-primary"
+              loading={loading}
               disabled={loading}
             >
               {loading ? 'Création...' : 'Créer le projet'}
-            </button>
+            </Button>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

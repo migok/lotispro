@@ -1,0 +1,35 @@
+.app-shell .shell-main { min-width: 0; width: 100%; margin-left: 0; padding: 80px var(--spacing-md) var(--spacing-lg); }
+.shell-skip-link { position: fixed; top: 8px; left: 12px; transform: translateY(-200%); z-index: var(--z-toast); padding: var(--spacing-sm); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-subtle); }
+.shell-skip-link:focus { transform: translateY(0); }
+.app-shell .shell-sidebar { display: none; }
+.shell-mobile-bar { display: flex; position: fixed; inset: 0 0 auto; height: 56px; align-items: center; gap: var(--spacing-md); padding-inline: var(--spacing-md); background: var(--bg-sidebar); border-bottom: 1px solid var(--border-subtle); z-index: var(--z-menu); font-weight: 600; }
+.shell-mobile-toggle, .shell-sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; color: var(--text-secondary); background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); cursor: pointer; }
+.shell-sidebar-toggle { display: none; }
+.ui-dialog.shell-mobile-panel { position: fixed; inset: 0 auto 0 0; transform: none; width: min(320px, calc(100vw - 32px)); height: 100dvh; max-height: 100dvh; border-radius: 0; padding: var(--spacing-lg) var(--spacing-sm); display: flex; flex-direction: column; background: var(--bg-sidebar); }
+.shell-mobile-panel .ui-dialog-title { padding: var(--spacing-sm) var(--spacing-md); }
+.shell-mobile-panel .sidebar-nav { overflow-y: auto; }
+.shell-account { position: relative; padding: var(--spacing-md) var(--spacing-sm); border-top: 1px solid var(--border-subtle); }
+.shell-account-trigger { display: flex; align-items: center; gap: var(--spacing-sm); width: 100%; padding: var(--spacing-sm); text-align: left; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--text-primary); cursor: pointer; font-family: var(--font-body); }
+.shell-account-trigger:hover, .shell-account-trigger[aria-expanded='true'] { background: var(--bg-tertiary); }
+.shell-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-md); background: var(--bg-tertiary); color: var(--text-secondary); flex-shrink: 0; }
+.shell-account-summary { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 2px; }
+.shell-account-summary strong { font-size: var(--type-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.shell-account-summary > span { color: var(--text-muted); font-size: var(--type-label); }
+.shell-account-panel { position: absolute; bottom: calc(100% - 4px); left: var(--spacing-md); right: var(--spacing-md); padding: var(--spacing-sm); background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
+.shell-account-panel .ui-button { width: 100%; justify-content: flex-start; font-size: var(--type-body); }
+.shell-account-email { color: var(--text-muted); font-size: var(--type-label); overflow-wrap: anywhere; margin: 0; padding: var(--spacing-sm); }
+.global-create-project { overflow-y: auto; }
+.global-create-project .modal-body { padding-inline: 0; }
+.global-create-project .modal-footer { padding-inline: 0; }
+@media (min-width: 640px) { .app-shell .shell-main { padding-inline: var(--spacing-lg); } }
+@media (min-width: 1024px) {
+  .shell-mobile-bar { display: none; }
+  .app-shell .shell-sidebar { display: flex; width: 244px; transform: none; border-right: 1px solid var(--border-subtle); }
+  .app-shell .shell-sidebar .sidebar-header { padding: 24px 50px 24px 24px; min-height: 88px; }
+  .app-shell .sidebar-logo { font-size: var(--type-section); text-decoration: none; }
+  .app-shell .shell-main { margin-left: 244px; padding: var(--spacing-lg); }
+  .app-shell.shell-collapsed .shell-main { margin-left: 0; padding-top: 64px; }
+  .shell-sidebar-toggle { display: inline-flex; position: fixed; left: 196px; top: 24px; z-index: var(--z-menu); }
+  .shell-collapsed .shell-sidebar-toggle { left: 12px; top: 12px; }
+}
+@media (min-width: 1280px) { .app-shell .shell-main { padding: var(--spacing-xl); } }
