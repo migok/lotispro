@@ -1,6 +1,8 @@
-import { Tooltip } from '../ui/tooltip';
-import { formatAmount } from '../../utils/formatters';
-import { formatNumber } from '../../utils/formatters';
+import { InfoTip } from '../ui/info-tip';
+import { Amount } from '../ui/amount';
+
+
+
 
 export default function CumulativeKpis({ stats, projectKpis, projectId: propsProjectId, isManager, isCommercial }) {
   return (
@@ -45,8 +47,8 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
                   </svg>
                 </div>
                 <div className="kpis-hero-content">
-                  <div className="kpis-hero-value"><Tooltip content={formatAmount(projectKpis?.ca_realise)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(projectKpis?.ca_realise)}> {formatNumber(projectKpis?.ca_realise, 'MAD')}</span></Tooltip></div>
-                  <div className="kpis-hero-label">CA réalisé <Tooltip content="Ventes finalisées + acomptes des réservations validées"><button type="button" className="kpis-info-icon" aria-label="Ventes finalisées + acomptes des réservations validées">ⓘ</button></Tooltip></div>
+                  <div className="kpis-hero-value"><Amount value={projectKpis?.ca_realise} /></div>
+                  <div className="kpis-hero-label">CA réalisé <InfoTip text="Ventes finalisées + acomptes des réservations validées" className="kpis-info-icon" /></div>
                   {projectKpis?.ca_objectif > 0 && (
                     <div className="kpis-hero-progress">
                       <div className="kpis-hero-progress-bar">
@@ -68,8 +70,8 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
                   </svg>
                 </div>
                 <div className="kpis-hero-content">
-                  <div className="kpis-hero-value"><Tooltip content={formatAmount(projectKpis?.ca_potentiel)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(projectKpis?.ca_potentiel)}> {formatNumber(projectKpis?.ca_potentiel, 'MAD')}</span></Tooltip></div>
-                  <div className="kpis-hero-label">CA Potentiel <Tooltip content="Valeur totale des lots avec réservation active — non encore convertis en vente"><button type="button" className="kpis-info-icon" aria-label="Valeur totale des lots avec réservation active — non encore convertis en vente">ⓘ</button></Tooltip></div>
+                  <div className="kpis-hero-value"><Amount value={projectKpis?.ca_potentiel} /></div>
+                  <div className="kpis-hero-label">CA Potentiel <InfoTip text="Valeur totale des lots avec réservation active — non encore convertis en vente" className="kpis-info-icon" /></div>
                   <div className="kpis-hero-subtitle">Lots réservés</div>
                 </div>
               </div>
@@ -79,20 +81,20 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
           {/* Métriques additionnelles pour décision */}
           <div className="kpis-decision-metrics">
             <div>
-              <div><Tooltip content={formatAmount(projectKpis?.prix_moyen_lot)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(projectKpis?.prix_moyen_lot)}> {formatNumber(projectKpis?.prix_moyen_lot, 'MAD')}</span></Tooltip></div>
-              <div>Prix moyen / lot <Tooltip content="Prix moyen de vente par lot sur ce projet"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Prix moyen de vente par lot sur ce projet">ⓘ</button></Tooltip></div>
+              <div><Amount value={projectKpis?.prix_moyen_lot} /></div>
+              <div>Prix moyen / lot <InfoTip text="Prix moyen de vente par lot sur ce projet" className="kpis-info-icon kpis-info-icon-dark" /></div>
             </div>
             <div>
-              <div><Tooltip content={formatAmount(projectKpis?.prix_moyen_m2)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(projectKpis?.prix_moyen_m2)}> {formatNumber(projectKpis?.prix_moyen_m2, 'MAD')}</span></Tooltip></div>
-              <div>Prix Moyen / m² <Tooltip content="Prix moyen au m² calculé sur les ventes réalisées"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Prix moyen au m² calculé sur les ventes réalisées">ⓘ</button></Tooltip></div>
+              <div><Amount value={projectKpis?.prix_moyen_m2} /></div>
+              <div>Prix Moyen / m² <InfoTip text="Prix moyen au m² calculé sur les ventes réalisées" className="kpis-info-icon kpis-info-icon-dark" /></div>
             </div>
             <div>
-              <div><Tooltip content={formatAmount(projectKpis?.total_deposits)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(projectKpis?.total_deposits)}> {formatNumber(projectKpis?.total_deposits, 'MAD')}</span></Tooltip></div>
-              <div>Total Acomptes <Tooltip content="Somme des acomptes perçus sur les réservations validées (non encore vendues)"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Somme des acomptes perçus sur les réservations validées (non encore vendues)">ⓘ</button></Tooltip></div>
+              <div><Amount value={projectKpis?.total_deposits} /></div>
+              <div>Total Acomptes <InfoTip text="Somme des acomptes perçus sur les réservations validées (non encore vendues)" className="kpis-info-icon kpis-info-icon-dark" /></div>
             </div>
             <div>
-              <div><Tooltip content={formatAmount(projectKpis?.ca_objectif)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(projectKpis?.ca_objectif)}> {formatNumber(projectKpis?.ca_objectif, 'MAD')}</span></Tooltip></div>
-              <div>CA Objectif <Tooltip content="Objectif de chiffre d'affaires défini pour ce projet — sert à calculer le taux de progression"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Objectif de chiffre d'affaires défini pour ce projet — sert à calculer le taux de progression">ⓘ</button></Tooltip></div>
+              <div><Amount value={projectKpis?.ca_objectif} /></div>
+              <div>CA Objectif <InfoTip text="Objectif de chiffre d'affaires défini pour ce projet — sert à calculer le taux de progression" className="kpis-info-icon kpis-info-icon-dark" /></div>
             </div>
           </div>
         </div>
@@ -110,8 +112,8 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
             {isCommercial() ? 'Ma performance — à ce jour' : 'Performance financière — à ce jour'}
           </h3>
           <span className="kpis-section-badge">
-            <Tooltip content={formatAmount(stats?.ca_total)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(stats?.ca_total)}> {formatNumber(stats?.ca_total, 'MAD')}</span></Tooltip> total
-            <Tooltip content="Valeur totale du portefeuille — somme des prix de tous les lots (vendus, réservés, disponibles, bloqués)"><button type="button" className="kpis-info-icon" aria-label="Valeur totale du portefeuille — somme des prix de tous les lots (vendus, réservés, disponibles, bloqués)">ⓘ</button></Tooltip>
+            <Amount value={stats?.ca_total} /> total
+            <InfoTip text="Valeur totale du portefeuille — somme des prix de tous les lots (vendus, réservés, disponibles, bloqués)" className="kpis-info-icon" />
           </span>
         </div>
 
@@ -132,10 +134,10 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
               <div className="kpis-stock-percent">{stats?.ca_total ? ((stats?.ca_realise || 0) / stats.ca_total * 100).toFixed(2) : '0.00'}%</div>
             </div>
             <div className="kpis-stock-info">
-              <div className="kpis-stock-value"><Tooltip content={formatAmount(stats?.ca_realise)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(stats?.ca_realise)}> {formatNumber(stats?.ca_realise, 'MAD')}</span></Tooltip></div>
+              <div className="kpis-stock-value"><Amount value={stats?.ca_realise} /></div>
               <div className="kpis-stock-label">
                 {isCommercial() ? 'Mon CA réalisé' : 'CA réalisé'}
-                <Tooltip content="Somme des lots vendus"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Somme des lots vendus">ⓘ</button></Tooltip>
+                <InfoTip text="Somme des lots vendus" className="kpis-info-icon kpis-info-icon-dark" />
               </div>
             </div>
           </div>
@@ -156,10 +158,10 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
               <div className="kpis-stock-percent">{stats?.ca_total ? ((stats?.ca_potentiel || 0) / stats.ca_total * 100).toFixed(2) : '0.00'}%</div>
             </div>
             <div className="kpis-stock-info">
-              <div className="kpis-stock-value"><Tooltip content={formatAmount(stats?.ca_potentiel)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(stats?.ca_potentiel)}> {formatNumber(stats?.ca_potentiel, 'MAD')}</span></Tooltip></div>
+              <div className="kpis-stock-value"><Amount value={stats?.ca_potentiel} /></div>
               <div className="kpis-stock-label">
                 CA Potentiel
-                <Tooltip content="Valeur des lots réservés"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Valeur des lots réservés">ⓘ</button></Tooltip>
+                <InfoTip text="Valeur des lots réservés" className="kpis-info-icon kpis-info-icon-dark" />
               </div>
             </div>
           </div>

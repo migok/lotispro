@@ -1,4 +1,5 @@
-import { Tooltip } from '../ui/tooltip';
+import { InfoTip } from '../ui/info-tip';
+
 export default function LotStockSection({ stats, isCommercial }) {
   return (
     <div className="kpis-section-v2" style={{ marginBottom: 'var(--spacing-lg)' }}>
@@ -33,7 +34,7 @@ export default function LotStockSection({ stats, isCommercial }) {
             <div className="kpis-stock-value">{stats?.counts?.available || 0}</div>
             <div className="kpis-stock-label">
               Disponibles
-              <Tooltip content="Lots prêts à la vente"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Lots prêts à la vente">ⓘ</button></Tooltip>
+              <InfoTip text="Lots prêts à la vente" className="kpis-info-icon kpis-info-icon-dark" />
             </div>
           </div>
         </div>
@@ -57,7 +58,7 @@ export default function LotStockSection({ stats, isCommercial }) {
             <div className="kpis-stock-value">{stats?.counts?.en_cours || 0}</div>
             <div className="kpis-stock-label">
               {isCommercial() ? 'Pipeline actif' : 'En cours'}
-              <Tooltip content="Lots avec option/réservation active"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Lots avec option/réservation active">ⓘ</button></Tooltip>
+              <InfoTip text="Lots avec option/réservation active" className="kpis-info-icon kpis-info-icon-dark" />
             </div>
           </div>
         </div>
@@ -81,7 +82,7 @@ export default function LotStockSection({ stats, isCommercial }) {
             <div className="kpis-stock-value">{stats?.counts?.chez_proprietaire || 0}</div>
             <div className="kpis-stock-label">
               {isCommercial() ? 'Mes ventes' : 'Chez propriétaire'}
-              <Tooltip content="Lots transférés chez le propriétaire"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Lots transférés chez le propriétaire">ⓘ</button></Tooltip>
+              <InfoTip text="Lots transférés chez le propriétaire" className="kpis-info-icon kpis-info-icon-dark" />
             </div>
           </div>
         </div>
@@ -106,7 +107,7 @@ export default function LotStockSection({ stats, isCommercial }) {
               <div className="kpis-stock-value">{stats?.counts?.blocked || 0}</div>
               <div className="kpis-stock-label">
                 Bloqués
-                <Tooltip content="Lots temporairement indisponibles"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Lots temporairement indisponibles">ⓘ</button></Tooltip>
+                <InfoTip text="Lots temporairement indisponibles" className="kpis-info-icon kpis-info-icon-dark" />
               </div>
             </div>
           </div>
@@ -135,7 +136,7 @@ export default function LotStockSection({ stats, isCommercial }) {
               <div className="kpis-stock-value" style={{ color: '#a78bfa' }}>{stats?.lots_liberes || 0}</div>
               <div className="kpis-stock-label">
                 Libérés
-                <Tooltip content="Réservations annulées ou expirées — lots remis en disponible"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Réservations annulées ou expirées — lots remis en disponible">ⓘ</button></Tooltip>
+                <InfoTip text="Réservations annulées ou expirées — lots remis en disponible" className="kpis-info-icon kpis-info-icon-dark" />
               </div>
             </div>
           </div>

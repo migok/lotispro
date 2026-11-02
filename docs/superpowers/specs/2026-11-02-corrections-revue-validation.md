@@ -11,3 +11,13 @@ Vérification avant push : lint code 0, aucune erreur ; 47 fichiers / 589 tests 
 ## #59 et #60
 
 Corrections et résultats à compléter sur leurs branches, puis tableau final point → commit → régression → vérification à l’écran. Priorité du lot #60 : 60.1 avant les autres corrections.
+
+## #59 — corrections et contrôles
+
+Merge de #58 : 66dd36a, correction source 1e9a022. Conflit limité à AVANCEMENT résolu en conservant le lot 2 en revue et les 589 tests de #58.
+
+59.1 : liens natifs couvrant cartes et classement Clients, frères des aides de montant pour éviter toute imbrication interactive ; focus visible sur la surface complète. Régression rouge sur les anciens liens limités au nom, puis clic et activation clavier vers /app/clients/12 vérifiés.
+
+59.2 : Amount et InfoTip communs, 20 blocs de montants et 21 aides migrés. Amount affiche le compact sans espace initial et expose l’exact en aria-label et en infobulle. Deux tests échouaient sur les primitives encore vides avant leur implémentation ; passage ciblé 12 tests verts. Pas de nouvelle dépendance.
+
+Avant push : lint code 0 ; 50 fichiers / 617 tests verts (254,14 s) ; build code 0 (12,64 s). Le gros chunk et les avertissements historiques de tests restent documentés. CLAUDE.md liste aussi Amount et InfoTip. Recette à l’écran à effectuer après la pile.

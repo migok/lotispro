@@ -1,3 +1,4 @@
+import { InfoTip } from './ui/info-tip';
 import { Tooltip } from './ui/tooltip';
 import { formatCompactPrice, formatPrice, formatAmount, formatDate } from '../utils/formatters';
 import { useState, useEffect, useCallback } from "react";
@@ -767,7 +768,7 @@ export default function GlobalDashboard() {
                 <div className="gdb-tile-value num">{availableCount}</div>
                 <div className="gdb-tile-label">
                   Lots disponibles
-                  <Tooltip content="Lots libres, prêts à la vente sur l'ensemble des projets"><button type="button" className="kpis-info-icon" aria-label="Lots libres, prêts à la vente sur l'ensemble des projets">ⓘ</button></Tooltip>
+                  <InfoTip text="Lots libres, prêts à la vente sur l'ensemble des projets" className="kpis-info-icon" />
                 </div>
                 <div className="gdb-tile-sub">
                   {stats ? `${stats.counts?.total ?? 0} lots au total` : "—"}
@@ -779,7 +780,7 @@ export default function GlobalDashboard() {
                 <div className="gdb-tile-value num">{stats?.counts?.en_cours ?? 0}</div>
                 <div className="gdb-tile-label">
                   Mes lots actifs
-                  <Tooltip content="Lots en pipeline actif (option, réservation, soldé, notaire)"><button type="button" className="kpis-info-icon" aria-label="Lots en pipeline actif (option, réservation, soldé, notaire)">ⓘ</button></Tooltip>
+                  <InfoTip text="Lots en pipeline actif (option, réservation, soldé, notaire)" className="kpis-info-icon" />
                 </div>
                 <div className="gdb-tile-sub">
                   {(stats?.counts?.chez_proprietaire ?? 0) > 0 ? `${stats.counts.chez_proprietaire} chez propriétaire` : "Pipeline en cours"}
@@ -794,7 +795,7 @@ export default function GlobalDashboard() {
               </button></Tooltip>
               <div className="gdb-tile-label">
                 {isManager ? "CA réalisé" : "Mon CA"}
-                <Tooltip content="Chiffre d'affaires confirmé : ventes finalisées + acomptes des réservations validées"><button type="button" className="kpis-info-icon" aria-label="Chiffre d'affaires confirmé : ventes finalisées + acomptes des réservations validées">ⓘ</button></Tooltip>
+                <InfoTip text="Chiffre d'affaires confirmé : ventes finalisées + acomptes des réservations validées" className="kpis-info-icon" />
               </div>
               <div className="gdb-tile-sub">
                 {stats?.ca_potentiel ? `+ ${formatPrice(stats.ca_potentiel)} potentiel` : "Ventes confirmées"}
@@ -816,7 +817,7 @@ export default function GlobalDashboard() {
               </div>
               <div className="gdb-tile-label">
                 Alertes actives
-                <Tooltip content="Réservations dont la date d'expiration approche dans les 7 jours — à relancer ou convertir en vente"><button type="button" className="kpis-info-icon" aria-label="Réservations dont la date d'expiration approche dans les 7 jours — à relancer ou convertir en vente">ⓘ</button></Tooltip>
+                <InfoTip text="Réservations dont la date d'expiration approche dans les 7 jours — à relancer ou convertir en vente" className="kpis-info-icon" />
               </div>
               <div className="gdb-tile-sub">
                 {alertCount === 0
@@ -836,7 +837,7 @@ export default function GlobalDashboard() {
               <div className="gdb-tile-value num" style={{ color: "#a78bfa" }}>{lotsLiberes}</div>
               <div className="gdb-tile-label">
                 Lots libérés
-                <Tooltip content="Réservations annulées ou expirées — ces lots sont redevenus disponibles à la vente"><button type="button" className="kpis-info-icon" aria-label="Réservations annulées ou expirées — ces lots sont redevenus disponibles à la vente">ⓘ</button></Tooltip>
+                <InfoTip text="Réservations annulées ou expirées — ces lots sont redevenus disponibles à la vente" className="kpis-info-icon" />
               </div>
               <div className="gdb-tile-sub">
                 {lotsLiberes === 0

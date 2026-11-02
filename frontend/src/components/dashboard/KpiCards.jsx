@@ -1,3 +1,4 @@
+import { InfoTip } from '../ui/info-tip';
 import { formatAmount } from '../../utils/formatters';
 import { Tooltip } from '../ui/tooltip';
 import { formatNumber } from '../../utils/formatters';
@@ -52,7 +53,7 @@ function Label({ text, tooltip }) {
   return (
     <div className="kpis-stock-label">
       <span>{text}</span>
-      {tooltip && <Tooltip content={tooltip}><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label={tooltip}>ⓘ</button></Tooltip>}
+      {tooltip && <InfoTip text={tooltip} className="kpis-info-icon kpis-info-icon-dark" />}
     </div>
   );
 }

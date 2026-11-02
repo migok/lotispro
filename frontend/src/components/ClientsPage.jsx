@@ -1,12 +1,13 @@
-import { Tooltip } from './ui/tooltip';
-import { formatAmount } from '../utils/formatters';
+import { Amount } from './ui/amount';
+
+
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { LoadingSkeleton } from './ui/skeleton';
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost } from '../utils/api';
-import { formatPrice, formatCompactPrice } from '../utils/formatters';
+import { formatPrice} from '../utils/formatters';
 import { CLIENT_TYPES, PIPELINE_LABELS } from '../utils/constants';
 import ClientForm from './clients/ClientForm';
 import { matchesClientSearch, shouldToastClientError } from '../utils/clientProfile';
@@ -194,11 +195,11 @@ export default function ClientsPage() {
           <div className="stat-tile-label">Acheteurs</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-tile-value num"><Tooltip content={formatAmount(totalDeposits)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(totalDeposits)}> {formatCompactPrice(totalDeposits)}</span></Tooltip></div>
+          <div className="stat-tile-value num"><Amount value={totalDeposits} /></div>
           <div className="stat-tile-label">Acomptes versés</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-tile-value num"><Tooltip content={formatAmount(totalCA)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(totalCA)}> {formatCompactPrice(totalCA)}</span></Tooltip></div>
+          <div className="stat-tile-value num"><Amount value={totalCA} /></div>
           <div className="stat-tile-label">CA total</div>
         </div>
       </div>
@@ -292,12 +293,13 @@ export default function ClientsPage() {
                     className="cp-card"
                     style={{ animationDelay: `${idx * 0.05}s`, cursor: 'pointer' }}
                   >
+                    <Link className="ui-card-cover" to={`/app/clients/${c.id}`}><span className="ui-sr-only">{c.name}</span></Link>
                     {/* Identity */}
                     <div className="cp-card-top">
                       <div className="monogram monogram-lg">{getInitials(c.name)}</div>
                       <div className="cp-identity">
                         <div className="cp-identity-row">
-                          <Link className="identity-name ui-card-link" to={`/app/clients/${c.id}`}>{c.name}</Link>
+                          <span className="identity-name">{c.name}</span>
                           {c.client_type && c.client_type !== 'autre' && (
                             <span className={`cp-perf-badge ${typeConf.cls}`}>{typeConf.label}</span>
                           )}
@@ -335,7 +337,7 @@ export default function ClientsPage() {
                       </div>
                       <div className="cp-mini-stat-sep" />
                       <div className="cp-mini-stat">
-                        <span className="cp-mini-val num"><Tooltip content={formatAmount(c.total_deposit || 0)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(c.total_deposit || 0)}> {formatCompactPrice(c.total_deposit || 0)}</span></Tooltip></span>
+                        <span className="cp-mini-val num"><Amount value={c.total_deposit || 0} /></span>
                         <span className="cp-mini-lbl">Acompte</span>
                       </div>
                     </div>
@@ -403,15 +405,16 @@ export default function ClientsPage() {
                       className="cp-lb-row"
                       style={{ cursor: 'pointer' }}
                     >
+                      <Link className="ui-card-cover" to={`/app/clients/${c.id}`}><span className="ui-sr-only">{c.name}</span></Link>
                       <span className={`cp-lb-rank${i === 0 ? ' cp-lb-rank-1' : ''}`}>{i + 1}</span>
                       <div className="monogram monogram-sm">{getInitials(c.name)}</div>
                       <div className="cp-lb-identity">
-                        <Link className="cp-lb-name ui-card-link" to={`/app/clients/${c.id}`}>{c.name}</Link>
+                        <span className="cp-lb-name">{c.name}</span>
                         <div className="cp-lb-bar-track">
                           <div className="cp-lb-bar-fill" style={{ width: `${pct.toFixed(1)}%` }} />
                         </div>
                       </div>
-                      <span className="cp-lb-value num"><Tooltip content={formatAmount(c.total_purchases)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(c.total_purchases)}> {formatCompactPrice(c.total_purchases)}</span></Tooltip></span>
+                      <span className="cp-lb-value num"><Amount value={c.total_purchases} /></span>
                     </div>
                   );
                 })}
@@ -429,7 +432,7 @@ export default function ClientsPage() {
               <span className="cp-panel-stat-lbl">Réservations</span>
             </div>
             <div className="cp-panel-stat">
-              <span className="cp-panel-stat-val num"><Tooltip content={formatAmount(totalCA)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(totalCA)}> {formatCompactPrice(totalCA)}</span></Tooltip></span>
+              <span className="cp-panel-stat-val num"><Amount value={totalCA} /></span>
               <span className="cp-panel-stat-lbl">CA total</span>
             </div>
           </div>

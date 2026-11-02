@@ -309,7 +309,7 @@ To enable: set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
 **Palette Obsidian Navy + Warm Brass** — premium B2B real estate SaaS.
 
 Use the shared primitives: Button, Card, StatusBadge, StatTile, DataTable, EmptyState,
-Skeleton, Dialog, Sheet, Tooltip and ConfirmDialog (available after the primitives lot).
+Skeleton, Dialog, Sheet, Tooltip, ConfirmDialog, Amount and InfoTip.
 Compose them instead of creating parallel controls. Use Recharts for data charts.
 All amount and date formatting has one source: `src/utils/formatters.js`
 (`formatAmount` / `formatDate`); compact amounts expose their exact value in a tooltip.
