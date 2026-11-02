@@ -1,4 +1,6 @@
+import { InfoTip } from '../ui/info-tip';
 import { formatAmount } from '../../utils/formatters';
+import { Tooltip } from '../ui/tooltip';
 import { formatNumber } from '../../utils/formatters';
 import {
   formatFlowUnavailableNotice,
@@ -51,7 +53,7 @@ function Label({ text, tooltip }) {
   return (
     <div className="kpis-stock-label">
       <span>{text}</span>
-      {tooltip && <span className="kpis-info-icon kpis-info-icon-dark" title={tooltip}>ⓘ</span>}
+      {tooltip && <InfoTip text={tooltip} className="kpis-info-icon kpis-info-icon-dark" />}
     </div>
   );
 }
@@ -85,6 +87,7 @@ export default function KpiCards({ stats, loading }) {
       {FLOW_CARDS.map((card) => {
         const unavailable = card.needsHistory && stats.flow_kpis_available === false;
         const variation = formatVariation(variations[card.key]);
+        const monetary = card.key === 'ca' || card.key === 'encaissements';
         return (
           <div key={card.key} className="kpis-stock-card period-kpi-card flow">
             <Label text={card.label} tooltip={card.tooltip} />
@@ -92,7 +95,9 @@ export default function KpiCards({ stats, loading }) {
               <div className="period-kpi-notice">{flowNotice}</div>
             ) : (
               <>
-                <div className="kpis-stock-value" tabIndex={card.key === 'ca' || card.key === 'encaissements' ? 0 : undefined} title={card.key === 'ca' || card.key === 'encaissements' ? formatAmount(flow[card.key]) : undefined}>{card.format(flow[card.key])}</div>
+                {monetary ? <Tooltip content={formatAmount(flow[card.key])}>
+                  <button type="button" className="kpis-stock-value ui-amount-value" aria-label={`${card.label} : ${formatAmount(flow[card.key])}`}>{card.format(flow[card.key])}</button>
+                </Tooltip> : <div className="kpis-stock-value">{card.format(flow[card.key])}</div>}
                 <div className="period-kpi-variation">
                   <span className={`period-kpi-trend${variation.trend ? ` ${variation.trend}` : ''}`}>
                     {variation.text}

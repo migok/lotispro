@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from './ui/skeleton';
 import { useState, useEffect, useCallback } from 'react';
 import { apiGet, apiPost } from '../utils/api';
 
@@ -160,7 +161,7 @@ export default function LotPricingConfigPanel({ projectId }) {
     return (
       <div className="section-card" style={{ marginTop: 'var(--spacing-lg)' }}>
         <h3>Grille de Prix</h3>
-        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--type-body)' }}>Chargement...</div>
+        <LoadingSkeleton label='Chargement' rows={3} />
       </div>
     );
   }

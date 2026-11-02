@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from './ui/skeleton';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/authHooks';
@@ -192,7 +193,7 @@ export default function ProjectsPage() {
 
       {/* ── Projects Grid ── */}
       {loading ? (
-        <div className="loading-state">Chargement…</div>
+        <LoadingSkeleton label='Chargement' rows={3} />
       ) : filteredProjects.length === 0 ? (
         <div className="empty-state">
           <p>

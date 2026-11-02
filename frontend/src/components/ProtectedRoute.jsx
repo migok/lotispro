@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from './ui/skeleton';
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/authHooks";
 
@@ -27,7 +28,7 @@ export default function ProtectedRoute({ children, allowedRoles = null }) {
           >
             🏘️
           </div>
-          <p style={{ color: "var(--text-muted)" }}>Chargement...</p>
+          <LoadingSkeleton label='Chargement' rows={3} />
         </div>
       </div>
     );

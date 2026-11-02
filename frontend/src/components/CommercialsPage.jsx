@@ -1,4 +1,7 @@
-import { formatAmount } from '../utils/formatters';
+import { Amount } from './ui/amount';
+import { Tooltip } from './ui/tooltip';
+import { LoadingSkeleton } from './ui/skeleton';
+
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
@@ -422,11 +425,11 @@ export default function CommercialsPage() {
           <div className="stat-tile-label">Réservations actives</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-tile-value num"><span tabIndex={0} title={formatAmount(totalDeposits)} aria-label={formatAmount(totalDeposits)}> {formatCompactPrice(totalDeposits)}</span></div>
+          <div className="stat-tile-value num"><Amount value={totalDeposits} /></div>
           <div className="stat-tile-label">Acomptes collectés</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-tile-value num"><span tabIndex={0} title={formatAmount(totalRevenue)} aria-label={formatAmount(totalRevenue)}> {formatCompactPrice(totalRevenue)}</span></div>
+          <div className="stat-tile-value num"><Amount value={totalRevenue} /></div>
           <div className="stat-tile-label">CA total généré</div>
         </div>
       </div>
@@ -492,7 +495,7 @@ export default function CommercialsPage() {
 
           {/* Commercial cards */}
           {loading ? (
-            <div className="loading-state">Chargement…</div>
+            <LoadingSkeleton label='Chargement' rows={3} />
           ) : displayList.length === 0 ? (
             <div className="empty-state">
               <p>
@@ -569,7 +572,7 @@ export default function CommercialsPage() {
                       </div>
                       <div className="cp-mini-stat-sep" />
                       <div className="cp-mini-stat">
-                        <span className="cp-mini-val num"><span tabIndex={0} title={formatAmount(stats.total_deposits || 0)} aria-label={formatAmount(stats.total_deposits || 0)}> {formatCompactPrice(stats.total_deposits || 0)}</span></span>
+                        <span className="cp-mini-val num"><Amount value={stats.total_deposits || 0} /></span>
                         <span className="cp-mini-lbl">Acomptes</span>
                       </div>
                     </div>
@@ -661,7 +664,7 @@ export default function CommercialsPage() {
                           <div className="cp-lb-bar-fill" style={{ width: `${pct.toFixed(1)}%` }} />
                         </div>
                       </div>
-                      <span className="cp-lb-value num"><span tabIndex={0} title={formatAmount(rev)} aria-label={formatAmount(rev)}> {formatCompactPrice(rev)}</span></span>
+                      <span className="cp-lb-value num"><Amount value={rev} /></span>
                     </div>
                   );
                 })}
@@ -680,7 +683,7 @@ export default function CommercialsPage() {
               <span className="cp-panel-stat-lbl">Réservations</span>
             </div>
             <div className="cp-panel-stat">
-              <span className="cp-panel-stat-val num"><span tabIndex={0} title={formatAmount(totalRevenue)} aria-label={formatAmount(totalRevenue)}> {formatCompactPrice(totalRevenue)}</span></span>
+              <span className="cp-panel-stat-val num"><Amount value={totalRevenue} /></span>
               <span className="cp-panel-stat-lbl">CA total</span>
             </div>
           </div>

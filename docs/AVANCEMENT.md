@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-10-31 (E6 validé en recette et fusionné, PR #57 ; E5 terminé, PR #55)_
+_Dernière mise à jour : 2026-11-02 (E5 et E6 terminés ; refonte UI : lots 1 et 2 en revue, recette visuelle à réaliser)_
 
 ## Vue d'ensemble
 
@@ -29,8 +29,8 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 
 | Lot | Statut | Portée | Validation |
 |---|---|---|---|
-| 1 — Fondations | 🟨 En revue | Tokens, contraste, typographie, formateurs, Tailwind v4 et configuration shadcn | 589 tests verts (correction 58.1 : statuts distincts) ; lint et build OK ; recette visuelle bloquée par le contrôle Chrome |
-| 2 — Primitives | ⬜ À faire | Composants accessibles, confirmations, skeletons, navigation clavier | Après le lot 1 |
+| 1 — Fondations | 🟨 [En revue (#58)](https://github.com/migok/lotispro/pull/58) | Tokens, contraste, typographie, formateurs, Tailwind v4 et configuration shadcn | 589 tests verts (correction 58.1 : statuts distincts) ; lint et build OK ; recette visuelle bloquée par le contrôle Chrome |
+| 2 — Primitives | 🟨 En revue | Composants accessibles, confirmations, skeletons, navigation clavier | 617 tests verts (corrections 59.1–59.2) ; lint et build OK ; recette visuelle non validée |
 | 3 — Shell et dashboard global | ⬜ À faire | Hors périmètre de cette session | Accord utilisateur requis |
 | 4 — Clients | ⬜ À faire | Hors périmètre de cette session | — |
 | 5 — Projet et lots | ⬜ À faire | Hors périmètre de cette session ; E6 déjà fusionné (#57) | — |

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost } from '../utils/api';
+import { ConfirmDialog } from './ui/confirm-dialog';
 import { ACTIVE_LOT_STATUSES } from '../utils/constants';
 import PeriodPicker from './dashboard/PeriodPicker';
 import KpiCards from './dashboard/KpiCards';
@@ -26,6 +27,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
   const [clientsPipeline, setClientsPipeline] = useState([]);
   const [latePayments, setLatePayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pendingRelease, setPendingRelease] = useState(null);
 
   // KPIs du projet (uniquement pour managers avec projectId)
   const [projectKpis, setProjectKpis] = useState(null);
@@ -204,16 +206,13 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
 
   // Libérer une alerte (réservation)
   const handleReleaseAlert = async (alertItem) => {
-    if (!confirm(`Êtes-vous sûr de vouloir libérer le lot ${alertItem.lot_numero} ?`)) {
-      return;
-    }
-
     try {
       await apiPost(`/api/reservations/${alertItem.id}/release`, {});
       toast.success('Réservation libérée avec succès');
       loadDashboardData();
     } catch (error) {
       toast.error(error.message || 'Erreur lors de la libération');
+      throw error;
     }
   };
 
@@ -382,12 +381,16 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
           clientsPipeline={clientsPipeline}
           onSelectLot={onSelectLot}
           onNavigate={onNavigate}
-          onReleaseAlert={handleReleaseAlert}
+          onReleaseAlert={setPendingRelease}
           onReload={loadDashboardData}
           isManager={isManager}
           isCommercial={isCommercial}
         />
       )}
+      <ConfirmDialog open={pendingRelease !== null} onOpenChange={(open) => { if (!open) setPendingRelease(null); }}
+        title={`Libérer le lot ${pendingRelease?.lot_numero || ''} ?`}
+        description="La réservation sera libérée. Le lot sera de nouveau disponible."
+        confirmLabel="Libérer le lot" onConfirm={() => handleReleaseAlert(pendingRelease)} />
     </div>
   );
 }

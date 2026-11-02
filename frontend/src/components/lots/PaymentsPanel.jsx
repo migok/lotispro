@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from '../ui/skeleton';
 import { useState } from 'react';
 import usePaymentsData from './usePaymentsData';
 import RecordPaymentForm from './RecordPaymentForm';
@@ -40,7 +41,7 @@ export default function PaymentsPanel({
   const [formFor, setFormFor] = useState(null); // id de l'échéance en cours d'encaissement
 
   if (failed) return <div className="ldm-documents-empty">Échéancier indisponible.</div>;
-  if (!summary) return <div className="ldm-documents-empty">Chargement de l'échéancier…</div>;
+  if (!summary) return <LoadingSkeleton label="Chargement de l'échéancier" rows={3} />;
 
   const legacy = summary.legacy === true;
   const recordable = canRecord && !legacy && !compact;

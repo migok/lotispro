@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from '../ui/skeleton';
 import { useEffect, useState } from 'react';
 import { formatDate, formatMad } from '../../utils/formatters';
 import { installmentLabel, listReservationChanges } from '../../services/reservationFinanceService';
@@ -59,7 +60,7 @@ export default function ReservationChangesHistory({ reservationId, installments 
     return () => { cancelled = true; };
   }, [reservationId]);
 
-  if (changes === null) return <div className="ldm-documents-empty">Chargement de l'historique…</div>;
+  if (changes === null) return <LoadingSkeleton label="Chargement de l'historique" rows={3} />;
   if (failed) return <div className="ldm-documents-empty">Historique indisponible.</div>;
   if (changes.length === 0) return <div className="ldm-documents-empty">Aucune modification enregistrée.</div>;
 

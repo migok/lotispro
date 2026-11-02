@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from '../ui/skeleton';
 import { useState } from 'react';
 import { formatMad } from '../../utils/formatters';
 import usePaymentsData from './usePaymentsData';
@@ -53,7 +54,7 @@ export default function ReservationFinanceView({
   if (failed) {
     body = <div className="ldm-documents-empty">Échéancier indisponible.</div>;
   } else if (!summary) {
-    body = <div className="ldm-documents-empty">Chargement de l'échéancier…</div>;
+    body = <LoadingSkeleton label="Chargement de l'échéancier" rows={3} />;
   } else {
     body = (
       <>

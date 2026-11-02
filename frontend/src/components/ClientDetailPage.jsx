@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from './ui/skeleton';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/toastHooks';
@@ -454,7 +455,7 @@ export default function ClientDetailPage() {
   };
 
   /* ── Guards ─────────────────────────────────────────────── */
-  if (loading) return <div className="loading-state">Chargement…</div>;
+  if (loading) return <LoadingSkeleton label='Chargement' rows={3} />;
   if (error) return (
     <div className="page-container">
       <div className="empty-state">
@@ -952,7 +953,7 @@ export default function ClientDetailPage() {
         {/* ── Paiements ── */}
         {activeTab === 'payments' && (
           paymentLoading
-            ? <div className="loading-state">Chargement des paiements…</div>
+            ? <LoadingSkeleton label='Chargement des paiements' rows={3} />
             : (() => {
                 // Schedules are created at engagement only (the legacy « Créer le plan » was removed)
                 return (

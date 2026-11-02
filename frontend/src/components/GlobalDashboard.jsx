@@ -1,7 +1,10 @@
+import { InfoTip } from './ui/info-tip';
+import { Tooltip } from './ui/tooltip';
 import { formatCompactPrice, formatPrice, formatAmount, formatDate } from '../utils/formatters';
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { apiGet } from "../utils/api";
+import { StatusBadge } from './ui/status-badge';
 import { useAuth } from "../contexts/authHooks";
 import { useToast } from "../contexts/toastHooks";
 
@@ -765,7 +768,7 @@ export default function GlobalDashboard() {
                 <div className="gdb-tile-value num">{availableCount}</div>
                 <div className="gdb-tile-label">
                   Lots disponibles
-                  <span className="kpis-info-icon" title="Lots libres, prêts à la vente sur l'ensemble des projets">ⓘ</span>
+                  <InfoTip text="Lots libres, prêts à la vente sur l'ensemble des projets" className="kpis-info-icon" />
                 </div>
                 <div className="gdb-tile-sub">
                   {stats ? `${stats.counts?.total ?? 0} lots au total` : "—"}
@@ -777,7 +780,7 @@ export default function GlobalDashboard() {
                 <div className="gdb-tile-value num">{stats?.counts?.en_cours ?? 0}</div>
                 <div className="gdb-tile-label">
                   Mes lots actifs
-                  <span className="kpis-info-icon" title="Lots en pipeline actif (option, réservation, soldé, notaire)">ⓘ</span>
+                  <InfoTip text="Lots en pipeline actif (option, réservation, soldé, notaire)" className="kpis-info-icon" />
                 </div>
                 <div className="gdb-tile-sub">
                   {(stats?.counts?.chez_proprietaire ?? 0) > 0 ? `${stats.counts.chez_proprietaire} chez propriétaire` : "Pipeline en cours"}
@@ -787,12 +790,12 @@ export default function GlobalDashboard() {
 
             <div className="gdb-tile" style={{ "--tile-accent": "var(--color-primary)", "--tile-icon-bg": "var(--color-primary-subtle)" }}>
               <div className="gdb-tile-icon"><IconCash /></div>
-              <div className="gdb-tile-value num" tabIndex={0} title={formatAmount(caRealise)} aria-label={formatAmount(caRealise)} style={{ fontSize: "var(--type-value)" }}>
+              <Tooltip content={formatAmount(caRealise)}><button type="button" className="gdb-tile-value num ui-amount-value" aria-label={`CA réalisé : ${formatAmount(caRealise)}`} style={{ fontSize: "var(--type-value)" }}>
                 {fmtCurrency(caRealise)}
-              </div>
+              </button></Tooltip>
               <div className="gdb-tile-label">
                 {isManager ? "CA réalisé" : "Mon CA"}
-                <span className="kpis-info-icon" title="Chiffre d'affaires confirmé : ventes finalisées + acomptes des réservations validées">ⓘ</span>
+                <InfoTip text="Chiffre d'affaires confirmé : ventes finalisées + acomptes des réservations validées" className="kpis-info-icon" />
               </div>
               <div className="gdb-tile-sub">
                 {stats?.ca_potentiel ? `+ ${formatPrice(stats.ca_potentiel)} potentiel` : "Ventes confirmées"}
@@ -814,7 +817,7 @@ export default function GlobalDashboard() {
               </div>
               <div className="gdb-tile-label">
                 Alertes actives
-                <span className="kpis-info-icon" title="Réservations dont la date d'expiration approche dans les 7 jours — à relancer ou convertir en vente">ⓘ</span>
+                <InfoTip text="Réservations dont la date d'expiration approche dans les 7 jours — à relancer ou convertir en vente" className="kpis-info-icon" />
               </div>
               <div className="gdb-tile-sub">
                 {alertCount === 0
@@ -834,7 +837,7 @@ export default function GlobalDashboard() {
               <div className="gdb-tile-value num" style={{ color: "#a78bfa" }}>{lotsLiberes}</div>
               <div className="gdb-tile-label">
                 Lots libérés
-                <span className="kpis-info-icon" title="Réservations annulées ou expirées — ces lots sont redevenus disponibles à la vente">ⓘ</span>
+                <InfoTip text="Réservations annulées ou expirées — ces lots sont redevenus disponibles à la vente" className="kpis-info-icon" />
               </div>
               <div className="gdb-tile-sub">
                 {lotsLiberes === 0
@@ -921,10 +924,8 @@ export default function GlobalDashboard() {
                     {optionsTracking.map((o) => {
                       const { label, cls } = fmtDays(o.days_remaining);
                       return (
-                        <tr key={o.lot_id} className={`opt-row${o.is_expired ? " opt-row--expired" : ""}`}
-                          style={{ cursor: "pointer" }}
-                          onClick={() => navigate(`/app/projects/${o.project_id}`)}>
-                          <td className="opt-cell-numero">#{o.lot_numero}</td>
+                        <tr key={o.lot_id} className={`opt-row${o.is_expired ? " opt-row--expired" : ""}`}>
+                          <td className="opt-cell-numero"><Link to={`/app/projects/${o.project_id}`}>#{o.lot_numero}</Link></td>
                           <td className="opt-cell-project">{o.project_name}</td>
                           <td className="opt-cell-client">
                             <div className="opt-client-name">{o.client_name}</div>
@@ -932,9 +933,7 @@ export default function GlobalDashboard() {
                           </td>
                           {isManager && <td className="opt-cell-commercial">{o.reserved_by_name || "—"}</td>}
                           <td>
-                            <span className={`status-badge ${o.lot_status}`} style={{ fontSize: "var(--type-label)", padding: "3px 8px" }}>
-                              {o.lot_status === "option" ? "Option" : "Résa. à finaliser"}
-                            </span>
+                            <StatusBadge status={o.lot_status} />
                           </td>
                           <td className="opt-cell-date">{o.reservation_date ? formatDate(o.reservation_date, { dateStyle: 'short' }) : "—"}</td>
                           <td className="opt-cell-date">{formatDate(o.expiration_date, { dateStyle: 'short' })}</td>
@@ -994,7 +993,6 @@ export default function GlobalDashboard() {
                     key={p.id}
                     className="gdb-proj-card"
                     style={{ animationDelay: `${0.05 * i}s` }}
-                    onClick={() => navigate(`/app/projects/${p.id}`)}
                   >
                     {/* Thumbnail */}
                     <div className="gdb-proj-thumb">
@@ -1014,7 +1012,7 @@ export default function GlobalDashboard() {
                     {/* Body */}
                     <div className="gdb-proj-body">
                       <div>
-                        <div className="gdb-proj-name">{p.name}</div>
+                        <div className="gdb-proj-name"><Link className="ui-card-link" to={`/app/projects/${p.id}`}>{p.name}</Link></div>
                         <div className="gdb-proj-meta">{total} lots · créé le {fmtDate(p.created_at)}</div>
                       </div>
 
@@ -1045,9 +1043,9 @@ export default function GlobalDashboard() {
                       </div>
 
                       <div className="gdb-proj-footer">
-                        <button className="gdb-voir-btn" onClick={(e) => { e.stopPropagation(); navigate(`/app/projects/${p.id}`); }}>
+                        <span className="gdb-voir-btn" aria-hidden="true">
                           Voir le projet <IconArrowRight />
-                        </button>
+                        </span>
                       </div>
                     </div>
                   </div>

@@ -53,3 +53,44 @@ Les premiers essais avec le délai de 5 secondes ont été interrompus après de
 `npm run lint` : code de sortie 0. `npm run build` : code de sortie 0 ; 250 modules transformés. Avertissement de chunk principal supérieur à 500 kB conservé, à traiter dans un chantier de découpage. Installation npm : 17 vulnérabilités signalées dans l'arbre ; aucun `audit fix` global ou changement de dépendances hors périmètre.
 
 Compte de test vérifié en mémoire contre l'API du worktree : connexion HTTP 200 ; `/api/projects`, `/api/dashboard/stats` et `/api/clients` HTTP 200. Aucun identifiant ni jeton n'est enregistré dans le dépôt. Ceci ne remplace pas la recette navigateur.
+
+## Lot 2 — primitives et premières migrations
+
+Branche `feature/ui-primitives`, dépend de la [PR #58](https://github.com/migok/lotispro/pull/58). PR demandée vers `dev`, à fusionner après le lot 1. Aucun lot 3 démarré.
+
+- [x] Button (variantes, composition Slot, état occupé/désactivé), Card, StatusBadge, StatTile, EmptyState, Skeleton/LoadingSkeleton, DataTable, Dialog, Sheet, Tooltip, ConfirmDialog dans `frontend/src/components/ui/`.
+- [x] Chacune couverte par les tests de rendu et les interactions applicables : clavier, tri et pagination, état vide/erreur/chargement, focus, Escape, annulation, double exécution, échec asynchrone.
+- [x] StatusBadge lit exclusivement STATUS_LABELS et STATUS_COLORS ; styles de badges/infobulles historiques raccordés aux mêmes tokens. Le lot 2 complète la migration des couleurs de statut amorcée au lot 1.
+- [x] Les deux confirmations natives remplacées : retrait d'un commercial et libération d'une réservation. Chemins, paramètres et corps des requêtes API identiques ; annuler ne déclenche aucune mutation.
+- [x] Messages de chargement remplacés par un skeleton générique annoncé une seule fois ; les libellés de boutons occupés et le chargement du dashboard projet restent spécifiques.
+- [x] Liens natifs sur les cartes du dashboard global, les lignes d'options globales et les cartes/classement Clients ; aucune imbrication de liens ou boutons.
+- [x] Aides KPI et valeurs exactes accessibles au focus, au toucher et au survol ; fermeture par Escape et au défilement. Portails compatibles avec le conteneur plein écran.
+- [ ] Captures et recette visuelle aux six combinaisons largeur/thème : même blocage de l'outil Chrome.
+
+Problèmes traités : #5 (primitives et première adoption, migration progressive des écrans aux lots suivants), #11 (dashboard global et Clients ; les autres cartes métier restent pour les lots suivants), #17 (confirmations uniquement ; fiche lot en Sheet au lot 5), #18 (placeholders de chargement).
+
+Nouveaux fichiers : onze modules de primitives dans `frontend/src/components/ui/`, tests `ui/__tests__/primitives.test.jsx`, `components/__tests__/uiMigration.test.jsx`, styles isolés `styles/ui.css`. Tests de confirmation ajoutés à `Dashboard.smoke.test.jsx`. Les autres adaptations de composants portent sur les aides, placeholders et liens, sans refonte des écrans.
+
+Dépendances ajoutées au lot 2 : aucune, les dépendances shadcn/Radix sont préparées dans le lot 1. Le test setup fournit seulement l'observateur de dimension absent de jsdom ; les interactions, la gestion du focus et les composants Radix sont réels.
+
+Cycle rouge : 20 tests de primitives échouaient sur les composants vides ; les quatre tests de migration reproduisaient l'absence de liens, de skeleton et de confirmation ; un test additionnel reproduisait la confirmation native de libération ; le test d'aide KPI exige désormais un bouton utilisable au clavier. Passage ciblé final : 35 tests verts dans quatre fichiers. Le test historique de chargement d'échéancier a été adapté à l'annonce `role=status` / `aria-busy`, en conservant ses assertions de non-régénération d'acte.
+
+Lint : code 0. Build : code 0, 325 modules transformés ; avertissement de chunk conservé. Suite complète finale verte : 49 fichiers, 611 tests, 223,27 secondes (commande ci-dessous).
+
+## Revue et suites
+
+- CI de la PR #58 : backend ruff/pytest, frontend eslint/vitest/build, migrations upgrade/downgrade/upgrade et aperçu Vercel verts.
+- Les dossiers `lot_webapp`, `lot_webapp-e5` et `lot_webapp-e6` sont propres et n'ont pas été modifiés.
+- Les corrections d'architecture des données et de salience du dashboard restent au lot 3 ; le portefeuille en tableau reste au lot 4 ; la vraie fiche lot en Sheet reste au lot 5.
+- Risque principal : absence de recette visuelle. Les PR restent en brouillon et ne sont pas déclarées « Terminées » ; seule l'implémentation et la validation automatisée sont proposées à la revue.
+
+Sortie réelle finale du lot 2 :
+
+```text
+npm test -- --maxWorkers=2 --testTimeout=15000 --reporter=verbose
+Test Files  49 passed (49)
+Tests       611 passed (611)
+Duration    223.27s
+```
+
+Les vérifications HTTP finales répondent 200 : frontend sur `http://127.0.0.1:5180/`, transformation Vite de `src/components/ui/confirm-dialog.jsx`, backend `/api/health` sur 8010. Cela vérifie les serveurs, pas le rendu des pages. L'aperçu local est laissé disponible pour la revue utilisateur.

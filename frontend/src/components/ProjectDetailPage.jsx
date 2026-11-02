@@ -1,3 +1,6 @@
+import { InfoTip } from './ui/info-tip';
+
+import { LoadingSkeleton } from './ui/skeleton';
 import { formatDate, formatPrice } from '../utils/formatters';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -1366,8 +1369,7 @@ function KPIsTab({ project }) {
   if (loading) {
     return (
       <div className="kpis-loading">
-        <div className="loading-spinner"></div>
-        <p>Chargement des KPIs...</p>
+        <LoadingSkeleton label='Chargement des KPIs' rows={3} />
       </div>
     );
   }
@@ -1867,8 +1869,7 @@ function PerformanceTab({ project }) {
   if (loading) {
     return (
       <div className="perf-loading">
-        <div className="loading-spinner"></div>
-        <p>Chargement des performances...</p>
+        <LoadingSkeleton label='Chargement des performances' rows={3} />
       </div>
     );
   }
@@ -2088,7 +2089,7 @@ function PerformanceTab({ project }) {
                         <div className="perf-progress-header">
                           <span>
                             Score de Performance (vs moyenne)
-                            <span className="kpis-info-icon kpis-info-icon-dark" title="Score calculé par rapport à la moyenne des commerciaux (100% = moyenne). Au-dessus de 100% : performance supérieure à la moyenne">ⓘ</span>
+                            <InfoTip text="Score calculé par rapport à la moyenne des commerciaux (100% = moyenne). Au-dessus de 100% : performance supérieure à la moyenne" className="kpis-info-icon kpis-info-icon-dark" />
                           </span>
                           <span className="perf-progress-value" style={{ color: getPerformanceColor(getPerformanceScore(commercial)) }}>
                             {getPerformanceScore(commercial)}%
@@ -2260,8 +2261,7 @@ function HistoriqueTab({ projectId, userId, isCommercial }) {
   if (loading) {
     return (
       <div className="history-loading">
-        <div className="loading-spinner"></div>
-        <p>Chargement de l'historique...</p>
+        <LoadingSkeleton label="Chargement de l'historique" rows={3} />
       </div>
     );
   }
@@ -2722,7 +2722,7 @@ export function ParametresTab({ project, onUpdate }) {
         </p>
 
         {planLoading ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--type-body)' }}>Chargement...</div>
+          <LoadingSkeleton label='Chargement' rows={3} />
         ) : (
           <form onSubmit={handlePlanSubmit}>
             {planError && (
