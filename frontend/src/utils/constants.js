@@ -44,7 +44,7 @@ export const STATUS_HEX_COLORS = {
   edl_realise:            '#79d6d0',
   edl_finalise:           '#69c9c2',
   chez_notaire:           '#f4b4d0',
-  chez_proprietaire:      '#66d6a5',
+  chez_proprietaire:      '#c2dc78',
   blocked:                '#ff9299',
 };
 

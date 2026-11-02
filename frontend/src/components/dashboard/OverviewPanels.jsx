@@ -1,9 +1,10 @@
-import { Tooltip } from '../ui/tooltip';
-import { formatAmount } from '../../utils/formatters';
+import { Amount } from '../ui/amount';
+
+
 import { useState } from 'react';
 import { useToast } from '../../contexts/toastHooks';
 import { apiPost } from '../../utils/api';
-import { formatPrice, formatDate, formatNumber } from '../../utils/formatters';
+import { formatPrice, formatDate} from '../../utils/formatters';
 import { ACTIVE_LOT_STATUSES, STATUS_LABELS, PIPELINE_LABELS } from '../../utils/constants';
 
 // Calculate days remaining until expiration
@@ -50,7 +51,7 @@ export default function OverviewPanels({ selectedStatuses, setSelectedStatuses, 
                 <div className="stat-label">Expirent bientôt</div>
               </div>
               <div className="stat-item">
-                <div className="stat-value num"><Tooltip content={formatAmount(alerts.summary.value_at_risk)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(alerts.summary.value_at_risk)}> {formatNumber(alerts.summary.value_at_risk, 'MAD')}</span></Tooltip></div>
+                <div className="stat-value num"><Amount value={alerts.summary.value_at_risk} /></div>
                 <div className="stat-label">Valeur à risque</div>
               </div>
             </div>

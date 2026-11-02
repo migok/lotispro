@@ -291,7 +291,7 @@ Design de référence : `docs/superpowers/specs/2026-10-22-roadmap-lotispro-desi
 - **No direct fetch:** always use `utils/api.js` wrapper
 - **Toast for feedback:** use `useToast()` from `contexts/toastHooks` (`ToastContext.jsx` only exports `ToastProvider`; likewise `useAuth` comes from `contexts/authHooks`, `AuthContext.jsx` only exports `AuthProvider`)
 - **Role checks:** use `ProtectedRoute` for route-level, check `user.role` in components
-- **Styling:** custom CSS in `styles.css`, no UI framework
+- **Styling:** tokens in `src/styles/tokens.css`; Tailwind v4 mapped to those tokens; shadcn/ui (Radix) primitives in `src/components/ui/`. Historical `styles.css` is being migrated; do not add hard-coded colours. Recharts is the standard for charts.
 - **Theme:** `useTheme.js` in `components/` — reads/writes `localStorage('lotispro-theme')`, sets `data-theme` on `<html>`
 
 ---
@@ -308,18 +308,36 @@ To enable: set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
 
 **Palette Obsidian Navy + Warm Brass** — premium B2B real estate SaaS.
 
+Use the shared primitives: Button, Card, StatusBadge, StatTile, DataTable, EmptyState,
+Skeleton, Dialog, Sheet, Tooltip, ConfirmDialog, Amount and InfoTip.
+Compose them instead of creating parallel controls. Use Recharts for data charts.
+All amount and date formatting has one source: `src/utils/formatters.js`
+(`formatAmount` / `formatDate`); compact amounts expose their exact value in a tooltip.
+
 Dark (default): `#090d16` bg + `#d4973a` brass primary  
 Light (`data-theme="light"`): `#f4f5f0` warm stone + `#b87728` deep brass
 
 **Status colors (map polygons + badges):**
 
-| Status | Color |
-|--------|-------|
-| available | `#10b981` emerald |
-| option / reserved | `#f59e0b` amber |
-| validated | `#8b5cf6` violet |
-| sold / chez_proprietaire | `#ef4444` red |
-| blocked | `#6b7280` gray |
+| Status | Dark / Leaflet | Light token |
+|--------|----------------|-------------|
+| creation | `#bac4d5` | `#526078` |
+| available | `#66d6a5` | `#12633f` |
+| option | `#d6bbff` | `#684095` |
+| reservation_a_finaliser | `#c7a5ff` | `#5d338f` |
+| reservation_engagee | `#b6ceff` | `#254f99` |
+| reservation_soldee | `#96baff` | `#1a448c` |
+| edl_programme | `#a5e4e0` | `#1b6262` |
+| edl_realise | `#79d6d0` | `#135957` |
+| edl_finalise | `#69c9c2` | `#0c514f` |
+| chez_notaire | `#f4b4d0` | `#923c65` |
+| chez_proprietaire | `#c2dc78` | `#4a6216` |
+| blocked | `#ff9299` | `#ab2136` |
+
+`STATUS_LABELS`, `STATUS_COLORS` and `STATUS_HEX_COLORS` in `utils/constants.js`
+are authoritative. The CSS references resolve through `styles/tokens.css`; keep the
+12 status colours distinct in each theme. Available stock is emerald; delivered
+lots are olive, separately from the commercial, financial, EDL and notary phases.
 
 **Typography:** Cormorant Garamond (display) + DM Sans (body) + DM Mono (mono)  
 Numbers use `font-variant-numeric: tabular-nums lining-nums` — `.num` utility class available.

@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { existsSync, readFileSync } from 'node:fs';
+import { STATUS_COLORS } from '../constants';
 
 const tokenFile = new URL('../../styles/tokens.css', import.meta.url);
 const css = readFileSync(existsSync(tokenFile) ? tokenFile : new URL('../../styles.css', import.meta.url), 'utf8');
@@ -15,6 +16,10 @@ const luminance = (hex) => {
     .map((v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
   return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
 };
+it.each([['dark', dark], ['light', light]])('keeps all 12 status tokens distinct in %s', (_theme, tokens) => {
+  const values = Object.values(STATUS_COLORS).map((reference) => resolve(tokens, reference.slice(4, -1)));
+  expect(new Set(values).size).toBe(12);
+});
 describe.each([['dark', dark], ['light', light]])('%s text contrast', (_theme, tokens) => {
   for (const surface of ['--bg-primary', '--bg-secondary', '--bg-tertiary', '--bg-surface', '--bg-sidebar']) {
     it.each(['--text-primary', '--text-secondary', '--text-muted', '--color-primary', '--text-gold'])(`%s on ${surface} meets WCAG AA`, (text) => {

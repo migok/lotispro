@@ -71,6 +71,10 @@ button.kpis-info-icon { border: none; background: none; font-family: var(--font-
 .ui-card-link::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
 .cp-card:has(.ui-card-link:focus-visible), .cp-lb-row:has(.ui-card-link:focus-visible), .gdb-proj-card:has(.ui-card-link:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .ui-amount-trigger { position: relative; z-index: var(--z-raised); cursor: help; }
+.ui-amount { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: inherit; font-variant-numeric: tabular-nums; }
+.cp-card > .ui-card-cover, .cp-lb-row > .ui-card-cover { position: absolute; inset: 0; z-index: var(--z-raised); border-radius: inherit; }
+.cp-card .ui-amount-trigger, .cp-lb-row .ui-amount-trigger { z-index: calc(var(--z-raised) + 1); }
+.cp-card:has(.ui-card-cover:focus-visible), .cp-lb-row:has(.ui-card-cover:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .ui-amount-value { border: 0; background: none; padding: 0; text-align: inherit; cursor: help; }
 @media (min-width: 640px) { .ui-sheet { border-radius: var(--radius-xl) 0 0 var(--radius-xl); } }
 @media (max-width: 640px) {

@@ -1,4 +1,5 @@
-import { Tooltip } from './ui/tooltip';
+import { InfoTip } from './ui/info-tip';
+
 import { LoadingSkeleton } from './ui/skeleton';
 import { formatDate, formatPrice } from '../utils/formatters';
 import { useState, useEffect, useRef } from 'react';
@@ -2087,7 +2088,7 @@ function PerformanceTab({ project }) {
                         <div className="perf-progress-header">
                           <span>
                             Score de Performance (vs moyenne)
-                            <Tooltip content="Score calculé par rapport à la moyenne des commerciaux (100% = moyenne). Au-dessus de 100% : performance supérieure à la moyenne"><button type="button" className="kpis-info-icon kpis-info-icon-dark" aria-label="Score calculé par rapport à la moyenne des commerciaux (100% = moyenne). Au-dessus de 100% : performance supérieure à la moyenne">ⓘ</button></Tooltip>
+                            <InfoTip text="Score calculé par rapport à la moyenne des commerciaux (100% = moyenne). Au-dessus de 100% : performance supérieure à la moyenne" className="kpis-info-icon kpis-info-icon-dark" />
                           </span>
                           <span className="perf-progress-value" style={{ color: getPerformanceColor(getPerformanceScore(commercial)) }}>
                             {getPerformanceScore(commercial)}%
