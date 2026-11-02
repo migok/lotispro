@@ -319,25 +319,30 @@ Light (`data-theme="light"`): `#f4f5f0` warm stone + `#b87728` deep brass
 
 **Status colors (map polygons + badges):**
 
-| Status | Dark / Leaflet | Light token |
-|--------|----------------|-------------|
-| creation | `#bac4d5` | `#526078` |
-| available | `#66d6a5` | `#12633f` |
-| option | `#d6bbff` | `#684095` |
-| reservation_a_finaliser | `#c7a5ff` | `#5d338f` |
-| reservation_engagee | `#b6ceff` | `#254f99` |
-| reservation_soldee | `#96baff` | `#1a448c` |
-| edl_programme | `#a5e4e0` | `#1b6262` |
-| edl_realise | `#79d6d0` | `#135957` |
-| edl_finalise | `#69c9c2` | `#0c514f` |
-| chez_notaire | `#f4b4d0` | `#923c65` |
-| chez_proprietaire | `#c2dc78` | `#4a6216` |
-| blocked | `#ff9299` | `#ab2136` |
+| Status | Leaflet / map legend | Dark token | Light token |
+|--------|----------------------|------------|-------------|
+| creation | `#64748b` | `#94a3b8` | `#475569` |
+| available | `#15803d` | `#4ade80` | `#15803d` |
+| option | `#d97706` | `#fbbf24` | `#a16207` |
+| reservation_a_finaliser | `#9333ea` | `#c084fc` | `#9333ea` |
+| reservation_engagee | `#2563eb` | `#60a5fa` | `#2563eb` |
+| reservation_soldee | `#0891b2` | `#22d3ee` | `#0e7490` |
+| edl_programme | `#9a3412` | `#fb923c` | `#9a3412` |
+| edl_realise | `#0f766e` | `#2dd4bf` | `#0f766e` |
+| edl_finalise | `#4338ca` | `#818cf8` | `#4338ca` |
+| chez_notaire | `#db2777` | `#f472b6` | `#be185d` |
+| chez_proprietaire | `#65a30d` | `#a3e635` | `#4d7c0f` |
+| blocked | `#dc2626` | `#f87171` | `#dc2626` |
 
 `STATUS_LABELS`, `STATUS_COLORS` and `STATUS_HEX_COLORS` in `utils/constants.js`
 are authoritative. The CSS references resolve through `styles/tokens.css`; keep the
-12 status colours distinct in each theme. Available stock is emerald; delivered
-lots are olive, separately from the commercial, financial, EDL and notary phases.
+12 status colours perceptually separated in each theme, including within a phase.
+Available stock is green, options amber, reservations to finalise violet, engaged
+blue, settled cyan; EDL uses rust, teal and indigo; notary pink, delivered lime,
+blocked red and creation slate. Map outlines use saturated variants on the pale
+basemap, shared by legend dots. Regression checks require a CIELAB distance of at
+least 20 between every pair and map colour contrast of at least 3:1 against white.
+These numerical checks complement visual QA; labels remain necessary for identification.
 
 **Typography:** Cormorant Garamond (display) + DM Sans (body) + DM Mono (mono)  
 Numbers use `font-variant-numeric: tabular-nums lining-nums` — `.num` utility class available.

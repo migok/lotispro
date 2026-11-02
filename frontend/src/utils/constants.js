@@ -32,20 +32,21 @@ export const STATUS_COLORS = {
   blocked:                'var(--color-blocked)',
 };
 
-// Hex values for map polygons (Leaflet doesn't read CSS vars)
+// Saturated map/legend colours stay visible on the pale basemap in both themes.
+// Badges use theme-aware CSS variants of the same categorical hues.
 export const STATUS_HEX_COLORS = {
-  creation:               '#bac4d5',
-  available:              '#66d6a5',
-  option:                 '#d6bbff',
-  reservation_a_finaliser:'#c7a5ff',
-  reservation_engagee:    '#b6ceff',
-  reservation_soldee:     '#96baff',
-  edl_programme:          '#a5e4e0',
-  edl_realise:            '#79d6d0',
-  edl_finalise:           '#69c9c2',
-  chez_notaire:           '#f4b4d0',
-  chez_proprietaire:      '#c2dc78',
-  blocked:                '#ff9299',
+  creation:               '#64748b',
+  available:              '#15803d',
+  option:                 '#d97706',
+  reservation_a_finaliser:'#9333ea',
+  reservation_engagee:    '#2563eb',
+  reservation_soldee:     '#0891b2',
+  edl_programme:          '#9a3412',
+  edl_realise:            '#0f766e',
+  edl_finalise:           '#4338ca',
+  chez_notaire:           '#db2777',
+  chez_proprietaire:      '#65a30d',
+  blocked:                '#dc2626',
 };
 
 // Statuses that are part of an active sales workflow
