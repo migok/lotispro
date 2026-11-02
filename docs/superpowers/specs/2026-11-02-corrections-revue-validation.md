@@ -33,7 +33,7 @@ Merge de #59 : 9af2b88 (correction 2d8dcc9 et merge 66dd36a). Conflits résolus 
 - **60.5** : is_expired et days_remaining du serveur pilotent l’état expiré/actif, ses compteurs et son style. Le badge partagé reprend le même état serveur pour son libellé ; la dérive de l’horloge navigateur ne peut plus l’inverser. Fixture renforcée pour qu’un écart de compteur ne puisse pas être masqué par deux désaccords qui se compensent.
 - **60.6** : blur avec relatedTarget=null ignoré ; actions accessibles jusqu’au clic. Échap capturé au document, avec retour du focus, même après perte du focus ; clic extérieur conservé. Trois tests échouaient avant correction. Solution minimale explicitement autorisée, sans nouvelle dépendance.
 
-Avant push : lint code 0, aucune erreur ni avertissement ; 60 fichiers / **675 tests verts** (**304,36 s**) ; build code 0 (**17,36 s**). Dernier ciblé transversal : 48 tests verts ; fixture du compteur serveur renforcée : deux tests verts. Les warnings historiques jsdom/navigation/act et le gros chunk demeurent ; aucun test désactivé.
+Premier contrôle local avant le push initial : lint code 0, aucune erreur ni avertissement ; 60 fichiers / **675 tests verts** (**304,36 s**) ; build code 0 (**17,36 s**). Dernier ciblé transversal : 48 tests verts ; fixture du compteur serveur renforcée : deux tests verts. Les warnings historiques jsdom/navigation/act et le gros chunk demeurent ; aucun test désactivé.
 
 ## Rapport point → commit → test → vérification à l’écran
 
@@ -58,7 +58,7 @@ Commandes : `npm run lint`, `npm test -- --maxWorkers=2 --testTimeout=15000` (re
 |---|---|---|---|---|
 | feature/ui-fondations (#58) | 0 erreur | 589 / 47 fichiers | 234,55 s | OK, 10,77 s |
 | feature/ui-primitives (#59) | 0 erreur | 617 / 50 fichiers | 254,14 s | OK, 12,64 s |
-| feature/ui-dashboard-global (#60) | 0 erreur | 675 / 60 fichiers | 304,36 s | OK, 17,36 s |
+| feature/ui-dashboard-global (#60), final | 0 erreur | 678 / 60 fichiers | 274,08 s | OK, 15,44 s |
 
 CI des mises à jour #58 et #59 : frontend, backend, migrations et Vercel verts. Les checks de #60 restent visibles sur sa PR ; les commentaires de corrections consignent le résultat final. Les trois PR restent en brouillon et aucun merge vers dev n’est effectué.
 
@@ -66,6 +66,15 @@ CI des mises à jour #58 et #59 : frontend, backend, migrations et Vercel verts.
 
 L’application et le backend répondent HTTP 200 sur localhost:5177 et localhost:8010. Ce contrôle ne vaut pas validation à l’écran. Lecture authentifiée du jeu réel : 610 lots GeoJSON, 599 disponibles, 3 options, 3 réservations à finaliser, 1 bloqué, 4 engagées. Les 599 disponibles de la liste globale dédupliquée égalent le compteur serveur. Aucun lot soldé, EDL, notaire ou propriétaire dans ce jeu : le scénario avancé demandé ne peut pas être déclaré vu à l’écran sur ces données.
 
-Aucune capture validée à ce stade. L’outil Computer Use avait interrompu l’accès Chrome Windows faute de déterminer l’URL avec confiance ; aucun autre moteur n’est utilisé pour contourner ce contrôle. Une dernière tentative native est prévue après livraison du code. Les tests DOM/jsdom ne sont jamais présentés comme une recette visuelle. Le compte commercial demandé pour la recette n’a pas été fourni à ce stade ; aucun changement de droits ou d’identité pour simuler sa connexion.
+Aucune capture validée à ce stade. L’outil Computer Use avait interrompu l’accès Chrome Windows faute de déterminer l’URL avec confiance ; aucun autre moteur n’est utilisé pour contourner ce contrôle. Le contrôle natif est traité séparément ; faute de scénario effectivement observé, les points restent marqués Non. Les tests DOM/jsdom ne sont jamais présentés comme une recette visuelle. Le compte commercial demandé pour la recette n’a pas été fourni à ce stade ; aucun changement de droits ou d’identité pour simuler sa connexion.
 
 Aucune modification backend, API, modèle, règle métier, calcul financier ou permission. Aucun e-mail/SMS/WhatsApp envoyé et aucune écriture métier effectuée pendant les contrôles API. Lot 4 non commencé.
+
+## Complément 60.4 — écart de données de fuseau révélé par la CI
+
+Le premier push de #60 a eu **deux échecs de tests sur 675** dans deadlines.test.js sous Node 22.23.4, malgré le passage local sous Node 24.13.0. Reproduction avec le même Node 22, sans toucher à l’installation système : le runtime local embarque tzdata 2025b, le runner tzdata 2026e. La fixture supposait à tort UTC+1 en novembre 2026 ; le calcul de production suivait déjà le fuseau IANA.
+
+L’[annonce officielle IANA 2026c](https://data.iana.org/time-zones/tzdb-2026c/NEWS) enregistre le passage du Maroc à UTC+0 le 20 septembre 2026. La [release officielle Node 22.23.4](https://nodejs.org/en/blog/release/v22.23.4) embarque tzdata 2026e. Les tests utilisent maintenant juin 2026 (UTC+1) et mars 2026 (UTC+0), périodes déterminées identiquement par les deux versions ; assertions inchangées sur 00 h 30, 23 h 30 et le lendemain. Trois cas UTC+0 ajoutés, aucun cas supprimé ni assertion affaiblie. Les sept cas passent sous le Node 22 du runner. Aucune modification de règle métier ou du backend, aucun décalage UTC fixé en dur, aucune dépendance produit ajoutée. Nouveau passage complet local consigné après cette correction de fixture.
+
+
+Dernier passage avant le push de la fixture : `npm run lint` code 0 ; `npm test -- --maxWorkers=2 --testTimeout=15000 --reporter=verbose` : **678 tests / 60 fichiers verts, 274,08 s** ; `npm run build` : code 0, **15,44 s**. Les sept tests de dates ont également été exécutés explicitement sous Node 22.23.4 : 7/7 verts. Le code de production du correctif 2d04094 reste inchangé ; seuls les tests et ce rapport ont évolué après le premier push.
