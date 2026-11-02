@@ -1,14 +1,13 @@
 """Payments received for a reservation (encaissements) and financial summary."""
 
 import math
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Literal
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, field_validator
 
-from app.core.config import settings
+from app.domain.dashboard_period import business_today
 from app.domain.schemas.common import BaseSchema
 from app.domain.schemas.reservation import PAYMENT_TYPE
 
@@ -19,17 +18,6 @@ FUTURE_DATE_MESSAGE = "La date d'encaissement ne peut pas être dans le futur."
 INVALID_AMOUNT_MESSAGE = "Montant invalide."
 NON_POSITIVE_AMOUNT_MESSAGE = "Le montant doit être supérieur à 0."
 TOO_PRECISE_AMOUNT_MESSAGE = "Le montant ne peut pas avoir plus de 2 décimales."
-
-
-def business_today() -> date:
-    """Today in the business time zone (``REMINDER_TIMEZONE``, Morocco).
-
-    Falls back to UTC when the time zone database is missing.
-    """
-    try:
-        return datetime.now(ZoneInfo(settings.REMINDER_TIMEZONE)).date()
-    except ZoneInfoNotFoundError:
-        return datetime.now(UTC).date()
 
 
 class ReservationPaymentForm(BaseSchema):

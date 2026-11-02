@@ -220,7 +220,7 @@ def setup_middlewares(app: FastAPI) -> None:
         allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
         allow_methods=settings.CORS_ALLOW_METHODS,
         allow_headers=settings.CORS_ALLOW_HEADERS,
-        expose_headers=["X-Request-ID", "X-Response-Time"],
+        expose_headers=["X-Request-ID", "X-Response-Time", "Content-Disposition"],
     )
 
     logger.info(

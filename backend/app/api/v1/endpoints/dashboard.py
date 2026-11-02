@@ -1,8 +1,16 @@
 """Dashboard and analytics endpoints."""
 
-from fastapi import APIRouter, Query
+from datetime import date
 
-from app.api.dependencies import CurrentUser, DashboardServiceDep, ManagerUser
+from fastapi import APIRouter, Query, Response
+
+from app.api.dependencies import (
+    CurrentUser,
+    DashboardExportServiceDep,
+    DashboardServiceDep,
+    ManagerUser,
+)
+from app.domain.dashboard_period import business_today, resolve_period
 from app.domain.schemas.dashboard import (
     CommercialPerformance,
     DashboardStats,
@@ -10,6 +18,8 @@ from app.domain.schemas.dashboard import (
 )
 
 router = APIRouter()
+
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 @router.get(
@@ -23,11 +33,61 @@ async def get_dashboard_stats(
     dashboard_service: DashboardServiceDep,
     project_id: int | None = Query(default=None, description="Filter by project"),
     user_id: int | None = Query(default=None, description="Filter by user"),
+    date_from: date | None = Query(
+        default=None, description="Period start (inclusive, default: month start)"
+    ),
+    date_to: date | None = Query(
+        default=None, description="Period end (inclusive, default: month end)"
+    ),
 ) -> DashboardStats:
-    """Get dashboard statistics."""
+    """Get dashboard statistics; flow / state KPIs cover the given period."""
     return await dashboard_service.get_dashboard_stats(
         project_id=project_id,
         user_id=user_id,
+        period=resolve_period(date_from, date_to, business_today()),
+    )
+
+
+@router.get(
+    "/export",
+    summary="Excel export of the period dashboard",
+    description=(
+        "Classeur .xlsx du tableau de bord d'un projet sur une période : feuille "
+        "« KPIs » (indicateurs de la période et de la précédente) et feuille "
+        "« Lots » (lots vendus sur la période). Un commercial n'exporte que ses "
+        "propres ventes."
+    ),
+    response_class=Response,
+)
+async def export_dashboard(
+    current_user: CurrentUser,
+    export_service: DashboardExportServiceDep,
+    project_id: int = Query(description="Project to export"),
+    user_id: int | None = Query(
+        default=None, description="Filter by commercial (manager only)"
+    ),
+    date_from: date | None = Query(
+        default=None, description="Period start (inclusive, default: month start)"
+    ),
+    date_to: date | None = Query(
+        default=None, description="Period end (inclusive, default: month end)"
+    ),
+) -> Response:
+    """Download the period dashboard of a project as an Excel workbook."""
+    period = resolve_period(date_from, date_to, business_today())
+    if current_user.role != "manager":
+        user_id = current_user.id
+    filename, content = await export_service.export(
+        project_id=project_id,
+        period=period,
+        user_id=user_id,
+        current_user_id=current_user.id,
+        current_user_role=current_user.role,
+    )
+    return Response(
+        content=content,
+        media_type=XLSX_MEDIA_TYPE,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -90,12 +150,19 @@ async def get_performance(
     project_id: int | None = Query(default=None, description="Filter by project"),
     user_id: int | None = Query(default=None, description="Filter by user"),
     period: str = Query(default="month", description="Aggregation period"),
+    date_from: date | None = Query(
+        default=None, description="Period start (inclusive, default: month start)"
+    ),
+    date_to: date | None = Query(
+        default=None, description="Period end (inclusive, default: month end)"
+    ),
 ) -> PerformanceData:
-    """Get performance analytics data."""
+    """Get performance analytics data; ``series`` covers the given period."""
     return await dashboard_service.get_performance_data(
         project_id=project_id,
         user_id=user_id,
         period=period,
+        date_range=resolve_period(date_from, date_to, business_today()),
     )
 
 

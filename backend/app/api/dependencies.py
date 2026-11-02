@@ -27,6 +27,7 @@ from app.services import (
     SaleService,
     UserService,
 )
+from app.services.dashboard_export import DashboardExportService
 from app.services.email_service import EmailService
 from app.services.engagement_edit_service import EngagementEditService
 from app.services.notifications.service import NotificationService
@@ -171,6 +172,11 @@ def get_dashboard_service(session: DBSession) -> DashboardService:
     return DashboardService(session)
 
 
+def get_dashboard_export_service(session: DBSession) -> DashboardExportService:
+    """Get dashboard Excel export service instance."""
+    return DashboardExportService(session)
+
+
 def get_audit_service(session: DBSession) -> AuditService:
     """Get audit service instance."""
     return AuditService(session)
@@ -228,6 +234,9 @@ EtatDesLieuxServiceDep = Annotated[
 ]
 SaleServiceDep = Annotated[SaleService, Depends(get_sale_service)]
 DashboardServiceDep = Annotated[DashboardService, Depends(get_dashboard_service)]
+DashboardExportServiceDep = Annotated[
+    DashboardExportService, Depends(get_dashboard_export_service)
+]
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
 PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
 DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
