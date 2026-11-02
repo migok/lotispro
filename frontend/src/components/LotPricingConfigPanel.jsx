@@ -160,7 +160,7 @@ export default function LotPricingConfigPanel({ projectId }) {
     return (
       <div className="section-card" style={{ marginTop: 'var(--spacing-lg)' }}>
         <h3>Grille de Prix</h3>
-        <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Chargement...</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--type-body)' }}>Chargement...</div>
       </div>
     );
   }
@@ -168,7 +168,7 @@ export default function LotPricingConfigPanel({ projectId }) {
   return (
     <div className="section-card" style={{ marginTop: 'var(--spacing-lg)' }}>
       <h3>Grille de Prix</h3>
-      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+      <p style={{ fontSize: 'var(--type-body)', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
         Configurez le <strong>prix au m² acte</strong> (stable, base du prix de vente figé à la réservation)
         et le <strong>prix au m² catalogue</strong> (affiché aux clients, modifiable)
         pour chaque combinaison catégorielle.
@@ -194,17 +194,17 @@ export default function LotPricingConfigPanel({ projectId }) {
       ) : (
         <form onSubmit={handleSave}>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--type-body)' }}>
               <thead>
                 <tr>
                   <th style={{ ...thStyle, borderRadius: '6px 0 0 0' }}>Combinaison</th>
                   <th style={{ ...thStyle, width: 150 }}>
                     Prix/m² acte
-                    <span style={{ display: 'block', fontWeight: 400, fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0 }}>stable · figé à la réservation</span>
+                    <span style={{ display: 'block', fontWeight: 400, fontSize: 'var(--type-label)', color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0 }}>stable · figé à la réservation</span>
                   </th>
                   <th style={{ ...thStyle, width: 165 }}>
                     Prix/m² catalogue
-                    <span style={{ display: 'block', fontWeight: 400, fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0 }}>affiché · recalcule le prix lot</span>
+                    <span style={{ display: 'block', fontWeight: 400, fontSize: 'var(--type-label)', color: 'var(--text-muted)', textTransform: 'none', letterSpacing: 0 }}>affiché · recalcule le prix lot</span>
                   </th>
                   <th style={{ ...thStyle, width: 110, textAlign: 'center', borderRadius: '0 6px 0 0' }}>Lots</th>
                 </tr>
@@ -291,7 +291,7 @@ const thStyle = {
   textAlign: 'left',
   padding: '8px 14px',
   fontWeight: 600,
-  fontSize: '0.75rem',
+  fontSize: 'var(--type-label)',
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
   color: 'var(--text-muted)',
@@ -317,14 +317,14 @@ const chipStyles = {
     gap: 4,
     padding: '2px 8px 2px 5px',
     borderRadius: 4,
-    fontSize: '0.75rem',
+    fontSize: 'var(--type-label)',
     fontWeight: 600,
     background: 'rgba(212, 151, 58, 0.15)',
     color: 'var(--color-primary)',
     border: '1px solid rgba(212, 151, 58, 0.25)',
   },
   zoneLabel: {
-    fontSize: '0.6rem',
+    fontSize: 'var(--type-label)',
     fontWeight: 700,
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
@@ -338,7 +338,7 @@ const chipStyles = {
     display: 'inline-block',
     padding: '2px 8px',
     borderRadius: 4,
-    fontSize: '0.75rem',
+    fontSize: 'var(--type-label)',
     fontWeight: 500,
     background: 'var(--bg-tertiary)',
     color: 'var(--text-secondary)',
@@ -348,7 +348,7 @@ const chipStyles = {
     display: 'inline-block',
     padding: '2px 8px',
     borderRadius: 4,
-    fontSize: '0.7rem',
+    fontSize: 'var(--type-label)',
     fontWeight: 600,
     background: 'rgba(245, 158, 11, 0.12)',
     color: '#f59e0b',

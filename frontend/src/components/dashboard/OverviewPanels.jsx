@@ -1,3 +1,4 @@
+import { formatAmount } from '../../utils/formatters';
 import { useState } from 'react';
 import { useToast } from '../../contexts/toastHooks';
 import { apiPost } from '../../utils/api';
@@ -48,7 +49,7 @@ export default function OverviewPanels({ selectedStatuses, setSelectedStatuses, 
                 <div className="stat-label">Expirent bientôt</div>
               </div>
               <div className="stat-item">
-                <div className="stat-value num">{formatNumber(alerts.summary.value_at_risk, 'MAD')}</div>
+                <div className="stat-value num"><span tabIndex={0} title={formatAmount(alerts.summary.value_at_risk)} aria-label={formatAmount(alerts.summary.value_at_risk)}> {formatNumber(alerts.summary.value_at_risk, 'MAD')}</span></div>
                 <div className="stat-label">Valeur à risque</div>
               </div>
             </div>
@@ -123,7 +124,7 @@ export default function OverviewPanels({ selectedStatuses, setSelectedStatuses, 
                 </svg>
                 <span style={{ color: 'var(--color-primary)' }}>Passage chez le notaire</span>
               </h3>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <span style={{ fontSize: 'var(--type-label)', color: 'var(--text-secondary)' }}>
                 {notaireAlerts.length} lot{notaireAlerts.length > 1 ? 's' : ''} en attente de rendez-vous
               </span>
             </div>
@@ -146,7 +147,7 @@ export default function OverviewPanels({ selectedStatuses, setSelectedStatuses, 
                       {item.lot_price && (
                         <>
                           <span className="alert-sep">·</span>
-                          <span className="num">{item.lot_price.toLocaleString('fr-FR')} MAD</span>
+                          <span className="num">{formatPrice(item.lot_price)}</span>
                         </>
                       )}
                       {item.client_phone && (
@@ -181,16 +182,16 @@ export default function OverviewPanels({ selectedStatuses, setSelectedStatuses, 
                   {isCommercial() ? 'Mes paiements en retard' : 'Clients en retard de paiement'}
                 </span>
               </h3>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <span style={{ fontSize: 'var(--type-label)', color: 'var(--text-secondary)' }}>
                 {latePayments.length} échéance{latePayments.length > 1 ? 's' : ''} impayée{latePayments.length > 1 ? 's' : ''}
               </span>
             </div>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--type-body)' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                     {['Client', 'Lot', 'Projet', 'Type', 'Montant', 'Échéance', 'Retard'].map(h => (
-                      <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                      <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontSize: 'var(--type-label)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -199,27 +200,27 @@ export default function OverviewPanels({ selectedStatuses, setSelectedStatuses, 
                     <tr key={p.installment_id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                       <td style={{ padding: '10px 12px' }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.client_name}</div>
-                        {p.client_phone && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{p.client_phone}</div>}
+                        {p.client_phone && <div style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)' }}>{p.client_phone}</div>}
                       </td>
                       <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', color: 'var(--color-primary)', fontWeight: 600 }}>
                         {p.lot_numero}
                       </td>
-                      <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 'var(--type-label)' }}>
                         {p.project_name}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <span className={`badge ${p.payment_type === 'deposit' ? 'badge-gold' : 'badge-gray'}`} style={{ fontSize: '0.7rem' }}>
+                        <span className={`badge ${p.payment_type === 'deposit' ? 'badge-gold' : 'badge-gray'}`} style={{ fontSize: 'var(--type-label)' }}>
                           {p.payment_type === 'deposit' ? `Acompte ${p.installment_number}` : `Solde ${p.installment_number}`}
                         </span>
                       </td>
                       <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
                         {formatPrice(p.amount)}
                       </td>
-                      <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: 'var(--type-label)' }}>
                         {formatDate(p.due_date)}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <span style={{ fontWeight: 700, color: 'var(--color-blocked)', fontVariantNumeric: 'tabular-nums', fontSize: '0.8rem' }}>
+                        <span style={{ fontWeight: 700, color: 'var(--color-blocked)', fontVariantNumeric: 'tabular-nums', fontSize: 'var(--type-label)' }}>
                           {p.days_late}j
                         </span>
                       </td>
@@ -303,7 +304,7 @@ export default function OverviewPanels({ selectedStatuses, setSelectedStatuses, 
                     <td>
                       <span className="lot-numero">{lot.numero}</span>
                       {(lot.zone || lot.surface) && (
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
+                        <div style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)', marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
                           {[lot.zone, lot.surface ? `${Math.round(parseFloat(lot.surface))} m²` : null].filter(Boolean).join(' · ')}
                         </div>
                       )}

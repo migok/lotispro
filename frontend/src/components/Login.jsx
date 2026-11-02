@@ -147,7 +147,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => navigate('/forgot-password')}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: '0.78rem', padding: 0, fontFamily: 'inherit' }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontSize: 'var(--type-label)', padding: 0, fontFamily: 'inherit' }}
                 >
                   Mot de passe oublié ?
                 </button>

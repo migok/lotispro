@@ -25,6 +25,16 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 | E6 📅 #4 Dashboard par période | ✅ | 3 / 3 | [#38](https://github.com/migok/lotispro/issues/38) | [#57](https://github.com/migok/lotispro/pull/57) |
 | E7 SMS / WhatsApp | ⛔ fournisseur à choisir | 0 / 3 | [#42](https://github.com/migok/lotispro/issues/42) | |
 
+## Refonte UI
+
+| Lot | Statut | Portée | Validation |
+|---|---|---|---|
+| 1 — Fondations | 🟨 En revue | Tokens, contraste, typographie, formateurs, Tailwind v4 et configuration shadcn | 589 tests verts (correction 58.1 : statuts distincts) ; lint et build OK ; recette visuelle bloquée par le contrôle Chrome |
+| 2 — Primitives | ⬜ À faire | Composants accessibles, confirmations, skeletons, navigation clavier | Après le lot 1 |
+| 3 — Shell et dashboard global | ⬜ À faire | Hors périmètre de cette session | Accord utilisateur requis |
+| 4 — Clients | ⬜ À faire | Hors périmètre de cette session | — |
+| 5 — Projet et lots | ⬜ À faire | Hors périmètre de cette session ; E6 déjà fusionné (#57) | — |
+
 ## Détail des tâches
 
 | ID | Tâche | Statut | Issue | PR | Terminé le |

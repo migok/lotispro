@@ -291,7 +291,7 @@ Design de référence : `docs/superpowers/specs/2026-10-22-roadmap-lotispro-desi
 - **No direct fetch:** always use `utils/api.js` wrapper
 - **Toast for feedback:** use `useToast()` from `contexts/toastHooks` (`ToastContext.jsx` only exports `ToastProvider`; likewise `useAuth` comes from `contexts/authHooks`, `AuthContext.jsx` only exports `AuthProvider`)
 - **Role checks:** use `ProtectedRoute` for route-level, check `user.role` in components
-- **Styling:** custom CSS in `styles.css`, no UI framework
+- **Styling:** tokens in `src/styles/tokens.css`; Tailwind v4 mapped to those tokens; shadcn/ui (Radix) primitives in `src/components/ui/`. Historical `styles.css` is being migrated; do not add hard-coded colours. Recharts is the standard for charts.
 - **Theme:** `useTheme.js` in `components/` — reads/writes `localStorage('lotispro-theme')`, sets `data-theme` on `<html>`
 
 ---
@@ -308,18 +308,41 @@ To enable: set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
 
 **Palette Obsidian Navy + Warm Brass** — premium B2B real estate SaaS.
 
+Use the shared primitives: Button, Card, StatusBadge, StatTile, DataTable, EmptyState,
+Skeleton, Dialog, Sheet, Tooltip and ConfirmDialog (available after the primitives lot).
+Compose them instead of creating parallel controls. Use Recharts for data charts.
+All amount and date formatting has one source: `src/utils/formatters.js`
+(`formatAmount` / `formatDate`); compact amounts expose their exact value in a tooltip.
+
 Dark (default): `#090d16` bg + `#d4973a` brass primary  
 Light (`data-theme="light"`): `#f4f5f0` warm stone + `#b87728` deep brass
 
 **Status colors (map polygons + badges):**
 
-| Status | Color |
-|--------|-------|
-| available | `#10b981` emerald |
-| option / reserved | `#f59e0b` amber |
-| validated | `#8b5cf6` violet |
-| sold / chez_proprietaire | `#ef4444` red |
-| blocked | `#6b7280` gray |
+| Status | Leaflet / map legend | Dark token | Light token |
+|--------|----------------------|------------|-------------|
+| creation | `#64748b` | `#94a3b8` | `#475569` |
+| available | `#15803d` | `#4ade80` | `#15803d` |
+| option | `#d97706` | `#fbbf24` | `#a16207` |
+| reservation_a_finaliser | `#9333ea` | `#c084fc` | `#9333ea` |
+| reservation_engagee | `#2563eb` | `#60a5fa` | `#2563eb` |
+| reservation_soldee | `#0891b2` | `#22d3ee` | `#0e7490` |
+| edl_programme | `#9a3412` | `#fb923c` | `#9a3412` |
+| edl_realise | `#0f766e` | `#2dd4bf` | `#0f766e` |
+| edl_finalise | `#4338ca` | `#818cf8` | `#4338ca` |
+| chez_notaire | `#db2777` | `#f472b6` | `#be185d` |
+| chez_proprietaire | `#65a30d` | `#a3e635` | `#4d7c0f` |
+| blocked | `#dc2626` | `#f87171` | `#dc2626` |
+
+`STATUS_LABELS`, `STATUS_COLORS` and `STATUS_HEX_COLORS` in `utils/constants.js`
+are authoritative. The CSS references resolve through `styles/tokens.css`; keep the
+12 status colours perceptually separated in each theme, including within a phase.
+Available stock is green, options amber, reservations to finalise violet, engaged
+blue, settled cyan; EDL uses rust, teal and indigo; notary pink, delivered lime,
+blocked red and creation slate. Map outlines use saturated variants on the pale
+basemap, shared by legend dots. Regression checks require a CIELAB distance of at
+least 20 between every pair and map colour contrast of at least 3:1 against white.
+These numerical checks complement visual QA; labels remain necessary for identification.
 
 **Typography:** Cormorant Garamond (display) + DM Sans (body) + DM Mono (mono)  
 Numbers use `font-variant-numeric: tabular-nums lining-nums` — `.num` utility class available.

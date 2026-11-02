@@ -1,3 +1,4 @@
+import { formatDate } from '../../utils/formatters';
 import { useEffect, useState } from 'react';
 import { listNotifications } from '../../services/notificationsService';
 import { NOTIFICATION_CHANNEL_LABELS } from '../../utils/clientProfile';
@@ -10,7 +11,7 @@ import {
 const STATUS_BADGE = { sent: 'badge-green', failed: 'badge-red', not_configured: 'badge-gray' };
 
 const formatSentAt = (value) =>
-  new Date(value).toLocaleString('fr-FR', {
+  formatDate(value, {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
@@ -56,7 +57,7 @@ export default function NotificationHistory({ clientId, lotId }) {
                   {NOTIFICATION_STATUS_LABELS[n.status] ?? n.status}
                 </span>
                 {n.status === 'failed' && n.error && (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{n.error}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 'var(--type-label)' }}>{n.error}</div>
                 )}
               </td>
               <td>{n.sent_by_name || 'Automatique'}</td>

@@ -82,7 +82,7 @@ export default function EdlPanel({ lot, onOpenCountChange }) {
         <div className="ldm-section-label" style={{ margin: 0 }}>
           État des lieux
           {actions.length > 0 && (
-            <span className={`badge ${openCount > 0 ? 'badge-red' : 'badge-green'}`} style={{ fontSize: '0.65rem', marginLeft: 6 }}>
+            <span className={`badge ${openCount > 0 ? 'badge-red' : 'badge-green'}`} style={{ fontSize: 'var(--type-label)', marginLeft: 6 }}>
               {actions.length - openCount} / {actions.length} faite{actions.length - openCount > 1 ? 's' : ''}
             </span>
           )}
@@ -121,7 +121,7 @@ export default function EdlPanel({ lot, onOpenCountChange }) {
                       aria-label={`Marquer « ${action.description} » comme ${action.status === 'faite' ? 'ouverte' : 'faite'}`}
                     />
                   ) : (
-                    <span className={`badge ${action.status === 'faite' ? 'badge-green' : 'badge-red'}`} style={{ fontSize: '0.65rem' }}>
+                    <span className={`badge ${action.status === 'faite' ? 'badge-green' : 'badge-red'}`} style={{ fontSize: 'var(--type-label)' }}>
                       {action.status === 'faite' ? 'Faite' : 'Ouverte'}
                     </span>
                   )}
@@ -130,7 +130,7 @@ export default function EdlPanel({ lot, onOpenCountChange }) {
                     {action.description}
                   </div>
                   {action.responsable && (
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{action.responsable}</span>
+                    <span style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)' }}>{action.responsable}</span>
                   )}
                   {editable && (
                     <div className="ldm-doc-actions">

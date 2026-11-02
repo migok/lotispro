@@ -67,7 +67,7 @@ export default function RecordPaymentForm({ reservationId, installment, onSaved,
       style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: 12, marginTop: 8 }}>
       <div style={{ fontWeight: 600, marginBottom: 8 }}>
         Encaissement — {installmentLabel(installment)}
-        <span style={{ fontWeight: 400, color: 'var(--text-secondary)', fontSize: '0.8rem', marginLeft: 6 }}>
+        <span style={{ fontWeight: 400, color: 'var(--text-secondary)', fontSize: 'var(--type-label)', marginLeft: 6 }}>
           échéance du {formatDate(installment.due_date)}, restant dû {formatMad(installment.remaining)}
         </span>
       </div>

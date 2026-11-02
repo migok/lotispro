@@ -231,7 +231,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
       <div className="page-header">
         <div>
           <h1 className="page-title">
-            {isCommercial() ? 'Mon Activité' : 'Tableau de Bord'}
+            {isCommercial() ? 'Mon Activité' : 'Tableau de bord'}
           </h1>
           <p className="page-subtitle">
             {isCommercial()
@@ -246,7 +246,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
             {/* Filtre par projet - Masquer si projectId est passé en props */}
             {!propsProjectId && (
               <div style={{ minWidth: '200px' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-xs)' }}>
+                <label style={{ display: 'block', fontSize: 'var(--type-label)', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-xs)' }}>
                   Projet
                 </label>
                 <select
@@ -268,7 +268,7 @@ export default function Dashboard({ onSelectLot, onNavigate, projectId: propsPro
             {/* Filtre par commercial (uniquement pour les managers) */}
             {isManager() && (
               <div style={{ minWidth: '200px' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-xs)' }}>
+                <label style={{ display: 'block', fontSize: 'var(--type-label)', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-xs)' }}>
                   Commercial
                 </label>
                 <select

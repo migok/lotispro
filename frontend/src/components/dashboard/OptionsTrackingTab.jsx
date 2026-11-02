@@ -1,3 +1,4 @@
+import { formatDate } from '../../utils/formatters';
 export default function OptionsTrackingTab({ optionsTracking, optionsTrackingError, effectiveProjectId, onSelectLot, isManager }) {
   const expired = optionsTracking.filter(o => o.is_expired);
   const active = optionsTracking.filter(o => !o.is_expired);
@@ -77,12 +78,12 @@ export default function OptionsTrackingTab({ optionsTracking, optionsTrackingErr
                     </td>
                     {isManager() && <td className="opt-cell-commercial">{o.reserved_by_name || '—'}</td>}
                     <td>
-                      <span className={`status-badge ${o.lot_status}`} style={{ fontSize: '0.7rem', padding: '3px 8px' }}>
+                      <span className={`status-badge ${o.lot_status}`} style={{ fontSize: 'var(--type-label)', padding: '3px 8px' }}>
                         {o.lot_status === 'option' ? 'Option' : 'Résa. à finaliser'}
                       </span>
                     </td>
-                    <td className="opt-cell-date">{o.reservation_date ? new Date(o.reservation_date).toLocaleDateString('fr-FR') : '—'}</td>
-                    <td className="opt-cell-date">{new Date(o.expiration_date).toLocaleDateString('fr-FR')}</td>
+                    <td className="opt-cell-date">{o.reservation_date ? formatDate(o.reservation_date, { dateStyle: 'short' }) : '—'}</td>
+                    <td className="opt-cell-date">{formatDate(o.expiration_date, { dateStyle: 'short' })}</td>
                     <td><span className={`opt-badge ${cls}`}>{label}</span></td>
                   </tr>
                 );

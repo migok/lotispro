@@ -21,12 +21,12 @@ describe('KpiCards', () => {
 
     expect(within(card('Lots vendus')).getByText('4')).toBeInTheDocument()
     expect(within(card('Lots vendus')).getByText('▲ 100 %')).toBeInTheDocument()
-    expect(within(card('CA')).getByText('1.2M MAD')).toBeInTheDocument()
+    expect(within(card('CA')).getByText('1,2 M MAD')).toBeInTheDocument()
     expect(within(card('CA')).getByText('▲ 20 %')).toBeInTheDocument()
     expect(within(card('Réservations créées')).getByText('8')).toBeInTheDocument()
     expect(within(card('Réservations créées')).getByText('= 0 %')).toBeInTheDocument()
     expect(within(card('Taux de conversion')).getByText('50 %')).toBeInTheDocument()
-    expect(within(card('Encaissements')).getByText('350K MAD')).toBeInTheDocument()
+    expect(within(card('Encaissements')).getByText('350 k MAD')).toBeInTheDocument()
     expect(within(card('Encaissements')).getByText('—')).toBeInTheDocument()
     expect(screen.getAllByText('vs période précédente')).toHaveLength(5)
 
@@ -73,7 +73,7 @@ describe('KpiCards', () => {
 
     // Reservations created and cash-ins stay visible.
     expect(within(card('Réservations créées')).getByText('8')).toBeInTheDocument()
-    expect(within(card('Encaissements')).getByText('350K MAD')).toBeInTheDocument()
+    expect(within(card('Encaissements')).getByText('350 k MAD')).toBeInTheDocument()
     expect(within(card('Lots vendus')).queryByText('4')).toBeNull()
     expect(within(card('Disponibles au 31/10/2026')).queryByText('42')).toBeNull()
   })

@@ -71,10 +71,10 @@ export default function SetPassword() {
       }}>
         {/* Header */}
         <div style={{ background: 'var(--bg-tertiary)', padding: '28px 36px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <p style={{ margin: '0 0 6px', fontSize: '0.68rem', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
+          <p style={{ margin: '0 0 6px', fontSize: 'var(--type-label)', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             LotisPro
           </p>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontFamily: 'var(--font-display)', fontWeight: 400, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
+          <h1 style={{ margin: 0, fontSize: 'var(--type-title)', fontFamily: 'var(--font-body)', fontWeight: 400, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
             {isReset ? 'Réinitialiser mon mot de passe' : 'Créer mon mot de passe'}
           </h1>
         </div>
@@ -93,10 +93,10 @@ export default function SetPassword() {
               }}>
                 <IconCheck />
               </div>
-              <p style={{ margin: '0 0 8px', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              <p style={{ margin: '0 0 8px', fontSize: 'var(--type-base)', fontWeight: 600, color: 'var(--text-primary)' }}>
                 {isReset ? 'Mot de passe réinitialisé' : 'Mot de passe créé'}
               </p>
-              <p style={{ margin: '0 0 24px', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              <p style={{ margin: '0 0 24px', fontSize: 'var(--type-body)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                 {isReset
                   ? 'Votre mot de passe a été mis à jour. Vous pouvez maintenant vous connecter.'
                   : 'Votre compte est activé. Vous pouvez maintenant vous connecter.'}
@@ -115,7 +115,7 @@ export default function SetPassword() {
                 <div className="error-box">{error}</div>
               ) : (
                 <form onSubmit={handleSubmit}>
-                  <p style={{ margin: '0 0 20px', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  <p style={{ margin: '0 0 20px', fontSize: 'var(--type-body)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                     {isReset
                       ? 'Définissez un nouveau mot de passe pour votre compte LotisPro.'
                       : 'Définissez un mot de passe sécurisé pour activer votre compte LotisPro.'}
@@ -172,7 +172,7 @@ export default function SetPassword() {
 
         {/* Footer */}
         <div style={{ padding: '12px 36px', borderTop: '1px solid var(--border-subtle)', textAlign: 'center' }}>
-          <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+          <p style={{ margin: 0, fontSize: 'var(--type-label)', color: 'var(--text-muted)' }}>
             {isReset
               ? 'Ce lien est valable 1 heure après réception de l\u2019email.'
               : 'Ce lien est valable 48 heures après réception de l\u2019invitation.'}

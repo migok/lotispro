@@ -1,3 +1,4 @@
+import { formatAmount } from '../utils/formatters';
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/authHooks';
@@ -192,11 +193,11 @@ export default function ClientsPage() {
           <div className="stat-tile-label">Acheteurs</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-tile-value num">{formatCompactPrice(totalDeposits)}</div>
+          <div className="stat-tile-value num"><span tabIndex={0} title={formatAmount(totalDeposits)} aria-label={formatAmount(totalDeposits)}> {formatCompactPrice(totalDeposits)}</span></div>
           <div className="stat-tile-label">Acomptes versés</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-tile-value num">{formatCompactPrice(totalCA)}</div>
+          <div className="stat-tile-value num"><span tabIndex={0} title={formatAmount(totalCA)} aria-label={formatAmount(totalCA)}> {formatCompactPrice(totalCA)}</span></div>
           <div className="stat-tile-label">CA total</div>
         </div>
       </div>
@@ -338,7 +339,7 @@ export default function ClientsPage() {
                       </div>
                       <div className="cp-mini-stat-sep" />
                       <div className="cp-mini-stat">
-                        <span className="cp-mini-val num">{formatCompactPrice(c.total_deposit || 0)}</span>
+                        <span className="cp-mini-val num"><span tabIndex={0} title={formatAmount(c.total_deposit || 0)} aria-label={formatAmount(c.total_deposit || 0)}> {formatCompactPrice(c.total_deposit || 0)}</span></span>
                         <span className="cp-mini-lbl">Acompte</span>
                       </div>
                     </div>
@@ -415,7 +416,7 @@ export default function ClientsPage() {
                           <div className="cp-lb-bar-fill" style={{ width: `${pct.toFixed(1)}%` }} />
                         </div>
                       </div>
-                      <span className="cp-lb-value num">{formatCompactPrice(c.total_purchases)}</span>
+                      <span className="cp-lb-value num"><span tabIndex={0} title={formatAmount(c.total_purchases)} aria-label={formatAmount(c.total_purchases)}> {formatCompactPrice(c.total_purchases)}</span></span>
                     </div>
                   );
                 })}
@@ -433,7 +434,7 @@ export default function ClientsPage() {
               <span className="cp-panel-stat-lbl">Réservations</span>
             </div>
             <div className="cp-panel-stat">
-              <span className="cp-panel-stat-val num">{formatCompactPrice(totalCA)}</span>
+              <span className="cp-panel-stat-val num"><span tabIndex={0} title={formatAmount(totalCA)} aria-label={formatAmount(totalCA)}> {formatCompactPrice(totalCA)}</span></span>
               <span className="cp-panel-stat-lbl">CA total</span>
             </div>
           </div>
