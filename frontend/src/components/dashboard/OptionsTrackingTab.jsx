@@ -1,9 +1,8 @@
-import { deadline } from '../../utils/deadlines';
 import { DeadlineBadge } from '../ui/deadline-badge';
 import { formatDate } from '../../utils/formatters';
 export default function OptionsTrackingTab({ optionsTracking, optionsTrackingError, effectiveProjectId, onSelectLot, isManager }) {
-  const expired = optionsTracking.filter(o => deadline(o.expiration_date).level === 'overdue');
-  const active = optionsTracking.filter(o => deadline(o.expiration_date).level !== 'overdue');
+  const expired = optionsTracking.filter(o => o.is_expired);
+  const active = optionsTracking.filter(o => !o.is_expired);
 
 
   return (
@@ -19,11 +18,11 @@ export default function OptionsTrackingTab({ optionsTracking, optionsTrackingErr
           <span className="opt-summary-label">Expirées</span>
         </div>
         <div className="opt-summary-tile opt-summary-tile--warn">
-          <span className="opt-summary-value">{active.filter(o => ['critical', 'soon'].includes(deadline(o.expiration_date).level)).length}</span>
+          <span className="opt-summary-value">{active.filter(o => o.days_remaining <= 3).length}</span>
           <span className="opt-summary-label">Expirent dans 3j</span>
         </div>
         <div className="opt-summary-tile opt-summary-tile--ok">
-          <span className="opt-summary-value">{active.filter(o => ['later', 'undated'].includes(deadline(o.expiration_date).level)).length}</span>
+          <span className="opt-summary-value">{active.filter(o => o.days_remaining > 3).length}</span>
           <span className="opt-summary-label">En cours</span>
         </div>
       </div>
@@ -78,7 +77,7 @@ export default function OptionsTrackingTab({ optionsTracking, optionsTrackingErr
                     </td>
                     <td className="opt-cell-date">{o.reservation_date ? formatDate(o.reservation_date, { dateStyle: 'short' }) : '—'}</td>
                     <td className="opt-cell-date">{formatDate(o.expiration_date, { dateStyle: 'short' })}</td>
-                    <td><DeadlineBadge date={o.expiration_date} /></td>
+                    <td><DeadlineBadge date={o.expiration_date} isExpired={o.is_expired} daysRemaining={o.days_remaining} /></td>
                   </tr>
                 );
               })}

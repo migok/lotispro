@@ -67,7 +67,7 @@ export default function GlobalDashboard() {
     </section>
     <div className="global-workspace">
       <TreatmentPanel options={options} alerts={alerts} payments={payments} notaires={notaires} />
-      <StockPanel key={identity} stats={stats} userId={userId} projects={projects.data} />
+      <StockPanel key={identity} stats={stats} userId={userId} projects={projects.data} revision={revision} />
     </div>
     <Card aria-label="Projets">
       <CardHeader className="global-section-heading"><CardTitle>Projets{projects.data && <span className="global-count">{projects.data.length}</span>}</CardTitle><Link to="/app/projects" className="global-text-link">Tous les projets</Link></CardHeader>

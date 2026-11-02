@@ -10,13 +10,12 @@ export default function AccountMenu({ user, theme, toggleTheme, onLogout }) {
   useEffect(() => {
     if (!open) return;
     const outside = (event) => { if (!root.current?.contains(event.target)) setOpen(false); };
-    const escape = (event) => { if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); trigger.current?.focus(); } };
+    const escape = (event) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus(); } };
     document.addEventListener('pointerdown', outside);
-    const element = root.current;
-    element?.addEventListener('keydown', escape);
-    return () => { document.removeEventListener('pointerdown', outside); element?.removeEventListener('keydown', escape); };
+    document.addEventListener('keydown', escape, true);
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape, true); };
   }, [open]);
-  return <div className="shell-account" ref={root} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
+  return <div className="shell-account" ref={root} onBlur={(event) => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
     <button ref={trigger} type="button" className="shell-account-trigger" aria-label={`Compte : ${user?.name ?? 'Mon compte'}`} aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
       <span className="shell-avatar" aria-hidden="true">{user?.name?.trim().charAt(0) || 'L'}</span>
       <span className="shell-account-summary"><strong>{user?.name || 'Mon compte'}</strong><span>{ROLES[user?.role] ?? user?.role}</span></span>
