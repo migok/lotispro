@@ -34,18 +34,18 @@ export const STATUS_COLORS = {
 
 // Hex values for map polygons (Leaflet doesn't read CSS vars)
 export const STATUS_HEX_COLORS = {
-  creation:               '#6b7280',
-  available:              '#10b981',
-  option:                 '#f59e0b',
-  reservation_a_finaliser:'#ef6c00',
-  reservation_engagee:    '#7c3aed',
-  reservation_soldee:     '#2563eb',
-  edl_programme:          '#38bdf8',
-  edl_realise:            '#0ea5e9',
-  edl_finalise:           '#0284c7',
-  chez_notaire:           '#0891b2',
-  chez_proprietaire:      '#16a34a',
-  blocked:                '#e05555',
+  creation:               '#bac4d5',
+  available:              '#66d6a5',
+  option:                 '#d6bbff',
+  reservation_a_finaliser:'#c7a5ff',
+  reservation_engagee:    '#b6ceff',
+  reservation_soldee:     '#96baff',
+  edl_programme:          '#a5e4e0',
+  edl_realise:            '#79d6d0',
+  edl_finalise:           '#69c9c2',
+  chez_notaire:           '#f4b4d0',
+  chez_proprietaire:      '#66d6a5',
+  blocked:                '#ff9299',
 };
 
 // Statuses that are part of an active sales workflow
@@ -107,3 +107,12 @@ export const CLIENT_TYPES = [
   { value: 'investisseur', label: 'Investisseur' },
   { value: 'autre', label: 'Autre' },
 ];
+
+// Presentation groups only: workflow transitions and permissions are unchanged.
+export const STATUS_PHASES = {
+  commercial: ['option', 'reservation_a_finaliser'],
+  financier: ['reservation_engagee', 'reservation_soldee'],
+  edl: ['edl_programme', 'edl_realise', 'edl_finalise'],
+  notaire: ['chez_notaire'],
+  livre: ['chez_proprietaire'],
+};

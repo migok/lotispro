@@ -22,7 +22,7 @@ describe('formatMad (same format as the backend format_mad)', () => {
     expect(formatMad(undefined)).toBe('—')
   })
 
-  it('leaves formatPrice unchanged for the other screens', () => {
-    expect(formatPrice(400000)).toBe('400.000 MAD')
+  it('uses shared French separators on the other screens', () => {
+    expect(formatPrice(400000)).toBe('400 000 MAD')
   })
 })

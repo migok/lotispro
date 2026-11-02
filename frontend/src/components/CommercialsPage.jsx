@@ -1,3 +1,4 @@
+import { formatAmount } from '../utils/formatters';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
@@ -67,7 +68,7 @@ function getLast6Months() {
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const label = d.toLocaleString('fr-FR', { month: 'short' }).replace('.', '');
+    const label = formatDate(d, { month: 'short' }).replace('.', '');
     result.push({ key, label });
   }
   return result;
@@ -94,7 +95,7 @@ function MonthlyBarChart({ data, metric }) {
 
   if (shown.length === 0) {
     return (
-      <div className="empty-state" style={{ padding: '20px 0', fontSize: '0.8rem' }}>
+      <div className="empty-state" style={{ padding: '20px 0', fontSize: 'var(--type-label)' }}>
         Aucune vente ce semestre
       </div>
     );
@@ -421,11 +422,11 @@ export default function CommercialsPage() {
           <div className="stat-tile-label">Réservations actives</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-tile-value num">{formatCompactPrice(totalDeposits)}</div>
+          <div className="stat-tile-value num"><span tabIndex={0} title={formatAmount(totalDeposits)} aria-label={formatAmount(totalDeposits)}> {formatCompactPrice(totalDeposits)}</span></div>
           <div className="stat-tile-label">Acomptes collectés</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-tile-value num">{formatCompactPrice(totalRevenue)}</div>
+          <div className="stat-tile-value num"><span tabIndex={0} title={formatAmount(totalRevenue)} aria-label={formatAmount(totalRevenue)}> {formatCompactPrice(totalRevenue)}</span></div>
           <div className="stat-tile-label">CA total généré</div>
         </div>
       </div>
@@ -568,7 +569,7 @@ export default function CommercialsPage() {
                       </div>
                       <div className="cp-mini-stat-sep" />
                       <div className="cp-mini-stat">
-                        <span className="cp-mini-val num">{formatCompactPrice(stats.total_deposits || 0)}</span>
+                        <span className="cp-mini-val num"><span tabIndex={0} title={formatAmount(stats.total_deposits || 0)} aria-label={formatAmount(stats.total_deposits || 0)}> {formatCompactPrice(stats.total_deposits || 0)}</span></span>
                         <span className="cp-mini-lbl">Acomptes</span>
                       </div>
                     </div>
@@ -576,13 +577,13 @@ export default function CommercialsPage() {
                     {/* Invitation link (dev fallback) */}
                     {c.is_pending && c.invitation_token && (
                       <div style={{ margin: '8px 0', padding: '8px 10px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--border-subtle)' }}>
-                        <p style={{ margin: '0 0 4px', fontSize: '0.68rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>Lien d&apos;invitation</p>
-                        <p style={{ margin: '0 0 6px', fontSize: '0.72rem', color: 'var(--text-muted)', wordBreak: 'break-all', lineHeight: 1.4 }}>
+                        <p style={{ margin: '0 0 4px', fontSize: 'var(--type-label)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>Lien d&apos;invitation</p>
+                        <p style={{ margin: '0 0 6px', fontSize: 'var(--type-label)', color: 'var(--text-muted)', wordBreak: 'break-all', lineHeight: 1.4 }}>
                           {`${window.location.origin}/set-password?token=${c.invitation_token}`}
                         </p>
                         <button
                           type="button"
-                          style={{ fontSize: '0.72rem', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                          style={{ fontSize: 'var(--type-label)', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
                           onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/set-password?token=${c.invitation_token}`); }}
                         >
                           Copier le lien
@@ -660,7 +661,7 @@ export default function CommercialsPage() {
                           <div className="cp-lb-bar-fill" style={{ width: `${pct.toFixed(1)}%` }} />
                         </div>
                       </div>
-                      <span className="cp-lb-value num">{formatCompactPrice(rev)}</span>
+                      <span className="cp-lb-value num"><span tabIndex={0} title={formatAmount(rev)} aria-label={formatAmount(rev)}> {formatCompactPrice(rev)}</span></span>
                     </div>
                   );
                 })}
@@ -679,7 +680,7 @@ export default function CommercialsPage() {
               <span className="cp-panel-stat-lbl">Réservations</span>
             </div>
             <div className="cp-panel-stat">
-              <span className="cp-panel-stat-val num">{formatCompactPrice(totalRevenue)}</span>
+              <span className="cp-panel-stat-val num"><span tabIndex={0} title={formatAmount(totalRevenue)} aria-label={formatAmount(totalRevenue)}> {formatCompactPrice(totalRevenue)}</span></span>
               <span className="cp-panel-stat-lbl">CA total</span>
             </div>
           </div>
@@ -735,7 +736,7 @@ export default function CommercialsPage() {
                     onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   />
                 </div>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+                <p style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
                   Un email d&apos;invitation sera envoyé pour que le commercial crée son propre mot de passe.
                 </p>
                 {error && <div className="error-box">{error}</div>}
@@ -766,9 +767,9 @@ export default function CommercialsPage() {
                 <h2 className="cp-modal-title">Supprimer le commercial</h2>
               </div>
             </div>
-            <div style={{ padding: '20px 28px', color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
+            <div style={{ padding: '20px 28px', color: 'var(--text-secondary)', fontSize: 'var(--type-body)', lineHeight: 1.6 }}>
               Êtes-vous sûr de vouloir supprimer{' '}
-              <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)', fontSize: '1rem' }}>
+              <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 'var(--type-base)' }}>
                 {deleteConfirm.name}
               </strong>{' '}
               ? Cette action est irréversible.

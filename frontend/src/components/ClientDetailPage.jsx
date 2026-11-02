@@ -248,7 +248,7 @@ function ReservationDeedActions({ reservationId, lotNumero, clientEmail, onDownl
   }, [reservationId]);
 
   if (failed) {
-    return <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>Documents indisponibles.</span>;
+    return <span style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)' }}>Documents indisponibles.</span>;
   }
   if (!summary) return null;
 
@@ -286,7 +286,7 @@ function ReservationDeedActions({ reservationId, lotNumero, clientEmail, onDownl
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 'var(--type-label)', color: 'var(--text-muted)' }}>
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="2" y="7.5" width="12" height="7" rx="1.5"/>
           <path d="M5 7.5V5a3 3 0 016 0v2.5"/>
@@ -832,7 +832,7 @@ export default function ClientDetailPage() {
                       </div>
                     </div>
                   ) : (
-                    <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                    <p style={{ fontSize: 'var(--type-body)', color: 'var(--text-muted)' }}>
                       Aucun commercial assigné
                     </p>
                   )}

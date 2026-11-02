@@ -103,7 +103,7 @@ export default function UploadGeojsonModal({ project, onClose, onUploaded }) {
               <>
                 <div className="alert alert-success" style={{ marginBottom: 'var(--spacing-md)' }}>
                   <strong>Upload réussi</strong>
-                  <div style={{ marginTop: 'var(--spacing-xs)', fontSize: '0.875rem' }}>
+                  <div style={{ marginTop: 'var(--spacing-xs)', fontSize: 'var(--type-body)' }}>
                     {result.lots_created ?? result.created ?? 0} lot(s) créé(s),{' '}
                     {result.lots_updated ?? result.updated ?? 0} mis à jour,{' '}
                     {result.skipped ?? 0} ignoré(s)
@@ -112,10 +112,10 @@ export default function UploadGeojsonModal({ project, onClose, onUploaded }) {
 
                 {result.errors && result.errors.length > 0 && (
                   <div>
-                    <h4 style={{ marginBottom: 'var(--spacing-xs)', fontSize: '0.9rem', color: 'var(--color-danger, #e05555)' }}>
+                    <h4 style={{ marginBottom: 'var(--spacing-xs)', fontSize: 'var(--type-body)', color: 'var(--color-danger, #e05555)' }}>
                       {result.errors.length} erreur(s) détectée(s)
                     </h4>
-                    <div style={{ maxHeight: '260px', overflowY: 'auto', fontSize: '0.82rem', border: '1px solid var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
+                    <div style={{ maxHeight: '260px', overflowY: 'auto', fontSize: 'var(--type-body)', border: '1px solid var(--bg-tertiary)', borderRadius: 'var(--radius-sm)' }}>
                       {result.errors.map((err, index) => (
                         <div key={index} style={{ padding: '6px 10px', borderBottom: '1px solid var(--bg-tertiary)', fontFamily: 'var(--font-mono, monospace)' }}>
                           {typeof err === 'string' ? err : `Lot ${err.lot_numero}: ${err.error}`}
@@ -144,15 +144,15 @@ export default function UploadGeojsonModal({ project, onClose, onUploaded }) {
                 {file && (
                   <div className="info-box">
                     <div className="font-semibold">{file.name}</div>
-                    <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                    <div className="text-muted" style={{ fontSize: 'var(--type-body)' }}>
                       {(file.size / 1024).toFixed(2)} KB
                     </div>
                   </div>
                 )}
 
                 <div className="info-box" style={{ marginTop: 'var(--spacing-md)' }}>
-                  <h4 style={{ marginBottom: 'var(--spacing-xs)', fontSize: '0.9rem' }}>Format attendu</h4>
-                  <ul style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', paddingLeft: 'var(--spacing-md)' }}>
+                  <h4 style={{ marginBottom: 'var(--spacing-xs)', fontSize: 'var(--type-body)' }}>Format attendu</h4>
+                  <ul style={{ fontSize: 'var(--type-body)', color: 'var(--text-secondary)', paddingLeft: 'var(--spacing-md)' }}>
                     <li>FeatureCollection GeoJSON</li>
                     <li>Propriétés: lot_id / parcelid, Shape_Area, zone, price</li>
                     <li>Les lots existants seront mis à jour</li>

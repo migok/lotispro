@@ -20,7 +20,7 @@ export default function ProtectedRoute({ children, allowedRoles = null }) {
         <div style={{ textAlign: "center" }}>
           <div
             style={{
-              fontSize: "3rem",
+              fontSize: "var(--type-display)",
               marginBottom: "var(--spacing-md)",
               animation: "spin 2s linear infinite",
             }}
@@ -59,12 +59,12 @@ export default function ProtectedRoute({ children, allowedRoles = null }) {
             padding: "var(--spacing-xl)",
           }}
         >
-          <div style={{ fontSize: "4rem", marginBottom: "var(--spacing-lg)" }}>
+          <div style={{ fontSize: "var(--type-display)", marginBottom: "var(--spacing-lg)" }}>
             🚫
           </div>
           <h2
             style={{
-              fontSize: "1.5rem",
+              fontSize: "var(--type-title)",
               fontWeight: 700,
               color: "var(--text-primary)",
               marginBottom: "var(--spacing-md)",
@@ -82,7 +82,7 @@ export default function ProtectedRoute({ children, allowedRoles = null }) {
           </p>
           <p
             style={{
-              fontSize: "0.85rem",
+              fontSize: "var(--type-body)",
               color: "var(--text-muted)",
               marginBottom: "var(--spacing-lg)",
             }}

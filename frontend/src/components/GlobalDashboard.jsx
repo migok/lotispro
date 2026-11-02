@@ -1,3 +1,4 @@
+import { formatCompactPrice, formatPrice, formatAmount, formatDate } from '../utils/formatters';
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiGet } from "../utils/api";
@@ -29,7 +30,7 @@ const STYLES = `
 .gdb-header-left {}
 .gdb-eyebrow {
   font-family: var(--font-body);
-  font-size: 0.68rem;
+  font-size: var(--type-label);
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -38,7 +39,7 @@ const STYLES = `
 }
 .gdb-title {
   font-family: var(--font-display);
-  font-size: 2.6rem;
+  font-size: var(--type-display);
   font-weight: 600;
   line-height: 1;
   color: var(--text-primary);
@@ -46,7 +47,7 @@ const STYLES = `
   margin: 0 0 6px;
 }
 .gdb-subtitle {
-  font-size: 0.82rem;
+  font-size: var(--type-body);
   color: var(--text-muted);
 }
 .gdb-subtitle strong {
@@ -68,7 +69,7 @@ const STYLES = `
   padding: 8px 16px;
   border-radius: var(--radius-sm);
   font-family: var(--font-body);
-  font-size: 0.8rem;
+  font-size: var(--type-label);
   font-weight: 500;
   cursor: pointer;
   border: none;
@@ -81,7 +82,7 @@ const STYLES = `
 .gdb-btn svg { flex-shrink: 0; }
 .gdb-btn-primary {
   background: var(--color-primary);
-  color: #ffffff;
+  color: var(--text-on-accent);
 }
 .gdb-btn-ghost {
   background: var(--bg-surface);
@@ -97,9 +98,9 @@ const STYLES = `
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-xl);
 }
-@media (max-width: 1100px) { .gdb-strip { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 700px) { .gdb-strip { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 420px) { .gdb-strip { grid-template-columns: 1fr; } }
+@media (max-width: 1280px) { .gdb-strip { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 1024px) { .gdb-strip { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .gdb-strip { grid-template-columns: 1fr; } }
 
 .gdb-tile {
   background: var(--bg-secondary);
@@ -133,7 +134,7 @@ const STYLES = `
 }
 .gdb-tile-value {
   font-family: var(--font-body);
-  font-size: 1.75rem;
+  font-size: var(--type-title);
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1;
@@ -141,14 +142,14 @@ const STYLES = `
   font-feature-settings: var(--num-features);
 }
 .gdb-tile-label {
-  font-size: 0.74rem;
+  font-size: var(--type-label);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 500;
 }
 .gdb-tile-sub {
-  font-size: 0.75rem;
+  font-size: var(--type-label);
   color: var(--text-secondary);
   margin-top: 2px;
 }
@@ -170,14 +171,14 @@ const STYLES = `
   margin-bottom: var(--spacing-md);
 }
 .gdb-section-title {
-  font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-family: var(--font-body);
+  font-size: var(--type-section);
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 .gdb-section-link {
-  font-size: 0.76rem;
+  font-size: var(--type-label);
   color: var(--color-primary);
   text-decoration: none;
   display: inline-flex;
@@ -264,14 +265,14 @@ const STYLES = `
   flex: 1;
 }
 .gdb-proj-name {
-  font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-family: var(--font-body);
+  font-size: var(--type-base);
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.3;
 }
 .gdb-proj-meta {
-  font-size: 0.72rem;
+  font-size: var(--type-label);
   color: var(--text-muted);
 }
 
@@ -296,7 +297,7 @@ const STYLES = `
 .gdb-progress-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 0.68rem;
+  font-size: var(--type-label);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -314,7 +315,7 @@ const STYLES = `
   gap: 4px;
   padding: 2px 8px;
   border-radius: var(--radius-full);
-  font-size: 0.68rem;
+  font-size: var(--type-label);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -338,7 +339,7 @@ const STYLES = `
   border-top: 1px solid var(--border-subtle);
 }
 .gdb-voir-btn {
-  font-size: 0.75rem;
+  font-size: var(--type-label);
   color: var(--color-primary);
   background: none;
   border: none;
@@ -376,7 +377,7 @@ const STYLES = `
   gap: var(--spacing-sm);
 }
 .gdb-panel-title {
-  font-size: 0.82rem;
+  font-size: var(--type-body);
   font-weight: 600;
   color: var(--text-primary);
   text-transform: uppercase;
@@ -386,7 +387,7 @@ const STYLES = `
   gap: 8px;
 }
 .gdb-panel-count {
-  font-size: 0.68rem;
+  font-size: var(--type-label);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: var(--radius-full);
@@ -400,7 +401,7 @@ const STYLES = `
 .gdb-panel-empty {
   padding: var(--spacing-xl) var(--spacing-lg);
   text-align: center;
-  font-size: 0.78rem;
+  font-size: var(--type-label);
   color: var(--text-muted);
   display: flex;
   flex-direction: column;
@@ -423,7 +424,7 @@ const STYLES = `
 .gdb-alert-row:hover { background: var(--bg-surface); }
 .gdb-alert-info { flex: 1; min-width: 0; }
 .gdb-alert-client {
-  font-size: 0.82rem;
+  font-size: var(--type-body);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -431,12 +432,12 @@ const STYLES = `
   text-overflow: ellipsis;
 }
 .gdb-alert-lot {
-  font-size: 0.7rem;
+  font-size: var(--type-label);
   color: var(--text-muted);
   margin-top: 1px;
 }
 .gdb-days-badge {
-  font-size: 0.68rem;
+  font-size: var(--type-label);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: var(--radius-full);
@@ -460,7 +461,7 @@ const STYLES = `
 .gdb-pay-row:hover { background: var(--bg-surface); }
 .gdb-pay-info { flex: 1; min-width: 0; }
 .gdb-pay-client {
-  font-size: 0.82rem;
+  font-size: var(--type-body);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -468,7 +469,7 @@ const STYLES = `
   text-overflow: ellipsis;
 }
 .gdb-pay-meta {
-  font-size: 0.7rem;
+  font-size: var(--type-label);
   color: var(--text-muted);
   margin-top: 1px;
   white-space: nowrap;
@@ -476,7 +477,7 @@ const STYLES = `
   text-overflow: ellipsis;
 }
 .gdb-pay-amount {
-  font-size: 0.78rem;
+  font-size: var(--type-label);
   font-weight: 600;
   color: var(--color-danger);
   font-variant-numeric: tabular-nums lining-nums;
@@ -520,17 +521,9 @@ function injectStyles() {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-const fmtCurrency = (v) => {
-  if (!v && v !== 0) return "—";
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M MAD`;
-  if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K MAD`;
-  return `${v} MAD`;
-};
+const fmtCurrency = formatCompactPrice;
 
-const fmtDate = (iso) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-};
+const fmtDate = (iso) => formatDate(iso, { day: 'numeric', month: 'long', year: 'numeric' });
 
 const daysUntil = (iso) => {
   if (!iso) return null;
@@ -539,7 +532,7 @@ const daysUntil = (iso) => {
 };
 
 const todayLabel = () =>
-  new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  formatDate(new Date(), { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 const IconGrid = () => (
@@ -718,7 +711,7 @@ export default function GlobalDashboard() {
       <div className="gdb-header">
         <div className="gdb-header-left">
           <div className="gdb-eyebrow">{isManager ? "Vue globale" : "Mon activité"}</div>
-          <h1 className="gdb-title">Tableau de Bord</h1>
+          <h1 className="gdb-title">Tableau de bord</h1>
           <div className="gdb-subtitle">
             <strong>{todayLabel()}</strong>
             {user?.name && (
@@ -794,15 +787,15 @@ export default function GlobalDashboard() {
 
             <div className="gdb-tile" style={{ "--tile-accent": "var(--color-primary)", "--tile-icon-bg": "var(--color-primary-subtle)" }}>
               <div className="gdb-tile-icon"><IconCash /></div>
-              <div className="gdb-tile-value num" style={{ fontSize: caRealise >= 1_000_000 ? "1.45rem" : "1.75rem" }}>
+              <div className="gdb-tile-value num" tabIndex={0} title={formatAmount(caRealise)} aria-label={formatAmount(caRealise)} style={{ fontSize: "var(--type-value)" }}>
                 {fmtCurrency(caRealise)}
               </div>
               <div className="gdb-tile-label">
-                {isManager ? "CA Réalisé" : "Mon CA"}
+                {isManager ? "CA réalisé" : "Mon CA"}
                 <span className="kpis-info-icon" title="Chiffre d'affaires confirmé : ventes finalisées + acomptes des réservations validées">ⓘ</span>
               </div>
               <div className="gdb-tile-sub">
-                {stats?.ca_potentiel ? `+ ${fmtCurrency(stats.ca_potentiel)} potentiel` : "Ventes confirmées"}
+                {stats?.ca_potentiel ? `+ ${formatPrice(stats.ca_potentiel)} potentiel` : "Ventes confirmées"}
               </div>
             </div>
 
@@ -939,12 +932,12 @@ export default function GlobalDashboard() {
                           </td>
                           {isManager && <td className="opt-cell-commercial">{o.reserved_by_name || "—"}</td>}
                           <td>
-                            <span className={`status-badge ${o.lot_status}`} style={{ fontSize: "0.7rem", padding: "3px 8px" }}>
+                            <span className={`status-badge ${o.lot_status}`} style={{ fontSize: "var(--type-label)", padding: "3px 8px" }}>
                               {o.lot_status === "option" ? "Option" : "Résa. à finaliser"}
                             </span>
                           </td>
-                          <td className="opt-cell-date">{o.reservation_date ? new Date(o.reservation_date).toLocaleDateString("fr-FR") : "—"}</td>
-                          <td className="opt-cell-date">{new Date(o.expiration_date).toLocaleDateString("fr-FR")}</td>
+                          <td className="opt-cell-date">{o.reservation_date ? formatDate(o.reservation_date, { dateStyle: 'short' }) : "—"}</td>
+                          <td className="opt-cell-date">{formatDate(o.expiration_date, { dateStyle: 'short' })}</td>
                           <td><span className={`opt-badge ${cls}`}>{label}</span></td>
                         </tr>
                       );
@@ -1161,7 +1154,7 @@ export default function GlobalDashboard() {
                       </div>
                     </div>
                     <div className="gdb-pay-amount num">
-                      {fmtCurrency(p.amount_due)}
+                      {formatPrice(p.amount_due)}
                     </div>
                   </div>
                 ))

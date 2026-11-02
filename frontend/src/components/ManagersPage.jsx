@@ -1,3 +1,4 @@
+import { formatDate } from '../utils/formatters';
 import { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiDelete } from '../utils/api';
@@ -58,10 +59,7 @@ function getDisplayName(m) {
   return m.name;
 }
 
-function formatDate(d) {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
-}
+
 
 /* ─── Component ─── */
 export default function ManagersPage() {
@@ -278,13 +276,13 @@ export default function ManagersPage() {
                   {/* Invitation link (dev fallback when email not received) */}
                   {m.is_pending && m.invitation_token && (
                     <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--border-subtle)' }}>
-                      <p style={{ margin: '0 0 4px', fontSize: '0.68rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>Lien d&apos;invitation</p>
-                      <p style={{ margin: '0 0 6px', fontSize: '0.72rem', color: 'var(--text-muted)', wordBreak: 'break-all', lineHeight: 1.4 }}>
+                      <p style={{ margin: '0 0 4px', fontSize: 'var(--type-label)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>Lien d&apos;invitation</p>
+                      <p style={{ margin: '0 0 6px', fontSize: 'var(--type-label)', color: 'var(--text-muted)', wordBreak: 'break-all', lineHeight: 1.4 }}>
                         {`${window.location.origin}/set-password?token=${m.invitation_token}`}
                       </p>
                       <button
                         type="button"
-                        style={{ fontSize: '0.72rem', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                        style={{ fontSize: 'var(--type-label)', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
                         onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/set-password?token=${m.invitation_token}`); }}
                       >
                         Copier le lien
@@ -336,7 +334,7 @@ export default function ManagersPage() {
                 </div>
               )}
               {companies.length === 0 && withoutCompany === 0 && (
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Aucune donnée</p>
+                <p style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)' }}>Aucune donnée</p>
               )}
             </div>
           </div>
@@ -346,7 +344,7 @@ export default function ManagersPage() {
             <p className="mg-section-label">Récemment ajoutés</p>
             <div className="cp-leaderboard">
               {recentManagers.length === 0 ? (
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Aucun manager</p>
+                <p style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)' }}>Aucun manager</p>
               ) : recentManagers.map((m) => (
                 <div key={m.id} className="cp-lb-row">
                   <div className="monogram monogram-sm">{getInitials(m)}</div>
@@ -427,7 +425,7 @@ export default function ManagersPage() {
                     value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
                 </div>
 
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+                <p style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
                   Un email d&apos;invitation sera envoyé pour que le manager crée son propre mot de passe.
                 </p>
 
@@ -456,9 +454,9 @@ export default function ManagersPage() {
               </div>
             </div>
             <div className="cp-modal-body">
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--type-body)', lineHeight: 1.6 }}>
                 Êtes-vous sûr de vouloir supprimer{' '}
-                <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)', fontSize: '1rem' }}>
+                <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 'var(--type-base)' }}>
                   {getDisplayName(deleteConfirm)}
                 </strong>{' '}?
               </p>

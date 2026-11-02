@@ -1,3 +1,4 @@
+import { formatAmount } from '../../utils/formatters';
 import { formatNumber } from '../../utils/formatters';
 
 export default function CumulativeKpis({ stats, projectKpis, projectId: propsProjectId, isManager, isCommercial }) {
@@ -43,8 +44,8 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
                   </svg>
                 </div>
                 <div className="kpis-hero-content">
-                  <div className="kpis-hero-value">{formatNumber(projectKpis?.ca_realise, 'MAD')}</div>
-                  <div className="kpis-hero-label">CA Réalisé <span className="kpis-info-icon" title="Ventes finalisées + acomptes des réservations validées">ⓘ</span></div>
+                  <div className="kpis-hero-value"><span tabIndex={0} title={formatAmount(projectKpis?.ca_realise)} aria-label={formatAmount(projectKpis?.ca_realise)}> {formatNumber(projectKpis?.ca_realise, 'MAD')}</span></div>
+                  <div className="kpis-hero-label">CA réalisé <span className="kpis-info-icon" title="Ventes finalisées + acomptes des réservations validées">ⓘ</span></div>
                   {projectKpis?.ca_objectif > 0 && (
                     <div className="kpis-hero-progress">
                       <div className="kpis-hero-progress-bar">
@@ -66,7 +67,7 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
                   </svg>
                 </div>
                 <div className="kpis-hero-content">
-                  <div className="kpis-hero-value">{formatNumber(projectKpis?.ca_potentiel, 'MAD')}</div>
+                  <div className="kpis-hero-value"><span tabIndex={0} title={formatAmount(projectKpis?.ca_potentiel)} aria-label={formatAmount(projectKpis?.ca_potentiel)}> {formatNumber(projectKpis?.ca_potentiel, 'MAD')}</span></div>
                   <div className="kpis-hero-label">CA Potentiel <span className="kpis-info-icon" title="Valeur totale des lots avec réservation active — non encore convertis en vente">ⓘ</span></div>
                   <div className="kpis-hero-subtitle">Lots réservés</div>
                 </div>
@@ -77,19 +78,19 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
           {/* Métriques additionnelles pour décision */}
           <div className="kpis-decision-metrics">
             <div>
-              <div>{formatNumber(projectKpis?.prix_moyen_lot, 'MAD')}</div>
-              <div>Prix Moyen / Lot <span className="kpis-info-icon kpis-info-icon-dark" title="Prix moyen de vente par lot sur ce projet">ⓘ</span></div>
+              <div><span tabIndex={0} title={formatAmount(projectKpis?.prix_moyen_lot)} aria-label={formatAmount(projectKpis?.prix_moyen_lot)}> {formatNumber(projectKpis?.prix_moyen_lot, 'MAD')}</span></div>
+              <div>Prix moyen / lot <span className="kpis-info-icon kpis-info-icon-dark" title="Prix moyen de vente par lot sur ce projet">ⓘ</span></div>
             </div>
             <div>
-              <div>{formatNumber(projectKpis?.prix_moyen_m2, 'MAD')}</div>
+              <div><span tabIndex={0} title={formatAmount(projectKpis?.prix_moyen_m2)} aria-label={formatAmount(projectKpis?.prix_moyen_m2)}> {formatNumber(projectKpis?.prix_moyen_m2, 'MAD')}</span></div>
               <div>Prix Moyen / m² <span className="kpis-info-icon kpis-info-icon-dark" title="Prix moyen au m² calculé sur les ventes réalisées">ⓘ</span></div>
             </div>
             <div>
-              <div>{formatNumber(projectKpis?.total_deposits, 'MAD')}</div>
+              <div><span tabIndex={0} title={formatAmount(projectKpis?.total_deposits)} aria-label={formatAmount(projectKpis?.total_deposits)}> {formatNumber(projectKpis?.total_deposits, 'MAD')}</span></div>
               <div>Total Acomptes <span className="kpis-info-icon kpis-info-icon-dark" title="Somme des acomptes perçus sur les réservations validées (non encore vendues)">ⓘ</span></div>
             </div>
             <div>
-              <div>{formatNumber(projectKpis?.ca_objectif, 'MAD')}</div>
+              <div><span tabIndex={0} title={formatAmount(projectKpis?.ca_objectif)} aria-label={formatAmount(projectKpis?.ca_objectif)}> {formatNumber(projectKpis?.ca_objectif, 'MAD')}</span></div>
               <div>CA Objectif <span className="kpis-info-icon kpis-info-icon-dark" title="Objectif de chiffre d'affaires défini pour ce projet — sert à calculer le taux de progression">ⓘ</span></div>
             </div>
           </div>
@@ -108,7 +109,7 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
             {isCommercial() ? 'Ma performance — à ce jour' : 'Performance financière — à ce jour'}
           </h3>
           <span className="kpis-section-badge">
-            {formatNumber(stats?.ca_total, 'MAD')} total
+            <span tabIndex={0} title={formatAmount(stats?.ca_total)} aria-label={formatAmount(stats?.ca_total)}> {formatNumber(stats?.ca_total, 'MAD')}</span> total
             <span className="kpis-info-icon" title="Valeur totale du portefeuille — somme des prix de tous les lots (vendus, réservés, disponibles, bloqués)">ⓘ</span>
           </span>
         </div>
@@ -130,9 +131,9 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
               <div className="kpis-stock-percent">{stats?.ca_total ? ((stats?.ca_realise || 0) / stats.ca_total * 100).toFixed(2) : '0.00'}%</div>
             </div>
             <div className="kpis-stock-info">
-              <div className="kpis-stock-value">{formatNumber(stats?.ca_realise, 'MAD')}</div>
+              <div className="kpis-stock-value"><span tabIndex={0} title={formatAmount(stats?.ca_realise)} aria-label={formatAmount(stats?.ca_realise)}> {formatNumber(stats?.ca_realise, 'MAD')}</span></div>
               <div className="kpis-stock-label">
-                {isCommercial() ? 'Mon CA Réalisé' : 'CA Réalisé'}
+                {isCommercial() ? 'Mon CA réalisé' : 'CA réalisé'}
                 <span className="kpis-info-icon kpis-info-icon-dark" title="Somme des lots vendus">ⓘ</span>
               </div>
             </div>
@@ -154,7 +155,7 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
               <div className="kpis-stock-percent">{stats?.ca_total ? ((stats?.ca_potentiel || 0) / stats.ca_total * 100).toFixed(2) : '0.00'}%</div>
             </div>
             <div className="kpis-stock-info">
-              <div className="kpis-stock-value">{formatNumber(stats?.ca_potentiel, 'MAD')}</div>
+              <div className="kpis-stock-value"><span tabIndex={0} title={formatAmount(stats?.ca_potentiel)} aria-label={formatAmount(stats?.ca_potentiel)}> {formatNumber(stats?.ca_potentiel, 'MAD')}</span></div>
               <div className="kpis-stock-label">
                 CA Potentiel
                 <span className="kpis-info-icon kpis-info-icon-dark" title="Valeur des lots réservés">ⓘ</span>

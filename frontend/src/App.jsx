@@ -102,7 +102,7 @@ const NAV_ITEMS = [
   {
     id: "dashboard",
     path: "/app/dashboard",
-    label: "Tableau de Bord",
+    label: "Tableau de bord",
     Icon: IconDashboard,
     allowedRoles: ["manager", "commercial"]
   },
@@ -223,13 +223,13 @@ function AppContent() {
           {/* User Info */}
           {user && (
             <div style={{ marginBottom: 'var(--spacing-md)' }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '2px' }}>
+              <div style={{ fontSize: 'var(--type-body)', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '2px' }}>
                 {user.name}
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '2px' }}>
+              <div style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)', marginBottom: '2px' }}>
                 {user.email}
               </div>
-              <div style={{ fontSize: '0.68rem', color: 'var(--color-primary)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 500 }}>
+              <div style={{ fontSize: 'var(--type-label)', color: 'var(--color-primary)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 500 }}>
                 {user.role}
               </div>
             </div>
@@ -253,7 +253,7 @@ function AppContent() {
             <span className="nav-label">Déconnexion</span>
           </button>
 
-          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          <div style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
             v2.0
           </div>
         </div>

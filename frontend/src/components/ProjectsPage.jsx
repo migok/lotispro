@@ -316,7 +316,7 @@ export default function ProjectsPage() {
                         </button>
                       </div>
                     ) : (
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      <span style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted)' }}>
                         {formatDate(project.created_at)}
                       </span>
                     )}
@@ -408,8 +408,8 @@ export default function ProjectsPage() {
                 </svg>
               </div>
               <h2 style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '1.4rem',
+                fontFamily: 'var(--font-body)',
+                fontSize: 'var(--type-title)',
                 fontWeight: 600,
                 color: 'var(--text-primary)',
                 marginBottom: '0.5rem',
@@ -417,12 +417,12 @@ export default function ProjectsPage() {
               }}>
                 Supprimer le projet
               </h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.5, margin: 0 }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--type-body)', lineHeight: 1.5, margin: 0 }}>
                 Vous êtes sur le point de supprimer
               </p>
               <p style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '1.15rem',
+                fontFamily: 'var(--font-body)',
+                fontSize: 'var(--type-section)',
                 color: 'var(--color-primary)',
                 fontWeight: 600,
                 margin: '0.3rem 0 0',
@@ -447,7 +447,7 @@ export default function ProjectsPage() {
                 <path d="M10 2L2 17h16L10 2z"/>
                 <path d="M10 9v4M10 15h.01"/>
               </svg>
-              <p style={{ fontSize: '0.8rem', color: '#c0524e', lineHeight: 1.6, margin: 0 }}>
+              <p style={{ fontSize: 'var(--type-label)', color: '#c0524e', lineHeight: 1.6, margin: 0 }}>
                 Action <strong style={{ color: '#e05555' }}>irréversible</strong> — lots, réservations et ventes seront définitivement supprimés.
               </p>
             </div>
@@ -477,7 +477,7 @@ export default function ProjectsPage() {
                   border: '1px solid rgba(224,85,85,0.35)',
                   background: 'rgba(224,85,85,0.12)',
                   color: '#e05555',
-                  fontSize: '0.875rem',
+                  fontSize: 'var(--type-body)',
                   fontWeight: 600,
                   cursor: deleting ? 'not-allowed' : 'pointer',
                   transition: 'all 0.15s ease',

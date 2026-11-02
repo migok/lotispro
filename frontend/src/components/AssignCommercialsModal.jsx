@@ -103,14 +103,14 @@ export default function AssignCommercialsModal({ project, onClose, onAssigned })
             <>
               {/* Assigned Users */}
               <div style={{ marginBottom: 'var(--spacing-lg)' }}>
-                <h3 style={{ fontSize: '0.95rem', marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)' }}>
+                <h3 style={{ fontSize: 'var(--type-base)', marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)' }}>
                   Commerciaux assignés ({assignedUsers.length})
                 </h3>
 
                 {assignedUsers.length === 0 ? (
                   <div className="empty-state" style={{ padding: 'var(--spacing-md)' }}>
-                    <div style={{ fontSize: '2rem' }}>👥</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: 'var(--type-value)' }}>👥</div>
+                    <div style={{ fontSize: 'var(--type-body)', color: 'var(--text-muted)' }}>
                       Aucun commercial assigné
                     </div>
                   </div>
@@ -141,14 +141,14 @@ export default function AssignCommercialsModal({ project, onClose, onAssigned })
 
               {/* Available Commercials */}
               <div>
-                <h3 style={{ fontSize: '0.95rem', marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)' }}>
+                <h3 style={{ fontSize: 'var(--type-base)', marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)' }}>
                   Commerciaux disponibles ({availableCommercials.length})
                 </h3>
 
                 {availableCommercials.length === 0 ? (
                   <div className="empty-state" style={{ padding: 'var(--spacing-md)' }}>
-                    <div style={{ fontSize: '2rem' }}>✓</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: 'var(--type-value)' }}>✓</div>
+                    <div style={{ fontSize: 'var(--type-body)', color: 'var(--text-muted)' }}>
                       Tous les commerciaux sont déjà assignés
                     </div>
                   </div>

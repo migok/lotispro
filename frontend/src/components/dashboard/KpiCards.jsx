@@ -1,3 +1,4 @@
+import { formatAmount } from '../../utils/formatters';
 import { formatNumber } from '../../utils/formatters';
 import {
   formatFlowUnavailableNotice,
@@ -91,7 +92,7 @@ export default function KpiCards({ stats, loading }) {
               <div className="period-kpi-notice">{flowNotice}</div>
             ) : (
               <>
-                <div className="kpis-stock-value">{card.format(flow[card.key])}</div>
+                <div className="kpis-stock-value" tabIndex={card.key === 'ca' || card.key === 'encaissements' ? 0 : undefined} title={card.key === 'ca' || card.key === 'encaissements' ? formatAmount(flow[card.key]) : undefined}>{card.format(flow[card.key])}</div>
                 <div className="period-kpi-variation">
                   <span className={`period-kpi-trend${variation.trend ? ` ${variation.trend}` : ''}`}>
                     {variation.text}

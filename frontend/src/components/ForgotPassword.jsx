@@ -61,10 +61,10 @@ export default function ForgotPassword() {
       }}>
         {/* Header */}
         <div style={{ background: 'var(--bg-tertiary)', padding: '28px 36px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <p style={{ margin: '0 0 6px', fontSize: '0.68rem', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
+          <p style={{ margin: '0 0 6px', fontSize: 'var(--type-label)', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             LotisPro
           </p>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontFamily: 'var(--font-display)', fontWeight: 400, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
+          <h1 style={{ margin: 0, fontSize: 'var(--type-title)', fontFamily: 'var(--font-body)', fontWeight: 400, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
             Mot de passe oublié
           </h1>
         </div>
@@ -83,10 +83,10 @@ export default function ForgotPassword() {
               }}>
                 <IconCheck />
               </div>
-              <p style={{ margin: '0 0 8px', fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              <p style={{ margin: '0 0 8px', fontSize: 'var(--type-base)', fontWeight: 600, color: 'var(--text-primary)' }}>
                 Email envoyé
               </p>
-              <p style={{ margin: '0 0 24px', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              <p style={{ margin: '0 0 24px', fontSize: 'var(--type-body)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                 Un lien de réinitialisation a été envoyé à <strong>{email}</strong>.
                 Vérifiez votre boîte mail et suivez les instructions.
               </p>
@@ -100,7 +100,7 @@ export default function ForgotPassword() {
             </div>
           ) : (
             <form onSubmit={handleSubmit}>
-              <p style={{ margin: '0 0 20px', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              <p style={{ margin: '0 0 20px', fontSize: 'var(--type-body)', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                 Saisissez l'adresse email associée à votre compte. Vous recevrez un lien pour réinitialiser votre mot de passe.
               </p>
 
@@ -143,7 +143,7 @@ export default function ForgotPassword() {
             <button
               type="button"
               onClick={() => navigate('/login')}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--type-label)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               <IconArrowLeft />
               Retour à la connexion

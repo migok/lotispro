@@ -111,7 +111,7 @@ export default function UploadProjectImageModal({ project, onClose, onUploaded }
             <button
               type="button"
               className="btn-text-danger"
-              style={{ alignSelf: 'flex-start', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 6 }}
+              style={{ alignSelf: 'flex-start', fontSize: 'var(--type-label)', display: 'flex', alignItems: 'center', gap: 6 }}
               onClick={() => { setFile(null); setPreview(null); }}
             >
               <IconTrash /> Supprimer l'aperçu

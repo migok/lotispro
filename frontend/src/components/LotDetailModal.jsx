@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { apiGet, apiPost, apiPut, apiFetch, apiUploadFile, buildApiError } from '../utils/api';
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
-import { formatPrice, formatDate, formatMad } from '../utils/formatters';
+import { formatPrice, formatDate, formatMad, formatAmount } from '../utils/formatters';
 import { ACTIVE_LOT_STATUSES, STATUS_LABELS, PAYMENT_TYPES } from '../utils/constants';
 import ClientForm from './clients/ClientForm';
 import ClientPicker from './clients/ClientPicker';
@@ -134,7 +134,7 @@ function previewRowLabel(row) {
   return `${row.type === 'deposit' ? 'Acompte' : 'Solde'} ${row.number}`;
 }
 function fmtShort(date) {
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDate(date, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 /* ── Payment timeline (panel view) ───────────────────────── */
@@ -1434,7 +1434,7 @@ function LotDetailModalContent({
   const expiryDate = (() => {
     const d = new Date();
     d.setDate(d.getDate() + (parseInt(reservationDays) || 7));
-    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    return formatDate(d, { day: 'numeric', month: 'long', year: 'numeric' });
   })();
 
   // Engaged before E4-T5 (no agreed total price): amounts unknown, no edit nor payment
@@ -1458,12 +1458,12 @@ function LotDetailModalContent({
     lot.surface && { icon: <IcSurface />, value: `${lot.surface} m²`, label: 'Surface' },
     (lot.price_per_sqm || (lot.price && lot.surface && lot.surface > 0)) && {
       icon: <IcChart />,
-      value: `${Math.round(lot.price_per_sqm ?? (lot.price / lot.surface)).toLocaleString('fr-FR')} MAD`,
+      value: formatPrice(lot.price_per_sqm ?? (lot.price / lot.surface)),
       label: 'Prix/m² catalogue'
     },
     lot.price_per_sqm_acte && {
       icon: <IcChart />,
-      value: `${Math.round(lot.price_per_sqm_acte).toLocaleString('fr-FR')} MAD`,
+      value: formatPrice(lot.price_per_sqm_acte),
       label: 'Prix/m² acte'
     },
     lot.zone && { icon: <IcPin />, value: `Zone ${lot.zone}`, label: 'Zone' },
@@ -1481,7 +1481,7 @@ function LotDetailModalContent({
       {lot.zone && <div className="msl-zone">Zone {lot.zone}{lot.type_lot ? ` · ${lot.type_lot}` : ''}</div>}
       <div className="msl-price">{formatPrice(lot.price)}</div>
       {lot.price_per_sqm
-        ? <div className="msl-price-m2">{lot.price_per_sqm.toLocaleString('fr-FR')} MAD/m² <span className="lot-price-tag">catalogue</span></div>
+        ? <div className="msl-price-m2">{formatAmount(lot.price_per_sqm)} / m² <span className="lot-price-tag">catalogue</span></div>
         : (lot.surface && lot.price && lot.surface > 0)
           ? <div className="msl-price-m2">{formatPrice(lot.price / lot.surface)}/m² <span className="lot-price-tag">catalogue</span></div>
           : null
@@ -1491,7 +1491,7 @@ function LotDetailModalContent({
           {formatPrice(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100)} <span className="lot-price-tag">acte</span>
         </div>
       )}
-      <span className={`status-badge ${lot.status}`} style={{ display: 'inline-flex', fontSize: '0.78rem', padding: '5px 11px', margin: '14px 0 18px' }}>
+      <span className={`status-badge ${lot.status}`} style={{ display: 'inline-flex', fontSize: 'var(--type-label)', padding: '5px 11px', margin: '14px 0 18px' }}>
         <span className="status-dot"></span>{STATUS_LABELS[lot.status]}
       </span>
       <div className="msl-stats">
@@ -1575,7 +1575,7 @@ function LotDetailModalContent({
               <div className="ldm-price-block">
                 <div className="lot-price-main">{formatPrice(lot.price)}</div>
                 {lot.price_per_sqm
-                  ? <div className="lot-price-per-m2">{lot.price_per_sqm.toLocaleString('fr-FR')} MAD/m² <span className="lot-price-tag">catalogue</span></div>
+                  ? <div className="lot-price-per-m2">{formatAmount(lot.price_per_sqm)} / m² <span className="lot-price-tag">catalogue</span></div>
                   : (lot.surface && lot.price && lot.surface > 0)
                     ? <div className="lot-price-per-m2">{formatPrice(lot.price / lot.surface)}/m² <span className="lot-price-tag">catalogue</span></div>
                     : null
@@ -1584,7 +1584,7 @@ function LotDetailModalContent({
                   <div className="lot-price-per-m2 lot-price-acte">
                     {lot.surface
                       ? <>{formatPrice(Math.round(lot.price_per_sqm_acte * lot.surface * 100) / 100)} <span className="lot-price-tag">acte</span></>
-                      : <>{lot.price_per_sqm_acte.toLocaleString('fr-FR')} MAD/m² <span className="lot-price-tag">acte</span></>
+                      : <>{formatAmount(lot.price_per_sqm_acte)} / m² <span className="lot-price-tag">acte</span></>
                     }
                   </div>
                 )}
@@ -1648,8 +1648,8 @@ function LotDetailModalContent({
                       <span className="ldm-ri-key">Chez le notaire</span>
                       <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {reservation?.wants_notaire
-                          ? <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Souhaité</span>
-                          : <span className="badge badge-gray" style={{ fontSize: '0.65rem' }}>Non encore</span>
+                          ? <span className="badge badge-green" style={{ fontSize: 'var(--type-label)' }}>Souhaité</span>
+                          : <span className="badge badge-gray" style={{ fontSize: 'var(--type-label)' }}>Non encore</span>
                         }
                       </span>
                     </div>
@@ -1691,7 +1691,7 @@ function LotDetailModalContent({
                         <div className="ldm-ri-row">
                           <span className="ldm-ri-key">Acte</span>
                           <span className="ldm-ri-val" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Acte de réservation</span>
+                            <span className="badge badge-green" style={{ fontSize: 'var(--type-label)' }}>Acte de réservation</span>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleDownloadDocument(acte)}>
                               Télécharger
                             </button>
@@ -1791,7 +1791,7 @@ function LotDetailModalContent({
                 <div className="ldm-section-label" style={{ margin: 0 }}>
                   <IcFile /> Documents
                   {documents.length > 0 && (
-                    <span className="badge badge-gray" style={{ fontSize: '0.65rem', marginLeft: 6 }}>{documents.length}</span>
+                    <span className="badge badge-gray" style={{ fontSize: 'var(--type-label)', marginLeft: 6 }}>{documents.length}</span>
                   )}
                 </div>
                 {lot.status === 'chez_notaire' && (
@@ -1805,7 +1805,7 @@ function LotDetailModalContent({
                     />
                     <button
                       className="btn btn-ghost btn-sm"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.78rem' }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 'var(--type-label)' }}
                       onClick={() => docFileInputRef.current?.click()}
                       disabled={uploadingDoc}
                     >
@@ -1858,7 +1858,7 @@ function LotDetailModalContent({
               return (
                 <>
                   {!canActivate && (
-                    <span style={{ fontSize: '0.78rem', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ fontSize: 'var(--type-label)', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                       <IcAlertTriangle /> Manquant : {missingFields.join(', ')}
                     </span>
                   )}
@@ -2028,7 +2028,7 @@ function LotDetailModalContent({
                 {can('edl_finalize') && (
                   <>
                     {edlOpenCount > 0 && (
-                      <span style={{ fontSize: '0.78rem', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ fontSize: 'var(--type-label)', color: 'var(--color-warning)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                         <IcAlertTriangle /> {openEdlActionsLabel(edlOpenCount)}
                       </span>
                     )}
@@ -2136,7 +2136,7 @@ function LotDetailModalContent({
     ? computePreview(thirdPanelPrice, paymentPlan, engagePreview).allRows.length : 0;
   // Deed price hint: deed price per m² × surface
   const salePriceHint = lot?.surface && lot.surface > 0 && (lot?.price_per_sqm_acte || lotPricingConfig?.prix_m2_acte)
-    ? `${Number(lot?.price_per_sqm_acte || lotPricingConfig.prix_m2_acte).toLocaleString('fr-FR')} MAD/m² acte × ${lot.surface} m²`
+    ? `${formatAmount(lot?.price_per_sqm_acte || lotPricingConfig.prix_m2_acte)} / m² acte × ${lot.surface} m²`
     : null;
 
   return (
@@ -2403,7 +2403,7 @@ function LotDetailModalContent({
                       onClick={() => setEnablePaymentPlan(v => !v)}>
                       <IcPayments />
                       Personnaliser l'échéancier
-                      <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
+                      <span style={{ fontSize: 'var(--type-label)', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
                         {enablePaymentPlan
                           ? 'Activé'
                           : projectFinancingPlan
@@ -2487,12 +2487,12 @@ function LotDetailModalContent({
                     const newExp = new Date(lot.expiration_date);
                     newExp.setDate(newExp.getDate() + (parseInt(extendDays) || 7));
                     return (
-                      <div className="msr-expiry-hint"><IcCalendar /> Nouvelle expiration : <strong>{newExp.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</strong></div>
+                      <div className="msr-expiry-hint"><IcCalendar /> Nouvelle expiration : <strong>{formatDate(newExp, { day: 'numeric', month: 'long', year: 'numeric' })}</strong></div>
                     );
                   })()}
                 </div>
                 <div className="msr-info-pill">
-                  <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  <span style={{ fontSize: 'var(--type-body)', color: 'var(--text-secondary)' }}>
                     La prolongation sera enregistrée dans l'historique de la réservation.
                   </span>
                 </div>
@@ -2616,7 +2616,7 @@ function LotDetailModalContent({
                       onClick={() => setEnablePaymentPlan(v => !v)}>
                       <IcPayments />
                       Personnaliser l'échéancier
-                      <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
+                      <span style={{ fontSize: 'var(--type-label)', fontWeight: 400, color: 'var(--text-muted)', marginLeft: 4 }}>
                         {enablePaymentPlan
                           ? 'Activé'
                           : projectFinancingPlan
@@ -2642,7 +2642,7 @@ function LotDetailModalContent({
 
                   {validationChoice === 'deduct' && (
                     <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-                      <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                      <span style={{ fontSize: 'var(--type-body)', color: 'var(--text-secondary)' }}>
                         La garantie de <strong>{formatMad(activeGuarantee)}</strong> est comptée comme premier acompte reçu.
                         {engageAgreed > 0 && (
                           <> L'échéancier portera sur le reste : <strong>{formatMad(Math.max(0, engageAgreed - activeGuarantee))}</strong>.</>
@@ -2726,21 +2726,21 @@ function LotDetailModalContent({
             {mode === 'to_proprietaire' && (
               <div className="msr-field-group">
                 <div className="msr-info-pill" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-                  <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  <span style={{ fontSize: 'var(--type-body)', color: 'var(--text-secondary)' }}>
                     Confirmer la réception des documents notariaux. Le lot passera en <strong>Chez le propriétaire</strong> (état terminal).
                   </span>
                   {lot.client_name && <span style={{ fontWeight: 600 }}>{lot.client_name}</span>}
-                  {lot.notary_name && <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Notaire : {lot.notary_name}</span>}
-                  {lot.notary_date && <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Acte du : {formatDate(lot.notary_date)}</span>}
+                  {lot.notary_name && <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--type-body)' }}>Notaire : {lot.notary_name}</span>}
+                  {lot.notary_date && <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--type-body)' }}>Acte du : {formatDate(lot.notary_date)}</span>}
                   {notaryDocuments.length > 0 ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.82rem' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 'var(--type-body)' }}>
                       <IcFile style={{ color: 'var(--color-primary)' }} />
                       <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
                         {notaryDocuments.length} document{notaryDocuments.length > 1 ? 's' : ''} joint{notaryDocuments.length > 1 ? 's' : ''}
                       </span>
                     </span>
                   ) : (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.82rem', color: 'var(--color-warning)' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 'var(--type-body)', color: 'var(--color-warning)' }}>
                       <IcAlertTriangle /> Aucun document joint — vous pouvez quand même confirmer
                     </span>
                   )}
@@ -2761,7 +2761,7 @@ function LotDetailModalContent({
             {mode === 'unblock' && (
               <div className="msr-field-group">
                 <div className="msr-info-pill">
-                  <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  <span style={{ fontSize: 'var(--type-body)', color: 'var(--text-secondary)' }}>
                     Le lot sera remis en statut <strong>Disponible</strong>.
                   </span>
                 </div>

@@ -1,3 +1,4 @@
+import { formatDate, formatPrice } from '../utils/formatters';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import L from 'leaflet';
@@ -83,7 +84,7 @@ const TAB_ICONS = {
 const getTabs = (isManager) => [
   { id: 'carte', label: 'Carte' },
   { id: 'lots', label: 'Lots' },
-  { id: 'dashboard', label: isManager ? 'Tableau de Bord' : 'Dashboard' },
+  { id: 'dashboard', label: isManager ? 'Tableau de bord' : 'Dashboard' },
   { id: 'kpis', label: 'KPIs' },
   { id: 'performance', label: 'Performance' },
   { id: 'historique', label: 'Historique' },
@@ -323,10 +324,6 @@ export default function ProjectDetailPage() {
           }
 
           // Créer le contenu du tooltip
-          const formatPrice = (price) => {
-            if (!price) return 'Non défini';
-            return price.toLocaleString('fr-FR') + ' MAD';
-          };
 
           const getStatusLabel = (s) => STATUS_LABELS[s] || s;
 
@@ -357,7 +354,7 @@ export default function ProjectDetailPage() {
             tooltipContent += `
               <div class="lot-tooltip-row">
                 <span class="lot-tooltip-label">Prix/m²:</span>
-                <span class="lot-tooltip-value">${Number(prixM2).toLocaleString('fr-FR')} MAD</span>
+                <span class="lot-tooltip-value">${formatPrice(prixM2)}</span>
               </div>
             `;
           }
@@ -571,7 +568,7 @@ export default function ProjectDetailPage() {
       {/* Tabs */}
       <div className="tabs">
         {getTabs(isManager()).filter((tab) => {
-          // Masquer l'onglet KPIs pour les managers (intégré dans Tableau de Bord) et commerciaux
+          // Masquer l'onglet KPIs pour les managers (intégré dans Tableau de bord) et commerciaux
           if (tab.id === 'kpis' && (isManager() || isCommercial())) return false;
           // Masquer l'onglet Performance pour les non-managers
           if (tab.id === 'performance' && !isManager()) return false;
@@ -1162,7 +1159,7 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager, enabledOptional }
           {conf.label}
         </span>
         {lot.days_in_status > 0 && (
-          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted, #6e7e9e)', marginLeft: '0.4rem' }}>
+          <span style={{ fontSize: 'var(--type-label)', color: 'var(--text-muted, #6e7e9e)', marginLeft: '0.4rem' }}>
             {Math.round(lot.days_in_status)}j
           </span>
         )}
@@ -1266,7 +1263,7 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager, enabledOptional }
           {lot.client_name}
           {lot.expiration_date && (
             <span className="lot-map-popup-expire">
-              exp. {new Date(lot.expiration_date).toLocaleDateString('fr-FR')}
+              exp. {formatDate(lot.expiration_date, { dateStyle: 'short' })}
             </span>
           )}
         </div>
@@ -1581,7 +1578,7 @@ function KPIsTab({ project }) {
                 </svg>
               </div>
               <div className="kpis-metric-content">
-                <div className="kpis-metric-label">Prix Moyen / Lot</div>
+                <div className="kpis-metric-label">Prix moyen / lot</div>
                 <div className="kpis-metric-value">{formatMoney(kpis?.prix_moyen_lot)}</div>
               </div>
             </div>
@@ -2251,7 +2248,7 @@ function HistoriqueTab({ projectId, userId, isCommercial }) {
 
   // Grouper par date
   const groupedHistory = history.reduce((groups, entry) => {
-    const date = new Date(entry.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    const date = formatDate(entry.created_at, { day: 'numeric', month: 'long', year: 'numeric' });
     if (!groups[date]) {
       groups[date] = [];
     }
@@ -2621,12 +2618,12 @@ export function ParametresTab({ project, onUpdate }) {
       {/* CSV Import Section */}
       <div className="section-card" style={{ marginTop: 'var(--spacing-lg)' }}>
         <h3>Import CSV Métadonnées</h3>
-        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+        <p style={{ fontSize: 'var(--type-body)', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
           Importez un fichier CSV pour mettre à jour les métadonnées des lots.
           La colonne de mapping obligatoire est <strong>N_LOT</strong> — elle doit correspondre au numéro du lot.
           Les lots absents du CSV ne sont pas modifiés.
         </p>
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+        <p style={{ fontSize: 'var(--type-label)', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
           Colonnes supportées&nbsp;: <code>N_LOT</code>, <code>TYPE_DE_LOT</code>, <code>EMPLACEMENT</code>, <code>TYPE_DE_MAISON</code>, <code>ZONE</code>
         </p>
 
@@ -2649,7 +2646,7 @@ export function ParametresTab({ project, onUpdate }) {
         </div>
 
         {csvFile && (
-          <p style={{ fontSize: '0.85rem', marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)' }}>
+          <p style={{ fontSize: 'var(--type-body)', marginTop: 'var(--spacing-sm)', color: 'var(--text-secondary)' }}>
             Fichier sélectionné: <strong>{csvFile.name}</strong>
           </p>
         )}
@@ -2695,7 +2692,7 @@ export function ParametresTab({ project, onUpdate }) {
                     <summary style={{ cursor: 'pointer', color: 'var(--warning)' }}>
                       Voir les détails ({csvResult.errors.length} avertissement{csvResult.errors.length > 1 ? 's' : ''})
                     </summary>
-                    <ul style={{ fontSize: '0.8rem', marginTop: 'var(--spacing-xs)', color: 'var(--text-secondary)' }}>
+                    <ul style={{ fontSize: 'var(--type-label)', marginTop: 'var(--spacing-xs)', color: 'var(--text-secondary)' }}>
                       {csvResult.errors.slice(0, 10).map((err, i) => (
                         <li key={i}>{err}</li>
                       ))}
@@ -2718,13 +2715,13 @@ export function ParametresTab({ project, onUpdate }) {
       {/* Financing Plan Section */}
       <div className="section-card" style={{ marginTop: 'var(--spacing-lg)' }}>
         <h3>Plan de financement par défaut</h3>
-        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+        <p style={{ fontSize: 'var(--type-body)', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
           Ce plan est proposé automatiquement lors du passage en <strong>Réservation engagée</strong>.
           Il peut être ajusté au cas par cas sur chaque réservation. Changer le plan ici n'affecte pas les échéanciers déjà créés.
         </p>
 
         {planLoading ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Chargement...</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--type-body)' }}>Chargement...</div>
         ) : (
           <form onSubmit={handlePlanSubmit}>
             {planError && (
@@ -2736,7 +2733,7 @@ export function ParametresTab({ project, onUpdate }) {
 
             {/* Visual split bar */}
             <div style={{ marginBottom: 'var(--spacing-lg)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 'var(--type-label)', color: 'var(--text-secondary)' }}>
                 <span>Acompte <strong style={{ color: 'var(--color-primary)' }}>{plan.deposit_pct}%</strong></span>
                 <span>Solde <strong>{Math.round((100 - plan.deposit_pct) * 100) / 100}%</strong></span>
               </div>

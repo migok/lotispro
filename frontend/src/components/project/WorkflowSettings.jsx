@@ -73,7 +73,7 @@ export default function WorkflowSettings({ project, onUpdate }) {
   return (
     <div className="section-card" style={{ marginTop: 'var(--spacing-lg)' }}>
       <h3>Étapes du workflow</h3>
-      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
+      <p style={{ fontSize: 'var(--type-body)', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-md)' }}>
         Choisissez les étapes facultatives utilisées par ce projet. Une étape ne peut pas être
         désactivée tant que des lots s’y trouvent.
       </p>
@@ -94,14 +94,14 @@ export default function WorkflowSettings({ project, onUpdate }) {
               />
               <span>
                 <span style={{ fontWeight: 600 }}>{label}</span>
-                <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{hint}</span>
+                <span style={{ display: 'block', fontSize: 'var(--type-label)', color: 'var(--text-secondary)' }}>{hint}</span>
               </span>
             </label>
           </div>
         ))}
         <div className="form-group">
           <label htmlFor={thresholdId} style={{ fontWeight: 600 }}>Seuil d'émission de l'acte (%)</label>
-          <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 4 }}>
+          <span style={{ display: 'block', fontSize: 'var(--type-label)', color: 'var(--text-secondary)', marginBottom: 4 }}>
             L'acte de réservation n'est émis qu'une fois ce pourcentage du prix total convenu encaissé
             (premier acompte compris).
           </span>

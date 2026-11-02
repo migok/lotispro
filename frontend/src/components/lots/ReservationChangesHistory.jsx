@@ -16,7 +16,7 @@ const FIELDS = [
 ];
 
 const formatChangedAt = (value) =>
-  new Date(value).toLocaleString('fr-FR', {
+  formatDate(value, {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
@@ -70,12 +70,12 @@ export default function ReservationChangesHistory({ reservationId, installments 
       {changes.map((change) => (
         <li key={change.id} className="rch-entry"
           style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '8px 10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 'var(--type-label)', color: 'var(--text-secondary)' }}>
             <span>{formatChangedAt(change.changed_at)}</span>
             <span>{change.user_name || '—'}</span>
           </div>
           <div style={{ fontWeight: 600, margin: '4px 0' }}>{change.reason}</div>
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.85rem' }}>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 'var(--type-body)' }}>
             {changeLines(change, labelById).map((line, index) => <li key={index}>{line}</li>)}
           </ul>
         </li>
