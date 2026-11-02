@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from '../ui/skeleton';
 import { formatDate } from '../../utils/formatters';
 import { useEffect, useState } from 'react';
 import { listNotifications } from '../../services/notificationsService';
@@ -28,7 +29,7 @@ export default function NotificationHistory({ clientId, lotId }) {
     return () => { cancelled = true; };
   }, [clientId, lotId]);
 
-  if (rows === null) return <div className="empty-state">Chargement…</div>;
+  if (rows === null) return <LoadingSkeleton label='Chargement' rows={3} />;
   if (failed) return <div className="empty-state">Impossible de charger les notifications</div>;
   if (rows.length === 0) return <div className="empty-state">Aucune notification</div>;
 

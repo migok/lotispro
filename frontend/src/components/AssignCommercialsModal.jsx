@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { apiGet, apiPost, apiDelete } from '../utils/api';
+import { ConfirmDialog } from './ui/confirm-dialog';
+import { Button } from './ui/button';
+import { LoadingSkeleton } from './ui/skeleton';
 
 export default function AssignCommercialsModal({ project, onClose, onAssigned }) {
   const [commercials, setCommercials] = useState([]);
@@ -7,6 +10,7 @@ export default function AssignCommercialsModal({ project, onClose, onAssigned })
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pendingUnassign, setPendingUnassign] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -53,10 +57,6 @@ export default function AssignCommercialsModal({ project, onClose, onAssigned })
   };
 
   const handleUnassign = async (userId) => {
-    if (!confirm('Retirer ce commercial du projet ?')) {
-      return;
-    }
-
     setActionLoading(true);
     setError('');
 
@@ -66,6 +66,7 @@ export default function AssignCommercialsModal({ project, onClose, onAssigned })
       onAssigned();
     } catch (err) {
       setError(err.message || 'Erreur lors du retrait');
+      throw err;
     } finally {
       setActionLoading(false);
     }
@@ -75,6 +76,7 @@ export default function AssignCommercialsModal({ project, onClose, onAssigned })
   const availableCommercials = commercials.filter((c) => !assignedUserIds.has(c.id));
 
   return (
+    <>
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
         <div className="modal-header">
@@ -96,9 +98,7 @@ export default function AssignCommercialsModal({ project, onClose, onAssigned })
           )}
 
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 'var(--spacing-lg)' }}>
-              <div className="loading-spinner"></div>
-            </div>
+            <LoadingSkeleton label="Chargement des commerciaux" rows={3} />
           ) : (
             <>
               {/* Assigned Users */}
@@ -125,14 +125,14 @@ export default function AssignCommercialsModal({ project, onClose, onAssigned })
                           <div className="user-name">{user.name}</div>
                           <div className="user-email">{user.email}</div>
                         </div>
-                        <button
-                          className="btn btn-sm btn-ghost"
-                          onClick={() => handleUnassign(user.id)}
+                        <Button
+                          variant="ghost" size="sm"
+                          onClick={() => setPendingUnassign(user)}
                           disabled={actionLoading}
                           title="Retirer du projet"
                         >
                           ✕ Retirer
-                        </button>
+                        </Button>
                       </div>
                     ))}
                   </div>
@@ -200,5 +200,10 @@ export default function AssignCommercialsModal({ project, onClose, onAssigned })
         </div>
       </div>
     </div>
+    <ConfirmDialog open={pendingUnassign !== null} onOpenChange={(open) => { if (!open) setPendingUnassign(null); }}
+      title="Retirer ce commercial du projet ?"
+      description={`${pendingUnassign?.name || 'Ce commercial'} n’aura plus accès à ce projet.`}
+      confirmLabel="Retirer le commercial" onConfirm={() => handleUnassign(pendingUnassign.id)} />
+    </>
   );
 }

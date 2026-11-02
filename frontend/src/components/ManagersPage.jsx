@@ -1,3 +1,4 @@
+import { LoadingSkeleton } from './ui/skeleton';
 import { formatDate } from '../utils/formatters';
 import { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../contexts/toastHooks';
@@ -218,7 +219,7 @@ export default function ManagersPage() {
           </div>
 
           {loading ? (
-            <div className="loading-state">Chargement…</div>
+            <LoadingSkeleton label='Chargement' rows={3} />
           ) : displayList.length === 0 ? (
             <div className="empty-state">
               <p>{searchQuery ? 'Aucun résultat pour cette recherche.' : 'Aucun manager enregistré.'}</p>

@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import KpiCards from '../KpiCards'
 
 const STATS = {
@@ -34,7 +35,7 @@ describe('KpiCards', () => {
     expect(within(card('En option au 31/10/2026')).getByText('3')).toBeInTheDocument()
   })
 
-  it('explains each flow KPI in a tooltip', () => {
+  it('explains each flow KPI in a keyboard-accessible tooltip', async () => {
     render(<KpiCards stats={STATS} loading={false} />)
     for (const title of [
       'Réservations engagées sur la période',
@@ -43,8 +44,11 @@ describe('KpiCards', () => {
       'Lots vendus ÷ réservations créées sur la même période (peut dépasser 100 %)',
       "Sommes reçues sur la période (versements à l'engagement et échéances)",
     ]) {
-      expect(screen.getByTitle(title)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: title })).toBeInTheDocument()
     }
+    await userEvent.tab()
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Réservations engagées sur la période')
+    await userEvent.keyboard('{Escape}')
   })
 
   it('shows a skeleton with aria-busy while loading', () => {

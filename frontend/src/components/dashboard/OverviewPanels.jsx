@@ -1,3 +1,4 @@
+import { Tooltip } from '../ui/tooltip';
 import { formatAmount } from '../../utils/formatters';
 import { useState } from 'react';
 import { useToast } from '../../contexts/toastHooks';
@@ -49,7 +50,7 @@ export default function OverviewPanels({ selectedStatuses, setSelectedStatuses, 
                 <div className="stat-label">Expirent bientôt</div>
               </div>
               <div className="stat-item">
-                <div className="stat-value num"><span tabIndex={0} title={formatAmount(alerts.summary.value_at_risk)} aria-label={formatAmount(alerts.summary.value_at_risk)}> {formatNumber(alerts.summary.value_at_risk, 'MAD')}</span></div>
+                <div className="stat-value num"><Tooltip content={formatAmount(alerts.summary.value_at_risk)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(alerts.summary.value_at_risk)}> {formatNumber(alerts.summary.value_at_risk, 'MAD')}</span></Tooltip></div>
                 <div className="stat-label">Valeur à risque</div>
               </div>
             </div>

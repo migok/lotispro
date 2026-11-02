@@ -371,7 +371,8 @@ describe('LotDetailModal', () => {
       mockFetch({ '/api/reservations/11/financial-summary': PENDING, '/api/reservations/11': RESERVATION, '/api/lots/5/documents': [] })
       renderModal(ENGAGED)
 
-      await screen.findByText("Chargement de l'échéancier…")
+      const loadingLabel = await screen.findByText("Chargement de l'échéancier")
+      expect(loadingLabel.closest('[role="status"]')).toHaveAttribute('aria-busy', 'true')
       expect(screen.queryByText("L'acte n'a pas été généré.")).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Régénérer' })).not.toBeInTheDocument()
     })

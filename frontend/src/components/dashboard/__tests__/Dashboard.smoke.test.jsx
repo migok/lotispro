@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../../test/renderWithProviders'
-import { apiGet } from '../../../utils/api'
+import { apiGet, apiPost } from '../../../utils/api'
 import Dashboard from '../../Dashboard'
 import { exportDashboard } from '../exportDashboard'
 
@@ -72,11 +72,31 @@ afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
   apiGet.mockReset()
+  apiPost.mockReset()
   exportDashboard.mockReset()
   sessionStorage.clear()
 })
 
 describe('Dashboard — sections', () => {
+  it('requires confirmation before releasing a reservation and preserves the API contract', async () => {
+    const normalGet = apiGet.getMockImplementation()
+    apiGet.mockImplementation(async (url) => url.startsWith('/api/dashboard/alerts') ? {
+      summary: { total_at_risk: 1, expired_count: 1, expiring_soon_count: 0, value_at_risk: 120000 },
+      reservations: [{ id: 42, lot_id: 2, lot_numero: 'A2', client_name: 'Client Option', lot_price: 120000, deposit: 0, risk_type: 'expired', days_remaining: -1 }],
+    } : normalGet(url))
+    const native = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderWithProviders(<Dashboard projectId={7} />, { user: { id: 1, role: 'manager' } })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Libérer' }))
+    expect(await screen.findByRole('alertdialog')).toHaveAccessibleName('Libérer le lot A2 ?')
+    expect(apiPost).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Annuler' }))
+    expect(apiPost).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Libérer' }))
+    await user.click(await screen.findByRole('button', { name: 'Libérer le lot' }))
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/reservations/42/release', {}))
+    expect(native).not.toHaveBeenCalled()
+  })
   it('renders the period, cumulative, stock and category sections for a manager', async () => {
     renderWithProviders(<Dashboard projectId={7} />, { user: { id: 1, role: 'manager' } })
 

@@ -668,7 +668,7 @@ body {
 }
 
 .kpi-icon.available { background-color: rgba(16, 185, 129, 0.2); color: var(--color-available); }
-.kpi-icon.reserved { background-color: rgba(245, 158, 11, 0.2); color: var(--color-reserved); }
+.kpi-icon.reserved { background-color: color-mix(in srgb, var(--color-reserved) 20%, transparent); color: var(--color-reserved); }
 .kpi-icon.sold { background-color: rgba(239, 68, 68, 0.2); color: var(--color-sold); }
 .kpi-icon.blocked { background-color: rgba(107, 114, 128, 0.2); color: var(--color-blocked); }
 .kpi-icon.money { background-color: rgba(16, 185, 129, 0.2); color: var(--color-success); }
@@ -846,21 +846,21 @@ body {
   text-transform: uppercase;
 }
 
-.lot-tooltip-status.creation               { background: rgba(107,114,128,0.2); color: #6b7280; }
-.lot-tooltip-status.available              { background: rgba(16,185,129,0.2);  color: #10b981; }
-.lot-tooltip-status.option                 { background: rgba(245,158,11,0.2);  color: #f59e0b; }
-.lot-tooltip-status.reservation_a_finaliser{ background: rgba(239,108,0,0.15);  color: #ef6c00; }
-.lot-tooltip-status.reservation_engagee    { background: rgba(124,58,237,0.15); color: #7c3aed; }
-.lot-tooltip-status.reservation_soldee     { background: rgba(37,99,235,0.15);  color: #2563eb; }
-.lot-tooltip-status.edl_programme          { background: rgba(56,189,248,0.15); color: #38bdf8; }
-.lot-tooltip-status.edl_realise            { background: rgba(14,165,233,0.15); color: #0ea5e9; }
-.lot-tooltip-status.edl_finalise           { background: rgba(2,132,199,0.15);  color: #0284c7; }
-.lot-tooltip-status.chez_notaire           { background: rgba(8,145,178,0.15);  color: #0891b2; }
-.lot-tooltip-status.chez_proprietaire      { background: rgba(16,185,129,0.2);  color: #16a34a; }
-.lot-tooltip-status.blocked                { background: rgba(107,114,128,0.2); color: #6b7280; }
+.lot-tooltip-status.creation               { background: color-mix(in srgb, var(--color-creation) 10%, var(--bg-secondary)); color: var(--color-creation); }
+.lot-tooltip-status.available              { background: color-mix(in srgb, var(--color-available) 10%, var(--bg-secondary)); color: var(--color-available); }
+.lot-tooltip-status.option                 { background: color-mix(in srgb, var(--color-option) 10%, var(--bg-secondary)); color: var(--color-option); }
+.lot-tooltip-status.reservation_a_finaliser{ background: color-mix(in srgb, var(--color-raf) 10%, var(--bg-secondary)); color: var(--color-raf); }
+.lot-tooltip-status.reservation_engagee    { background: color-mix(in srgb, var(--color-engaged) 10%, var(--bg-secondary)); color: var(--color-engaged); }
+.lot-tooltip-status.reservation_soldee     { background: color-mix(in srgb, var(--color-soldee) 10%, var(--bg-secondary)); color: var(--color-soldee); }
+.lot-tooltip-status.edl_programme          { background: color-mix(in srgb, var(--color-edl-programme) 10%, var(--bg-secondary)); color: var(--color-edl-programme); }
+.lot-tooltip-status.edl_realise            { background: color-mix(in srgb, var(--color-edl-realise) 10%, var(--bg-secondary)); color: var(--color-edl-realise); }
+.lot-tooltip-status.edl_finalise           { background: color-mix(in srgb, var(--color-edl-finalise) 10%, var(--bg-secondary)); color: var(--color-edl-finalise); }
+.lot-tooltip-status.chez_notaire           { background: color-mix(in srgb, var(--color-notaire) 10%, var(--bg-secondary)); color: var(--color-notaire); }
+.lot-tooltip-status.chez_proprietaire      { background: color-mix(in srgb, var(--color-proprietaire) 10%, var(--bg-secondary)); color: var(--color-proprietaire); }
+.lot-tooltip-status.blocked                { background: color-mix(in srgb, var(--color-blocked) 10%, var(--bg-secondary)); color: var(--color-blocked); }
 /* Legacy */
-.lot-tooltip-status.reserved  { background: rgba(245,158,11,0.2);  color: #f59e0b; }
-.lot-tooltip-status.sold      { background: rgba(239,68,68,0.2);   color: #ef4444; }
+.lot-tooltip-status.reserved  { background: color-mix(in srgb, var(--color-reserved) 10%, var(--bg-secondary)); color: var(--color-reserved); }
+.lot-tooltip-status.sold      { background: color-mix(in srgb, var(--color-proprietaire) 10%, var(--bg-secondary)); color: var(--color-proprietaire); }
 .lot-tooltip-status.validated { background: rgba(139,92,246,0.2);  color: #8b5cf6; }
 
 .lot-tooltip-row {
@@ -1360,7 +1360,7 @@ body {
   color: var(--color-available);
 }
 .status-badge.option {
-  background-color: rgba(245, 158, 11, 0.2);
+  background-color: color-mix(in srgb, var(--color-reserved) 20%, transparent);
   color: var(--color-option);
 }
 .status-badge.reservation_a_finaliser {
@@ -1402,7 +1402,7 @@ body {
 
 /* Legacy status badges — kept for historical data */
 .status-badge.reserved {
-  background-color: rgba(245, 158, 11, 0.2);
+  background-color: color-mix(in srgb, var(--color-reserved) 20%, transparent);
   color: var(--color-reserved);
 }
 .status-badge.sold {
@@ -1467,7 +1467,7 @@ body {
 .lots-filter-pill.filter-available                { color: var(--color-available);    border-color: var(--color-available); }
 .lots-filter-pill.filter-available.active         { background: rgba(16,185,129,0.12); }
 .lots-filter-pill.filter-option                   { color: var(--color-option);       border-color: var(--color-option); }
-.lots-filter-pill.filter-option.active            { background: rgba(245,158,11,0.12); }
+.lots-filter-pill.filter-option.active            { background: color-mix(in srgb, var(--color-reserved) 12%, transparent); }
 .lots-filter-pill.filter-reservation_a_finaliser  { color: var(--color-raf);          border-color: var(--color-raf); }
 .lots-filter-pill.filter-reservation_a_finaliser.active { background: rgba(239,108,0,0.12); }
 .lots-filter-pill.filter-reservation_engagee      { color: var(--color-engaged);      border-color: var(--color-engaged); }
@@ -1490,7 +1490,7 @@ body {
 .lots-filter-pill.filter-sold        { color: var(--color-sold);      border-color: var(--color-sold); }
 .lots-filter-pill.filter-sold.active { background: rgba(239,68,68,0.12); }
 .lots-filter-pill.filter-reserved        { color: var(--color-warning);   border-color: var(--color-warning); }
-.lots-filter-pill.filter-reserved.active { background: rgba(245,158,11,0.12); }
+.lots-filter-pill.filter-reserved.active { background: color-mix(in srgb, var(--color-reserved) 12%, transparent); }
 .lots-filter-pill.filter-validated        { color: var(--color-engaged);  border-color: var(--color-engaged); }
 .lots-filter-pill.filter-validated.active { background: rgba(124,58,237,0.12); }
 
@@ -1557,7 +1557,7 @@ body {
 }
 
 .expiry-chip.expiry-soon {
-  background: rgba(232, 169, 58, 0.15);
+  background: color-mix(in srgb, var(--color-warning) 15%, transparent);
   color: var(--color-warning);
 }
 
@@ -1663,7 +1663,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(232, 169, 58, 0.04) 0%, transparent 60%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-warning) 4%, transparent) 0%, transparent 60%);
   pointer-events: none;
 }
 
@@ -1682,10 +1682,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(232, 169, 58, 0.12);
+  background-color: color-mix(in srgb, var(--color-warning) 12%, transparent);
   color: var(--color-warning);
   flex-shrink: 0;
-  border: 1px solid rgba(232, 169, 58, 0.2);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 20%, transparent);
 }
 
 .alert-card.expired .alert-icon {
@@ -1781,7 +1781,7 @@ body {
 }
 
 .stat-item.stat-item-warning {
-  border-top: 2px solid rgba(232, 169, 58, 0.35);
+  border-top: 2px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
 }
 
 [data-theme="light"] .alert-card {
@@ -5135,7 +5135,7 @@ body {
 }
 
 .dashboard-v2 .kpi-icon-v2.reserved {
-  background: rgba(245, 158, 11, 0.15);
+  background: color-mix(in srgb, var(--color-reserved) 15%, transparent);
   color: var(--color-reserved);
 }
 
@@ -5790,7 +5790,7 @@ body {
 .status-filter-btn.available.active { background: rgba(16, 185, 129, 0.15); }
 
 .status-filter-btn.reserved { color: var(--color-reserved); }
-.status-filter-btn.reserved.active { background: rgba(245, 158, 11, 0.15); }
+.status-filter-btn.reserved.active { background: color-mix(in srgb, var(--color-reserved) 15%, transparent); }
 
 .status-filter-btn.sold { color: var(--color-sold); }
 .status-filter-btn.sold.active { background: rgba(239, 68, 68, 0.15); }
@@ -5865,8 +5865,8 @@ body {
 
 /* Réservé - Orange */
 .btn-status-filter.reserved {
-  background: rgba(245, 158, 11, 0.15);
-  border-color: rgba(245, 158, 11, 0.3);
+  background: color-mix(in srgb, var(--color-reserved) 15%, transparent);
+  border-color: color-mix(in srgb, var(--color-reserved) 30%, transparent);
   color: #b45309;
 }
 
@@ -5875,7 +5875,7 @@ body {
 }
 
 .btn-status-filter.reserved:hover {
-  background: rgba(245, 158, 11, 0.25);
+  background: color-mix(in srgb, var(--color-reserved) 25%, transparent);
   border-color: var(--warning);
 }
 
@@ -8678,7 +8678,7 @@ body {
   flex-shrink: 0;
 }
 .cl-pip-buyer    { background: rgba(46, 204, 113, 0.12); color: var(--color-available); border: 1px solid rgba(46, 204, 113, 0.25); }
-.cl-pip-reserved { background: rgba(232, 169, 58, 0.12); color: #e8a93a; border: 1px solid rgba(232, 169, 58, 0.25); }
+.cl-pip-reserved { background: color-mix(in srgb, var(--color-reserved) 12%, transparent); color: var(--color-reserved); border: 1px solid color-mix(in srgb, var(--color-reserved) 25%, transparent); }
 .cl-pip-past     { background: var(--bg-tertiary); color: var(--text-muted); border: 1px solid var(--border-subtle); }
 .cl-pip-prospect { background: rgba(99, 140, 210, 0.1); color: var(--text-secondary); border: 1px solid rgba(99, 140, 210, 0.2); }
 
@@ -9331,7 +9331,7 @@ body {
 }
 
 .chart-bar.reserved {
-  background: #e8a93a;
+  background: var(--color-reserved);
   opacity: 0.8;
 }
 
@@ -9431,7 +9431,7 @@ body {
 }
 
 .chart-tooltip-dot.sold { background: #8896ae; }
-.chart-tooltip-dot.reserved { background: #e8a93a; }
+.chart-tooltip-dot.reserved { background: var(--color-reserved); }
 
 .chart-tooltip-ca {
   margin-top: 6px;
@@ -9468,7 +9468,7 @@ body {
 }
 
 .legend-dot.sold    { background: #8896ae; }
-.legend-dot.reserved { background: #e8a93a; }
+.legend-dot.reserved { background: var(--color-reserved); }
 
 /* ═══════════════════════════════════════════════════════════════
    REP-CARD — Répartition par catégorie + Évolution mensuelle
@@ -9575,9 +9575,9 @@ body {
   border-color: rgba(136, 150, 174, 0.18);
 }
 .rep-summary-pill.reserved {
-  background: rgba(232, 169, 58, 0.13);
-  color: #e8a93a;
-  border-color: rgba(232, 169, 58, 0.2);
+  background: color-mix(in srgb, var(--color-reserved) 13%, transparent);
+  color: var(--color-reserved);
+  border-color: color-mix(in srgb, var(--color-reserved) 20%, transparent);
 }
 .rep-summary-pill.available {
   background: rgba(46, 204, 113, 0.1);
@@ -9596,7 +9596,7 @@ body {
 }
 
 [data-theme="light"] .rep-summary-pill.sold     { background: rgba(90, 104, 128, 0.09);  color: #5a6880; border-color: rgba(90,104,128,0.15); }
-[data-theme="light"] .rep-summary-pill.reserved { background: rgba(184, 107, 26, 0.09);  color: #b86b1a; border-color: rgba(184,107,26,0.18); }
+[data-theme="light"] .rep-summary-pill.reserved { background: color-mix(in srgb, var(--color-reserved) 9%, transparent);  color: var(--color-reserved); border-color: color-mix(in srgb, var(--color-reserved) 18%, transparent); }
 [data-theme="light"] .rep-summary-pill.available{ background: rgba(22, 163, 74, 0.09);   color: #16a34a; border-color: rgba(22,163,74,0.15); }
 [data-theme="light"] .rep-summary-pill.blocked  { background: rgba(197, 48, 48, 0.09);   color: #c53030; border-color: rgba(197,48,48,0.15); }
 
@@ -9616,7 +9616,7 @@ body {
   flex-shrink: 0;
 }
 .rep-dot.sold      { background: #8896ae; }
-.rep-dot.reserved  { background: #e8a93a; }
+.rep-dot.reserved  { background: var(--color-reserved); }
 .rep-dot.available { background: #2ecc71; }
 .rep-dot.blocked   { background: #e05555; }
 .rep-dot.others    { background: #3e4e68; }
@@ -9728,7 +9728,7 @@ body {
 .rep-row-seg:only-child  { border-radius: 999px; }
 
 .rep-row-seg.sold      { background: #8896ae; }
-.rep-row-seg.reserved  { background: #e8a93a; }
+.rep-row-seg.reserved  { background: var(--color-reserved); }
 .rep-row-seg.available { background: #2ecc71; }
 .rep-row-seg.blocked   { background: #e05555; }
 .rep-row-seg.others    { background: #2a3548; }
@@ -9756,13 +9756,13 @@ body {
 }
 
 .rep-badge.sold      { background: rgba(136, 150, 174, 0.15); color: #8896ae; }
-.rep-badge.reserved  { background: rgba(232, 169, 58, 0.15);  color: #e8a93a; }
+.rep-badge.reserved  { background: color-mix(in srgb, var(--color-reserved) 15%, transparent);  color: var(--color-reserved); }
 .rep-badge.available { background: rgba(46, 204, 113, 0.12);  color: #2ecc71; }
 .rep-badge.blocked   { background: rgba(224, 85, 85, 0.12);   color: #e05555; }
 .rep-badge.others    { background: rgba(62, 78, 104, 0.18);   color: #6e7e9e; }
 
 [data-theme="light"] .rep-badge.sold     { background: rgba(90, 104, 128, 0.12);  color: #5a6880; }
-[data-theme="light"] .rep-badge.reserved { background: rgba(184, 107, 26, 0.1);   color: #b86b1a; }
+[data-theme="light"] .rep-badge.reserved { background: color-mix(in srgb, var(--color-reserved) 10%, transparent);   color: var(--color-reserved); }
 [data-theme="light"] .rep-badge.available{ background: rgba(22, 163, 74, 0.1);    color: #16a34a; }
 [data-theme="light"] .rep-badge.blocked  { background: rgba(197, 48, 48, 0.1);    color: #c53030; }
 [data-theme="light"] .rep-badge.others   { background: rgba(90, 104, 128, 0.1);   color: #8896ae; }
@@ -11232,7 +11232,7 @@ body {
 }
 .status-badge--pill.option,
 .status-badge--pill.reservation_a_finaliser {
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25), 0 2px 8px rgba(245, 158, 11, 0.1);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-reserved) 25%, transparent), 0 2px 8px color-mix(in srgb, var(--color-reserved) 10%, transparent);
 }
 .status-badge--pill.reservation_engagee,
 .status-badge--pill.reservation_soldee {
@@ -11786,8 +11786,8 @@ body {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: rgba(232, 169, 58, 0.1);
-  border: 1px solid rgba(232, 169, 58, 0.2);
+  background: color-mix(in srgb, var(--color-reserved) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-reserved) 20%, transparent);
   border-radius: var(--radius-sm);
   font-size: var(--type-label);
   color: var(--color-warning);
@@ -13197,8 +13197,8 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .opt-badge--expired  { background: rgba(224,85,85,0.15);  color: var(--color-danger); }
-.opt-badge--critical { background: rgba(245,158,11,0.18); color: #e08000; }
-.opt-badge--warn     { background: rgba(245,158,11,0.12); color: var(--color-warning); }
+.opt-badge--critical { background: color-mix(in srgb, var(--color-warning) 18%, transparent); color: var(--color-warning); }
+.opt-badge--warn     { background: color-mix(in srgb, var(--color-warning) 12%, transparent); color: var(--color-warning); }
 .opt-badge--ok       { background: rgba(46,204,113,0.12); color: var(--color-success); }
 
 /* Light theme */

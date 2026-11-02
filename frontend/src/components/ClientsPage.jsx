@@ -1,6 +1,8 @@
+import { Tooltip } from './ui/tooltip';
 import { formatAmount } from '../utils/formatters';
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { LoadingSkeleton } from './ui/skeleton';
 import { useAuth } from '../contexts/authHooks';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost } from '../utils/api';
@@ -81,7 +83,6 @@ const PIPELINE_CONFIG = {
 
 /* ── Component ─────────────────────────────────────────────── */
 export default function ClientsPage() {
-  const navigate = useNavigate();
   const { token } = useAuth();
   const toast = useToast();
 
@@ -193,11 +194,11 @@ export default function ClientsPage() {
           <div className="stat-tile-label">Acheteurs</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-tile-value num"><span tabIndex={0} title={formatAmount(totalDeposits)} aria-label={formatAmount(totalDeposits)}> {formatCompactPrice(totalDeposits)}</span></div>
+          <div className="stat-tile-value num"><Tooltip content={formatAmount(totalDeposits)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(totalDeposits)}> {formatCompactPrice(totalDeposits)}</span></Tooltip></div>
           <div className="stat-tile-label">Acomptes versés</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-tile-value num"><span tabIndex={0} title={formatAmount(totalCA)} aria-label={formatAmount(totalCA)}> {formatCompactPrice(totalCA)}</span></div>
+          <div className="stat-tile-value num"><Tooltip content={formatAmount(totalCA)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(totalCA)}> {formatCompactPrice(totalCA)}</span></Tooltip></div>
           <div className="stat-tile-label">CA total</div>
         </div>
       </div>
@@ -263,7 +264,7 @@ export default function ClientsPage() {
           </div>
 
           {loading ? (
-            <div className="loading-state">Chargement…</div>
+            <LoadingSkeleton label="Chargement des clients" rows={4} />
           ) : displayList.length === 0 ? (
             <div className="empty-state">
               <p>
@@ -290,14 +291,13 @@ export default function ClientsPage() {
                     key={c.id}
                     className="cp-card"
                     style={{ animationDelay: `${idx * 0.05}s`, cursor: 'pointer' }}
-                    onClick={() => navigate(`/app/clients/${c.id}`)}
                   >
                     {/* Identity */}
                     <div className="cp-card-top">
                       <div className="monogram monogram-lg">{getInitials(c.name)}</div>
                       <div className="cp-identity">
                         <div className="cp-identity-row">
-                          <span className="identity-name">{c.name}</span>
+                          <Link className="identity-name ui-card-link" to={`/app/clients/${c.id}`}>{c.name}</Link>
                           {c.client_type && c.client_type !== 'autre' && (
                             <span className={`cp-perf-badge ${typeConf.cls}`}>{typeConf.label}</span>
                           )}
@@ -316,13 +316,9 @@ export default function ClientsPage() {
                         </div>
                       </div>
                       <div className="cp-card-btns">
-                        <button
-                          className="cl-view-btn"
-                          onClick={e => { e.stopPropagation(); navigate(`/app/clients/${c.id}`); }}
-                          title="Voir le profil"
-                        >
+                        <span className="cl-view-btn" aria-hidden="true">
                           <IconChevronRight />
-                        </button>
+                        </span>
                       </div>
                     </div>
 
@@ -339,7 +335,7 @@ export default function ClientsPage() {
                       </div>
                       <div className="cp-mini-stat-sep" />
                       <div className="cp-mini-stat">
-                        <span className="cp-mini-val num"><span tabIndex={0} title={formatAmount(c.total_deposit || 0)} aria-label={formatAmount(c.total_deposit || 0)}> {formatCompactPrice(c.total_deposit || 0)}</span></span>
+                        <span className="cp-mini-val num"><Tooltip content={formatAmount(c.total_deposit || 0)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(c.total_deposit || 0)}> {formatCompactPrice(c.total_deposit || 0)}</span></Tooltip></span>
                         <span className="cp-mini-lbl">Acompte</span>
                       </div>
                     </div>
@@ -406,17 +402,16 @@ export default function ClientsPage() {
                       key={c.id}
                       className="cp-lb-row"
                       style={{ cursor: 'pointer' }}
-                      onClick={() => navigate(`/app/clients/${c.id}`)}
                     >
                       <span className={`cp-lb-rank${i === 0 ? ' cp-lb-rank-1' : ''}`}>{i + 1}</span>
                       <div className="monogram monogram-sm">{getInitials(c.name)}</div>
                       <div className="cp-lb-identity">
-                        <span className="cp-lb-name">{c.name}</span>
+                        <Link className="cp-lb-name ui-card-link" to={`/app/clients/${c.id}`}>{c.name}</Link>
                         <div className="cp-lb-bar-track">
                           <div className="cp-lb-bar-fill" style={{ width: `${pct.toFixed(1)}%` }} />
                         </div>
                       </div>
-                      <span className="cp-lb-value num"><span tabIndex={0} title={formatAmount(c.total_purchases)} aria-label={formatAmount(c.total_purchases)}> {formatCompactPrice(c.total_purchases)}</span></span>
+                      <span className="cp-lb-value num"><Tooltip content={formatAmount(c.total_purchases)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(c.total_purchases)}> {formatCompactPrice(c.total_purchases)}</span></Tooltip></span>
                     </div>
                   );
                 })}
@@ -434,7 +429,7 @@ export default function ClientsPage() {
               <span className="cp-panel-stat-lbl">Réservations</span>
             </div>
             <div className="cp-panel-stat">
-              <span className="cp-panel-stat-val num"><span tabIndex={0} title={formatAmount(totalCA)} aria-label={formatAmount(totalCA)}> {formatCompactPrice(totalCA)}</span></span>
+              <span className="cp-panel-stat-val num"><Tooltip content={formatAmount(totalCA)}><span className="ui-amount-trigger" tabIndex={0} aria-label={formatAmount(totalCA)}> {formatCompactPrice(totalCA)}</span></Tooltip></span>
               <span className="cp-panel-stat-lbl">CA total</span>
             </div>
           </div>
