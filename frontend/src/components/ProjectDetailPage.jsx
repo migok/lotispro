@@ -16,7 +16,7 @@ import useLeafletAutoResize from './useLeafletAutoResize';
 import WorkflowSettings from './project/WorkflowSettings';
 import LotsTab from './project/LotsTab';
 import { lotFromFeature } from '../utils/lotFromFeature';
-import { ACTIVE_LOT_STATUSES, STATUS_HEX_COLORS, STATUS_LABELS } from '../utils/constants';
+import { ACTIVE_LOT_STATUSES, STATUS_COLORS as STATUS_TEXT_COLORS, STATUS_HEX_COLORS, STATUS_LABELS } from '../utils/constants';
 import { ALL_STATUSES, DEFAULT_ENABLED_OPTIONAL, allowedTransitions, enabledStatuses } from '../utils/lotWorkflow';
 
 const STATUS_COLORS = STATUS_HEX_COLORS;
@@ -1128,8 +1128,9 @@ function CarteTab({
 function LotMapPopup({ lot, onClose, onViewDetails, isManager, enabledOptional }) {
   const displayStatus = STATUS_LABELS[lot.status] ? lot.status : 'available';
   const statusColor = STATUS_HEX_COLORS[displayStatus];
-  // 12 % tint of the status colour for the pill background
-  const conf = { label: STATUS_LABELS[displayStatus], color: statusColor, bg: `${statusColor}1f` };
+  // Map ink is saturated for the basemap; popup text follows the active theme.
+  const textColor = STATUS_TEXT_COLORS[displayStatus];
+  const conf = { label: STATUS_LABELS[displayStatus], color: textColor, bg: `color-mix(in srgb, ${textColor} 12%, transparent)` };
   const priceM2 = lot.price && lot.surface && lot.surface > 0
     ? Math.round(lot.price / lot.surface)
     : null;
@@ -1158,7 +1159,7 @@ function LotMapPopup({ lot, onClose, onViewDetails, isManager, enabledOptional }
       {/* Status pill */}
       <div className="lot-map-popup-status-wrap">
         <span className="lot-map-popup-status" style={{ color: conf.color, background: conf.bg }}>
-          <span className="lot-map-popup-status-dot" style={{ background: conf.color }} />
+          <span className="lot-map-popup-status-dot" style={{ background: statusColor }} />
           {conf.label}
         </span>
         {lot.days_in_status > 0 && (
