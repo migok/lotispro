@@ -26,7 +26,7 @@
   --color-danger: #ff9299;
   --color-info: #9abfff;
   --action-danger: #a52336;
-  /* Commercial: violet; financial: blue; EDL: teal; notary: pink; delivered: green. */
+  /* Commercial: violet; financial: blue; EDL: teal; notary: pink; delivered: olive. */
   --color-creation: #bac4d5;
   --color-available: #66d6a5;
   --color-option: #d6bbff;
@@ -37,7 +37,7 @@
   --color-edl-realise: #79d6d0;
   --color-edl-finalise: #69c9c2;
   --color-notaire: #f4b4d0;
-  --color-proprietaire: #66d6a5;
+  --color-proprietaire: #c2dc78;
   --color-blocked: var(--color-danger);
   --color-reserved: var(--color-option);
   --color-sold: var(--color-proprietaire);
@@ -142,7 +142,7 @@
   --color-edl-realise: #135957;
   --color-edl-finalise: #0c514f;
   --color-notaire: #923c65;
-  --color-proprietaire: #12633f;
+  --color-proprietaire: #4a6216;
   --border-gold: rgb(130 80 20 / 0.24);
   --border-subtle: rgb(56 70 94 / 0.14);
   --border-control: #71809a;

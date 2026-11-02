@@ -2,6 +2,9 @@ import { ACTIVE_LOT_STATUSES, STATUS_COLORS, STATUS_HEX_COLORS, STATUS_LABELS } 
 import { ALL_STATUSES, EDL_STATUSES } from '../lotWorkflow'
 
 describe('status constants', () => {
+  it('assigns a distinct map colour to each of the 12 statuses', () => {
+    expect(new Set(Object.values(STATUS_HEX_COLORS)).size).toBe(12)
+  })
   it.each(ALL_STATUSES)('%s has a label, a CSS colour and a hex colour', (status) => {
     expect(STATUS_LABELS[status]).toEqual(expect.any(String))
     expect(STATUS_COLORS[status]).toMatch(/^var\(--color-[a-z-]+\)$/)
