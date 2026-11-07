@@ -147,15 +147,6 @@ function timelineType(ev) {
 // Reservations on which a payment can still be recorded (engaged, not yet sold)
 const OPEN_RESERVATION_STATUSES = ['active', 'validated'];
 
-/**
- * Échéancier et encaissements d'une réservation du client (spec E4-T5) : mêmes
- * montants et libellés que la fiche lot (PaymentsPanel).
- * « Enregistrer un encaissement » seulement sur une réservation engagée : la fiche client
- * n'expose pas le statut du lot, donc on s'appuie sur le résumé financier — `gap_due_timing`
- * n'est écrit qu'à l'engagement (E4-T5) et la réservation passe en `converted` au solde —
- * plus la règle auteur / manager (`canRecordFor`). Le backend refuse de toute façon un
- * encaissement hors réservation engagée.
- */
 function TimelineItem({ ev }) {
   return (
     <li className={`cd-timeline-item cd-tl-${timelineType(ev)}`}>
@@ -172,6 +163,15 @@ function TimelineItem({ ev }) {
   );
 }
 
+/**
+ * Échéancier et encaissements d'une réservation du client (spec E4-T5) : mêmes
+ * montants et libellés que la fiche lot (PaymentsPanel).
+ * « Enregistrer un encaissement » seulement sur une réservation engagée : la fiche client
+ * n'expose pas le statut du lot, donc on s'appuie sur le résumé financier — `gap_due_timing`
+ * n'est écrit qu'à l'engagement (E4-T5) et la réservation passe en `converted` au solde —
+ * plus la règle auteur / manager (`canRecordFor`). Le backend refuse de toute façon un
+ * encaissement hors réservation engagée.
+ */
 function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRecorded, highlighted }) {
   const res = reservations.find(r => r.id === schedule.reservation_id);
   const label = res
@@ -619,9 +619,9 @@ export default function ClientDetailPage() {
       <div className="stat-strip">
         <div className="stat-tile cd-stat-grow">
           <div className="stat-tile-value" style={{ color: 'var(--color-success)' }}>
-            <Amount label="Total des achats" value={stats.total_purchases || 0} />
+            <Amount label="Total des achats" value={stats.total_purchases || 0} compact={false} />
           </div>
-          <div className="stat-tile-label">CA Total</div>
+          <div className="stat-tile-label">Total des achats</div>
         </div>
         <div className="stat-tile">
           <div className="stat-tile-value num">{stats.total_lots || 0}</div>

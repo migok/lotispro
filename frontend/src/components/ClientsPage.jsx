@@ -35,6 +35,8 @@ export default function ClientsPage() {
   const [showModal, setShowModal] = useState(false);
   const [preview, setPreview] = useState(null);
   const previewTrigger = useRef(null);
+  const createTrigger = useRef(null);
+  const openCreate = (event) => { createTrigger.current = event.currentTarget; setShowModal(true); };
 
   const loadClients = useCallback(async () => {
     setLoading(true);
@@ -74,6 +76,7 @@ export default function ClientsPage() {
   const totals = useMemo(() => portfolioTotals(clients), [clients]);
   const base = useMemo(() => filterBySearchAndType(clients, { q, type }), [clients, q, type]);
   const counts = useMemo(() => countByPipeline(base), [base]);
+  const total = PIPELINE_FILTERS.reduce((sum, { key }) => sum + counts[key], 0);
   const rows = useMemo(() => filterByPipeline(base, pipeline), [base, pipeline]);
   const hasFilters = Boolean(q || type || pipeline);
   const portfolioSearch = location.search;
@@ -88,7 +91,7 @@ export default function ClientsPage() {
     { key: 'active_reservations', header: 'Réservations', sortable: true, align: 'right', render: (value) => value || 0 },
     { key: 'total_sales', header: 'Achats', sortable: true, align: 'right', render: (value) => value || 0 },
     { key: 'total_deposit', header: 'Acomptes', sortable: true, align: 'right', render: (value) => <Amount value={value || 0} /> },
-    { key: 'total_purchases', header: 'Total achats', sortable: true, align: 'right', render: (value) => <Amount value={value || 0} /> },
+    { key: 'total_purchases', header: 'Total des achats', sortable: true, align: 'right', render: (value) => <Amount value={value || 0} /> },
     { key: 'actions', header: 'Aperçu', render: (_, c) => <Button variant="ghost" size="sm" aria-label={`Aperçu de ${c.name}`} onClick={(event) => { previewTrigger.current = event.currentTarget; setPreview(c); }}>Aperçu</Button> },
   ], [portfolioSearch]);
 
@@ -99,7 +102,7 @@ export default function ClientsPage() {
     body = <div role="alert" className="clients-error"><span>Impossible de charger les clients</span><Button variant="secondary" onClick={loadClients}>Réessayer</Button></div>;
   } else if (!clients.length) {
     body = <EmptyState title="Aucun client enregistré" description="Ajoutez votre premier client pour suivre son parcours."
-      action={<Button onClick={() => setShowModal(true)}>Ajouter le premier client</Button>} />;
+      action={<Button onClick={openCreate}>Ajouter le premier client</Button>} />;
   } else {
     body = <>
       <div className="clients-kpis">
@@ -119,6 +122,11 @@ export default function ClientsPage() {
         </label>
         {hasFilters && rows.length > 0 && <Button variant="secondary" onClick={resetFilters}>Réinitialiser les filtres</Button>}
       </div>
+      {total > 0 && <div className="clients-pipeline-bar" aria-hidden="true">
+        {PIPELINE_FILTERS.filter(({ key }) => counts[key] > 0).map(({ key }) => <div key={key} data-pipeline={key}
+          className={`clients-pipeline-segment is-${key}${pipeline === key ? ' is-selected' : ''}${pipeline && pipeline !== key ? ' is-dimmed' : ''}`}
+          style={{ width: `${(counts[key] / total) * 100}%` }} onClick={() => setFilter('pipeline', pipeline === key ? '' : key)} />)}
+      </div>}
       <div className="clients-pipeline">
         {PIPELINE_FILTERS.map(({ key, label }) => <Button key={key} variant="outline" size="sm" aria-pressed={pipeline === key}
           aria-label={`${label} : ${plural(counts[key])}`} onClick={() => setFilter('pipeline', pipeline === key ? '' : key)}>
@@ -138,11 +146,11 @@ export default function ClientsPage() {
         <p className="clients-eyebrow">Portefeuille</p>
         <h1>Clients</h1>
       </div>
-      <Button onClick={() => setShowModal(true)}>Nouveau client</Button>
+      <Button onClick={openCreate}>Nouveau client</Button>
     </div>
     {body}
     <Dialog open={showModal} onOpenChange={setShowModal}>
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={(event) => { event.preventDefault(); createTrigger.current?.focus(); }}>
         <DialogTitle>Créer un client</DialogTitle>
         <DialogDescription>Renseignez les informations du nouveau contact.</DialogDescription>
         <ClientForm onSubmit={handleCreate} onCancel={() => setShowModal(false)} submitLabel="Créer le client" />

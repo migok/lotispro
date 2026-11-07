@@ -158,3 +158,31 @@ it('keeps the same API scope for an authenticated commercial', async () => {
   expect(profileNames(await table())).toHaveLength(4);
   expect(apiGet).toHaveBeenCalledWith('/api/dashboard/clients-pipeline');
 });
+
+it('returns focus to « Nouveau client » when the create dialog closes with Escape', async () => {
+  renderPage();
+  await table();
+  const open = screen.getByRole('button', { name: 'Nouveau client' });
+  await userEvent.click(open);
+  await screen.findByRole('dialog', { name: 'Créer un client' });
+  await userEvent.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  await waitFor(() => expect(open).toHaveFocus());
+});
+
+it('filters from the stacked pipeline bar like the matching button, without extra tab stops', async () => {
+  const { container } = renderPage();
+  const list = await table();
+  const bar = container.querySelector('.clients-pipeline-bar');
+  expect(bar).toHaveAttribute('aria-hidden', 'true');
+  expect(bar.querySelectorAll('[data-pipeline]')).toHaveLength(4);
+  expect(bar.querySelector('[data-pipeline="buyer"]').style.width).toBe('25%');
+  await userEvent.click(bar.querySelector('[data-pipeline="prospect"]'));
+  expect(profileNames(await table())).toEqual(['Chadia Idrissi']);
+  expect(screen.getByRole('button', { name: 'Prospects : 1 client' })).toHaveAttribute('aria-pressed', 'true');
+  expect(bar.querySelector('[data-pipeline="prospect"]')).toHaveClass('is-selected');
+  expect(within(list).getByRole('button', { name: /^Achats/ })).toBeInTheDocument();
+  expect(within(list).queryAllByRole('button', { name: /^Achats/ })).toHaveLength(1);
+  await userEvent.click(bar.querySelector('[data-pipeline="prospect"]'));
+  expect(profileNames(await table())).toHaveLength(4);
+});

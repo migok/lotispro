@@ -65,3 +65,12 @@ it('keeps the same financial totals and project filtering', async () => {
   expect(screen.getByRole('button', { name: 'Total des achats : 400 000 MAD' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Achats (4)' })).toBeInTheDocument();
 });
+
+it('shows the exact purchases total in the profile tile, not a compact figure', async () => {
+  renderPage();
+  const tile = await screen.findByRole('button', { name: 'Total des achats : 700 000 MAD' });
+  expect(tile).toHaveTextContent('700 000 MAD');
+  expect(tile).not.toHaveTextContent(/\bk\b|\bM MAD/i);
+  expect(tile.closest('.stat-tile')).toHaveTextContent('Total des achats');
+  expect(screen.queryByText('CA Total')).not.toBeInTheDocument();
+});
