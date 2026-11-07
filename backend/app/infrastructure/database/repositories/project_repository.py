@@ -2,7 +2,7 @@
 
 from sqlalchemy import and_, func, or_, select
 
-from app.domain.lot_workflow import DEFAULT_ENABLED_OPTIONAL, SOLD_STATUSES
+from app.domain.lot_workflow import DEFAULT_ENABLED_OPTIONAL, DELIVERED_STATUS
 from app.infrastructure.database.models import (
     AssignmentModel,
     LotModel,
@@ -27,12 +27,12 @@ class ProjectRepository(BaseRepository[ProjectModel]):
         Returns:
             Project with accurate sold_lots and total_lots counts
         """
-        # Subquery to count sold lots (soldée and every later status)
+        # Subquery to count sold lots (handed over to the owner)
         sold_lots_subquery = (
             select(func.count(LotModel.id))
             .where(
                 LotModel.project_id == id,
-                LotModel.status.in_(SOLD_STATUSES),
+                LotModel.status == DELIVERED_STATUS,
             )
             .scalar_subquery()
         )
@@ -93,7 +93,7 @@ class ProjectRepository(BaseRepository[ProjectModel]):
                 LotModel.project_id,
                 func.count(LotModel.id).label("sold_count"),
             )
-            .where(LotModel.status.in_(SOLD_STATUSES))
+            .where(LotModel.status == DELIVERED_STATUS)
             .group_by(LotModel.project_id)
             .subquery()
         )

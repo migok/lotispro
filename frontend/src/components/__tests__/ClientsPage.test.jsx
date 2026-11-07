@@ -39,7 +39,7 @@ it('preserves the portfolio financial totals while filters change', async () => 
   renderPage();
   await table();
   expect(screen.getByRole('button', { name: 'Réservations actives : 3' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Acomptes versés : 70 000 MAD' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Encaissé : 70 000 MAD' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Total des achats : 500 000 MAD' })).toBeInTheDocument();
   await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type de client' }), 'investisseur');
   expect(profileNames(await table())).toEqual(['Brahim Benali']);

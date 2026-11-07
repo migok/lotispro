@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.domain.dashboard_period import Period, business_today, resolve_period
-from app.domain.lot_workflow import EDL_STATUSES, SOLD_STATUSES
+from app.domain.lot_workflow import EDL_STATUSES, IN_PROGRESS_STATUSES
 from app.domain.schemas.dashboard import (
     AlertsSummary,
     AverageDurations,
@@ -36,6 +36,10 @@ from app.infrastructure.database.repositories import (
     ReservationRepository,
     SaleRepository,
 )
+from app.infrastructure.database.repositories.reservation_payment_repository import (
+    amount_net_expr,
+    amount_received_expr,
+)
 from app.services.dashboard_period_service import DashboardPeriodService
 from app.services.payment_progress import payment_progress
 
@@ -44,13 +48,9 @@ logger = get_logger(__name__)
 # Reservation statuses that mean the lot is actively reserved (legacy, kept for queries)
 _ACTIVE_STATUSES = ("active", "validated")
 
-# Lot statuses that represent an active sales workflow
-_ACTIVE_LOT_STATUSES = (
-    "option",
-    "reservation_a_finaliser",
-    "reservation_engagee",
-    *SOLD_STATUSES,
-)
+# Lot statuses that represent an active sales workflow (« En cours »), the
+# lots handed over to their owner excluded: they have their own bucket.
+_ACTIVE_LOT_STATUSES = IN_PROGRESS_STATUSES
 
 
 class DashboardService:
@@ -211,7 +211,6 @@ class DashboardService:
                 + global_row.edl_realise
                 + global_row.edl_finalise
                 + global_row.chez_notaire
-                + global_row.chez_proprietaire
             )
             counts = DashboardCounts(
                 total=global_row.total,
@@ -251,7 +250,6 @@ class DashboardService:
                 + global_row.edl_realise
                 + global_row.edl_finalise
                 + global_row.chez_notaire
-                + global_row.chez_proprietaire
             )
             counts = DashboardCounts(
                 total=global_row.total,
@@ -890,9 +888,9 @@ class DashboardService:
             active_res_result = await self.session.execute(active_res_query)
             active_reservations = active_res_result.scalar() or 0
 
-            # Get total deposits from active reservations
+            # Amount received on their active reservations
             deposits_query = select(
-                func.coalesce(func.sum(ReservationModel.deposit), 0)
+                func.coalesce(func.sum(amount_received_expr()), 0)
             ).where(
                 ReservationModel.reserved_by_user_id == user.id,
                 ReservationModel.status.in_(_ACTIVE_STATUSES),
@@ -1002,10 +1000,10 @@ class DashboardService:
             total_sales = sales_row[0] or 0
             total_purchases = float(sales_row[1] or 0)
 
-            # Calculate total deposit
-            deposit_query = select(func.sum(ReservationModel.deposit)).where(
+            # Amount received on all their reservations, refunds deducted
+            # (same as the fiche client)
+            deposit_query = select(func.sum(amount_net_expr())).where(
                 ReservationModel.client_id == client.id,
-                ReservationModel.status.in_(_ACTIVE_STATUSES),
             )
             if project_id:
                 deposit_query = deposit_query.where(

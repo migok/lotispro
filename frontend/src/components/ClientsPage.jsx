@@ -90,7 +90,7 @@ export default function ClientsPage() {
     { key: 'phone', header: 'Téléphone', render: (value) => value ? <a href={`tel:${value}`}>{value}</a> : '—' },
     { key: 'active_reservations', header: 'Réservations', sortable: true, align: 'right', render: (value) => value || 0 },
     { key: 'total_sales', header: 'Achats', sortable: true, align: 'right', render: (value) => value || 0 },
-    { key: 'total_deposit', header: 'Acomptes', sortable: true, align: 'right', render: (value) => <Amount value={value || 0} /> },
+    { key: 'total_deposit', header: 'Encaissé', sortable: true, align: 'right', render: (value) => <Amount value={value || 0} /> },
     { key: 'total_purchases', header: 'Total des achats', sortable: true, align: 'right', render: (value) => <Amount value={value || 0} /> },
     { key: 'actions', header: 'Aperçu', render: (_, c) => <Button variant="ghost" size="sm" aria-label={`Aperçu de ${c.name}`} onClick={(event) => { previewTrigger.current = event.currentTarget; setPreview(c); }}>Aperçu</Button> },
   ], [portfolioSearch]);
@@ -107,7 +107,7 @@ export default function ClientsPage() {
     body = <>
       <div className="clients-kpis">
         <StatTile label="Réservations actives" value={totals.reservations} />
-        <StatTile label="Acomptes versés" value={totals.deposits} currency />
+        <StatTile label="Encaissé" value={totals.deposits} currency />
         <StatTile label="Total des achats" value={totals.purchases} currency />
       </div>
       <div className="clients-toolbar">
@@ -167,7 +167,7 @@ export default function ClientsPage() {
               <dt>CIN</dt><dd>{preview.cin || '—'}</dd>
               <dt>Téléphone</dt><dd>{preview.phone ? <a href={`tel:${preview.phone}`}>{preview.phone}</a> : '—'}</dd>
               <dt>E-mail</dt><dd>{preview.email ? <a href={`mailto:${preview.email}`}>{preview.email}</a> : '—'}</dd>
-              <dt>Acomptes versés</dt><dd><Amount value={preview.total_deposit || 0} compact={false} /></dd>
+              <dt>Encaissé</dt><dd><Amount value={preview.total_deposit || 0} compact={false} /></dd>
               <dt>Total des achats</dt><dd><Amount value={preview.total_purchases || 0} compact={false} /></dd>
             </dl>
             <Link to={`/app/clients/${preview.id}`} state={{ portfolioSearch }}>Ouvrir la fiche client</Link>

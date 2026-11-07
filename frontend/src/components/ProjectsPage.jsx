@@ -210,7 +210,7 @@ export default function ProjectsPage() {
       ) : (
         <div className="projects-grid">
           {filteredProjects.map((project) => {
-            const available = project.total_lots - project.sold_lots - (project.reserved_lots || 0);
+            const available = project.available_lots || 0;
 
             return (
               <div
@@ -272,7 +272,7 @@ export default function ProjectsPage() {
                       <span className="project-stat-value" style={{ color: 'var(--color-reserved)' }}>
                         {project.reserved_lots || 0}
                       </span>
-                      <span className="project-stat-label">réservés</span>
+                      <span className="project-stat-label">en cours</span>
                     </div>
                     <div className="project-stat-divider" />
                     <div className="project-stat">

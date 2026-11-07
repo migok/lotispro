@@ -1223,13 +1223,6 @@ class ReservationService:
             lot_id, new_status, transition="solde", user_id=user_id
         )
 
-        project = await self.project_repo.get_by_id(lot.project_id)
-        if project:
-            await self.project_repo.update_lot_counts(
-                lot.project_id,
-                sold_lots=project.sold_lots + 1,
-            )
-
         logger.info(
             "Lot marked as soldee — sale created",
             lot_id=lot_id,

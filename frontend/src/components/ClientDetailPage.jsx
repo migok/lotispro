@@ -518,7 +518,8 @@ export default function ClientDetailPage() {
   const stats = {
     total_purchases: sales.reduce((sum, s) => sum + (s.price || 0), 0),
     total_lots: sales.length,
-    total_deposit: reservations.reduce((sum, r) => sum + (r.deposit || 0), 0),
+    // Net of the refunds of cancelled reservations (shown apart below)
+    total_deposit: reservations.reduce((sum, r) => sum + (r.amount_net || 0), 0),
     total_refund: reservations.filter(r => r.status === 'released').reduce((sum, r) => sum + (r.deposit_refund_amount || 0), 0),
     active_reservations: reservations.filter(r => r.status === 'active' || r.status === 'validated').length,
     lots_liberes: reservations.filter(r => r.status === 'released' || r.status === 'expired').length,
@@ -536,7 +537,7 @@ export default function ClientDetailPage() {
       kind: 'reservation', status: r.status,
       date: r.reservation_date,
       label: `Réservation lot ${r.lot_numero}`,
-      sub: r.project_name, amount: r.deposit,
+      sub: r.project_name, amount: r.amount_received,
     })),
   ]
     .sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -631,7 +632,7 @@ export default function ClientDetailPage() {
           <div className="stat-tile-value" style={{ color: 'var(--color-primary)' }}>
             {formatPrice(stats.total_deposit || 0)}
           </div>
-          <div className="stat-tile-label">Acomptes versés</div>
+          <div className="stat-tile-label">Encaissé</div>
         </div>
         {stats.total_refund > 0 && (
           <div className="stat-tile cd-stat-grow">
@@ -909,9 +910,9 @@ export default function ClientDetailPage() {
                         </div>
                       </div>
                       <div className="cd-list-right">
-                        {res.deposit > 0 && (
-                          <div className="cd-list-price cd-list-price--brass">
-                            {formatPrice(res.deposit)}
+                        {res.amount_received > 0 && (
+                          <div className="cd-list-price cd-list-price--brass" title="Encaissé">
+                            {formatPrice(res.amount_received)}
                           </div>
                         )}
                         {res.status === 'released' && res.deposit_refund_amount > 0 && (

@@ -964,7 +964,7 @@ class TestFinalReviewFixes:
 
         from app.core.exceptions import BusinessRuleError
         from app.domain.schemas.sale import SaleFromReservation
-        from app.infrastructure.database.models import ProjectModel
+        from app.infrastructure.database.repositories import ProjectRepository
         from app.services.reservation_service import ReservationService
 
         lot, _ = await _direct_engage(
@@ -983,9 +983,6 @@ class TestFinalReviewFixes:
             current_reservation_id=lot.current_reservation_id,
             price=lot.price,
         )
-        project = await db_session.get(ProjectModel, lot.project_id)
-        assert project is not None
-        sold_before = project.sold_lots
 
         first = ReservationService(db_session)
         await first.engagee_to_soldee(
@@ -1010,5 +1007,7 @@ class TestFinalReviewFixes:
         await db_session.rollback()
         sales = (await db_session.execute(select(SaleModel))).scalars().all()
         assert len(sales) == 1
-        await db_session.refresh(project)
-        assert project.sold_lots == sold_before + 1
+        # A soldée lot is not handed over yet: not counted as sold
+        counted = await ProjectRepository(db_session).get_by_id(stale.project_id)
+        assert counted is not None
+        assert counted.sold_lots == 0

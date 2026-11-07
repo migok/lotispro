@@ -90,7 +90,7 @@ export default function CumulativeKpis({ stats, projectKpis, projectId: propsPro
             </div>
             <div>
               <div><Amount value={projectKpis?.total_deposits} /></div>
-              <div>Total Acomptes <InfoTip text="Somme des acomptes perçus sur les réservations validées (non encore vendues)" className="kpis-info-icon kpis-info-icon-dark" /></div>
+              <div>Encaissé en cours <InfoTip text="Montants encaissés sur les réservations en cours (non soldées)" className="kpis-info-icon kpis-info-icon-dark" /></div>
             </div>
             <div>
               <div><Amount value={projectKpis?.ca_objectif} /></div>

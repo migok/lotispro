@@ -80,8 +80,11 @@ class ProjectResponse(BaseSchema):
     description: str | None
     visibility: str
     total_lots: int
-    sold_lots: int
-    reserved_lots: int = Field(default=0, description="Number of reserved lots")
+    sold_lots: int = Field(description="Lots handed over (chez le propriétaire)")
+    reserved_lots: int = Field(
+        default=0, description="Lots in progress (option → chez le notaire)"
+    )
+    available_lots: int = Field(default=0, description="Lots available for sale")
     ca_objectif: float | None
     delivery_date: date | None = Field(
         default=None,

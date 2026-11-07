@@ -9,6 +9,10 @@ from app.infrastructure.database.models import (
     UserModel,
 )
 from app.infrastructure.database.repositories.base import BaseRepository
+from app.infrastructure.database.repositories.reservation_payment_repository import (
+    amount_net_expr,
+    amount_received_expr,
+)
 
 
 class ClientRepository(BaseRepository[ClientModel]):
@@ -159,7 +163,14 @@ class ClientRepository(BaseRepository[ClientModel]):
 
         # Get reservations history
         reservations_query = (
-            select(ReservationModel, LotModel, ProjectModel, UserModel)
+            select(
+                ReservationModel,
+                LotModel,
+                ProjectModel,
+                UserModel,
+                amount_received_expr(),
+                amount_net_expr(),
+            )
             .join(LotModel, LotModel.id == ReservationModel.lot_id)
             .join(ProjectModel, ProjectModel.id == ReservationModel.project_id)
             .outerjoin(UserModel, UserModel.id == ReservationModel.reserved_by_user_id)
@@ -170,13 +181,22 @@ class ClientRepository(BaseRepository[ClientModel]):
         reservations_result = await self.session.execute(reservations_query)
         reservations_history = []
 
-        for reservation, lot, project, reserver in reservations_result.all():
+        for (
+            reservation,
+            lot,
+            project,
+            reserver,
+            amount_received,
+            amount_net,
+        ) in reservations_result.all():
             reservations_history.append(
                 {
                     "id": reservation.id,
                     "reservation_date": reservation.reservation_date,
                     "expiration_date": reservation.expiration_date,
                     "deposit": reservation.deposit,
+                    "amount_received": float(amount_received or 0),
+                    "amount_net": float(amount_net or 0),
                     "deposit_date": reservation.deposit_date,
                     "deposit_refund_amount": reservation.deposit_refund_amount,
                     "deposit_refund_date": reservation.deposit_refund_date,
@@ -208,7 +228,7 @@ class ClientRepository(BaseRepository[ClientModel]):
         sale_stats = stats_result.one()
 
         deposit_result = await self.session.execute(
-            select(func.sum(ReservationModel.deposit)).where(
+            select(func.sum(amount_net_expr())).where(
                 ReservationModel.client_id == client_id
             )
         )
