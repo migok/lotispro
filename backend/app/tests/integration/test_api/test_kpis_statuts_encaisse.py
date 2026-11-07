@@ -181,9 +181,42 @@ class TestProjectKpis:
         db_session: AsyncSession,
         manager: UserModel,
         commercial: UserModel,
+        other_commercial: UserModel,
         auth_headers: Callable[[UserModel], dict[str, str]],
     ) -> None:
         s = await _scenario(db_session, manager, commercial)
+        # The other commercial's lots must not count
+        await assign(db_session, other_commercial, s.project)
+        l8 = await make_lot(db_session, s.project, status="chez_proprietaire")
+        r8 = await make_reservation(
+            db_session,
+            l8,
+            s.client,
+            user=other_commercial,
+            status="converted",
+            agreed_total_price=900_000,
+        )
+        l8.current_reservation_id = r8.id
+        await make_reservation_payment(db_session, r8, 900_000, PAID_ON)
+        await _sale(db_session, l8, r8, s.client, other_commercial, 900_000)
+        l10 = await make_lot(db_session, s.project, status="option")
+        r10 = await make_reservation(
+            db_session, l10, s.client, user=other_commercial, deposit=50_000
+        )
+        l10.current_reservation_id = r10.id
+        # The commercial's reservation marked soldée by the manager is theirs
+        l9 = await make_lot(db_session, s.project, status="chez_proprietaire")
+        r9 = await make_reservation(
+            db_session,
+            l9,
+            s.client,
+            user=commercial,
+            status="converted",
+            agreed_total_price=600_000,
+        )
+        l9.current_reservation_id = r9.id
+        await _sale(db_session, l9, r9, s.client, manager, 600_000)
+        await db_session.commit()
 
         resp = await client.get(
             f"/api/projects/{s.project.id}/kpis",
@@ -193,13 +226,62 @@ class TestProjectKpis:
 
         assert resp.status_code == 200, resp.json()
         kpis = resp.json()
-        assert kpis["sold_lots"] == 1
+        assert kpis["sold_lots"] == 2
         assert kpis["reserved_lots"] == 4
-        assert kpis["surface_vendue"] == 250
+        assert kpis["surface_vendue"] == 450
         assert kpis["surface_reservee"] == 800
-        assert kpis["prix_moyen_lot"] == 800_000
-        assert kpis["prix_moyen_m2"] == 3_200
+        assert kpis["prix_moyen_lot"] == 700_000
+        assert kpis["prix_moyen_m2"] == pytest.approx(3_111.11)
         assert kpis["total_deposits"] == 135_000
+
+    async def test_a_resold_lot_counts_its_current_sale_only(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        project = await make_project(db_session, manager)
+        buyer = await make_client(db_session, commercial)
+        lot = await make_lot(db_session, project, status="chez_proprietaire")
+        first = await make_reservation(
+            db_session, lot, buyer, user=commercial, status="converted"
+        )
+        await _sale(db_session, lot, first, buyer, commercial, 100_000)
+        current = await make_reservation(
+            db_session, lot, buyer, user=commercial, status="converted"
+        )
+        lot.current_reservation_id = current.id
+        await _sale(db_session, lot, current, buyer, commercial, 500_000)
+        await db_session.commit()
+
+        resp = await client.get(
+            f"/api/projects/{project.id}/kpis", headers=auth_headers(manager)
+        )
+
+        assert resp.json()["prix_moyen_lot"] == 500_000
+
+    async def test_a_reservation_left_on_a_lot_back_to_sale_is_not_in_progress(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        """Block / unblock puts the lot back to available, its reservation stays active."""
+        project = await make_project(db_session, manager)
+        buyer = await make_client(db_session, commercial)
+        lot = await make_lot(db_session, project, status="available")
+        await make_reservation(db_session, lot, buyer, user=commercial, deposit=10_000)
+        await db_session.commit()
+
+        resp = await client.get(
+            f"/api/projects/{project.id}/kpis", headers=auth_headers(manager)
+        )
+
+        assert resp.json()["total_deposits"] == 0
 
 
 @pytest.mark.integration
@@ -309,3 +391,38 @@ class TestClientDetail:
         received = sorted(r["amount_received"] for r in body["reservations_history"])
         assert received == [10_000, 100_000, 800_000]
         assert body["stats"]["total_deposit"] == 910_000
+
+    async def test_received_amount_rules_for_legacy_and_refunded_guarantee(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        project = await make_project(db_session, manager)
+        buyer = await make_client(db_session, commercial)
+        # Legacy: payments recorded, no agreed total price
+        legacy = await make_reservation(
+            db_session,
+            await make_lot(db_session, project, status="reservation_engagee"),
+            buyer,
+            deposit=10_000,
+        )
+        await make_reservation_payment(db_session, legacy, 30_000, PAID_ON)
+        # Engaged after the guarantee was refunded: nothing received yet
+        await make_reservation(
+            db_session,
+            await make_lot(db_session, project, status="reservation_engagee"),
+            buyer,
+            guarantee_amount=20_000,
+            agreed_total_price=500_000,
+        )
+        await db_session.commit()
+
+        resp = await client.get(
+            f"/api/clients/{buyer.id}/details", headers=auth_headers(manager)
+        )
+
+        history = resp.json()["reservations_history"]
+        assert sorted(r["amount_received"] for r in history) == [0, 30_000]

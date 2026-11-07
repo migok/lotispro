@@ -977,7 +977,7 @@ class ProjectService:
             progression_ca = round((ca_realise / ca_objectif) * 100, 2)
 
         prix_moyen_lot, prix_moyen_m2 = await self._delivered_average_prices(
-            project_id, sold_by_user_id=filter_user_id
+            project_id, reserved_by_user_id=filter_user_id
         )
         total_deposits = await self._received_in_progress(
             project_id, reserved_by_user_id=filter_user_id
@@ -1094,23 +1094,35 @@ class ProjectService:
         }
 
     async def _delivered_average_prices(
-        self, project_id: int, *, sold_by_user_id: int | None = None
+        self, project_id: int, *, reserved_by_user_id: int | None = None
     ) -> tuple[float, float]:
-        """Average price per lot and per m² of the sales of lots handed over."""
+        """Average price per lot and per m² of the lots handed over.
+
+        One sale per lot: the sale of its current reservation (a lot sold
+        again keeps its earlier sales). The commercial is the one who made
+        the reservation, whoever marked it soldée.
+        """
         query = (
             select(
                 func.coalesce(func.sum(SaleModel.price), 0),
                 func.count(SaleModel.id),
                 func.coalesce(func.sum(LotModel.surface), 0),
             )
-            .join(LotModel, LotModel.id == SaleModel.lot_id)
+            .select_from(LotModel)
+            .join(
+                ReservationModel,
+                ReservationModel.id == LotModel.current_reservation_id,
+            )
+            .join(SaleModel, SaleModel.reservation_id == ReservationModel.id)
             .where(
-                SaleModel.project_id == project_id,
+                LotModel.project_id == project_id,
                 LotModel.status == DELIVERED_STATUS,
             )
         )
-        if sold_by_user_id is not None:
-            query = query.where(SaleModel.sold_by_user_id == sold_by_user_id)
+        if reserved_by_user_id is not None:
+            query = query.where(
+                ReservationModel.reserved_by_user_id == reserved_by_user_id
+            )
         total, count, surface = (await self.session.execute(query)).one()
         per_lot = round(float(total) / count, 2) if count else 0.0
         per_m2 = round(float(total) / float(surface), 2) if surface else 0.0
@@ -1119,10 +1131,19 @@ class ProjectService:
     async def _received_in_progress(
         self, project_id: int, *, reserved_by_user_id: int | None = None
     ) -> float:
-        """Amount received on the project's in-progress (not sold) reservations."""
-        query = select(func.coalesce(func.sum(amount_received_expr()), 0)).where(
-            ReservationModel.project_id == project_id,
-            ReservationModel.status.in_(("active", "validated")),
+        """Amount received on the project's in-progress (not sold) reservations.
+
+        Only the current reservation of a lot still in progress: a lot blocked
+        then put back on sale leaves its reservation ``active``.
+        """
+        query = (
+            select(func.coalesce(func.sum(amount_received_expr()), 0))
+            .join(LotModel, LotModel.current_reservation_id == ReservationModel.id)
+            .where(
+                ReservationModel.project_id == project_id,
+                ReservationModel.status.in_(("active", "validated")),
+                LotModel.status.in_(IN_PROGRESS_STATUSES),
+            )
         )
         if reserved_by_user_id is not None:
             query = query.where(

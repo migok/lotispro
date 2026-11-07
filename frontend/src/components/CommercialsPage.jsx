@@ -426,7 +426,7 @@ export default function CommercialsPage() {
         </div>
         <div className="stat-tile">
           <div className="stat-tile-value num"><Amount value={totalDeposits} /></div>
-          <div className="stat-tile-label">Encaissé (en cours)</div>
+          <div className="stat-tile-label">Encaissé en cours</div>
         </div>
         <div className="stat-tile">
           <div className="stat-tile-value num"><Amount value={totalRevenue} /></div>
@@ -573,7 +573,7 @@ export default function CommercialsPage() {
                       <div className="cp-mini-stat-sep" />
                       <div className="cp-mini-stat">
                         <span className="cp-mini-val num"><Amount value={stats.total_deposits || 0} /></span>
-                        <span className="cp-mini-lbl">Encaissé</span>
+                        <span className="cp-mini-lbl">Encaissé en cours</span>
                       </div>
                     </div>
 

@@ -1656,7 +1656,7 @@ function KPIsTab({ project }) {
                 </svg>
               </div>
               <div className="kpis-metric-content">
-                <div className="kpis-metric-label">R&eacute;serv&eacute;e</div>
+                <div className="kpis-metric-label">En cours</div>
                 <div className="kpis-metric-value">{formatSurface(kpis?.surface_reservee)}</div>
               </div>
             </div>
@@ -1707,7 +1707,7 @@ function KPIsTab({ project }) {
 
           <div className="kpis-rate-card">
             <div className="kpis-rate-header">
-              <span>Taux de R&eacute;servation</span>
+              <span>Taux en cours</span>
               <span className="kpis-rate-value" style={{ color: 'var(--color-warning)' }}>
                 {kpis?.taux_reservation || 0}%
               </span>
