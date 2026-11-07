@@ -21,3 +21,6 @@
 .clients-preview dt { color: var(--text-secondary); }
 .clients-preview dd { margin: 0; overflow-wrap: anywhere; }
 @media (min-width: 640px) { .clients-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.cd-dialog { max-height: 90vh; overflow-y: auto; }
+.cd-project-filter-icon { display: inline-flex; align-items: center; gap: var(--spacing-xs); }
+.cd-project-label { font-size: var(--type-label); color: var(--text-secondary); }
