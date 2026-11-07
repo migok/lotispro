@@ -156,6 +156,22 @@ const OPEN_RESERVATION_STATUSES = ['active', 'validated'];
  * plus la règle auteur / manager (`canRecordFor`). Le backend refuse de toute façon un
  * encaissement hors réservation engagée.
  */
+function TimelineItem({ ev }) {
+  return (
+    <li className={`cd-timeline-item cd-tl-${timelineType(ev)}`}>
+      <div className="cd-tl-dot" />
+      <div className="cd-tl-content">
+        <div className="cd-tl-top">
+          <span className="cd-tl-day">{formatDate(ev.date)}</span>
+          {ev.sub && <span className="badge badge-gray">{ev.sub}</span>}
+        </div>
+        <div className="cd-tl-label">{ev.label}</div>
+        {ev.amount > 0 && <div className="cd-tl-amount">{formatPrice(ev.amount)}</div>}
+      </div>
+    </li>
+  );
+}
+
 function PaymentOverviewCard({ schedule, reservations, canRecordFor, onPaymentRecorded, highlighted }) {
   const res = reservations.find(r => r.id === schedule.reservation_id);
   const label = res
@@ -813,24 +829,7 @@ export default function ClientDetailPage() {
             </div>
           ) : (
             <ol className="cd-timeline-list">
-              {summaryEvents.map((ev, i) => {
-                const type = timelineType(ev);
-                return (
-                  <li key={i} className={`cd-timeline-item cd-tl-${type}`}>
-                    <div className="cd-tl-dot" />
-                    <div className="cd-tl-content">
-                      <div className="cd-tl-top">
-                        <span className="cd-tl-day">{formatDate(ev.date)}</span>
-                        {ev.sub && <span className="badge badge-gray">{ev.sub}</span>}
-                      </div>
-                      <div className="cd-tl-label">{ev.label}</div>
-                      {ev.amount > 0 && (
-                        <div className="cd-tl-amount">{formatPrice(ev.amount)}</div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
+              {summaryEvents.map((ev, i) => <TimelineItem key={i} ev={ev} />)}
             </ol>
           )}
           {timelineEvents.length > 0 && (
@@ -1026,19 +1025,7 @@ export default function ClientDetailPage() {
           <DialogTitle>Historique commercial de {client.name}</DialogTitle>
           <DialogDescription>{timelineEvents.length} événement{timelineEvents.length > 1 ? 's' : ''}, du plus récent au plus ancien.</DialogDescription>
           <ol className="cd-timeline-list">
-            {timelineEvents.map((ev, i) => (
-              <li key={i} className={`cd-timeline-item cd-tl-${timelineType(ev)}`}>
-                <div className="cd-tl-dot" />
-                <div className="cd-tl-content">
-                  <div className="cd-tl-top">
-                    <span className="cd-tl-day">{formatDate(ev.date)}</span>
-                    {ev.sub && <span className="badge badge-gray">{ev.sub}</span>}
-                  </div>
-                  <div className="cd-tl-label">{ev.label}</div>
-                  {ev.amount > 0 && <div className="cd-tl-amount">{formatPrice(ev.amount)}</div>}
-                </div>
-              </li>
-            ))}
+            {timelineEvents.map((ev, i) => <TimelineItem key={i} ev={ev} />)}
           </ol>
         </DialogContent>
       </Dialog>
