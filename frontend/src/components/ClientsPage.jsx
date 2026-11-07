@@ -196,7 +196,7 @@ export default function ClientsPage() {
         </div>
         <div className="stat-tile">
           <div className="stat-tile-value num"><Amount value={totalDeposits} /></div>
-          <div className="stat-tile-label">Acomptes versés</div>
+          <div className="stat-tile-label">Encaissé</div>
         </div>
         <div className="stat-tile">
           <div className="stat-tile-value num"><Amount value={totalCA} /></div>
@@ -338,7 +338,7 @@ export default function ClientsPage() {
                       <div className="cp-mini-stat-sep" />
                       <div className="cp-mini-stat">
                         <span className="cp-mini-val num"><Amount value={c.total_deposit || 0} /></span>
-                        <span className="cp-mini-lbl">Acompte</span>
+                        <span className="cp-mini-lbl">Encaissé</span>
                       </div>
                     </div>
 

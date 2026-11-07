@@ -1501,7 +1501,7 @@ function KPIsTab({ project }) {
             </div>
             <div className="kpis-stock-info">
               <div className="kpis-stock-value">{kpis?.reserved_lots || 0}</div>
-              <div className="kpis-stock-label">R&eacute;serv&eacute;s</div>
+              <div className="kpis-stock-label">En cours</div>
             </div>
           </div>
 
@@ -1607,7 +1607,7 @@ function KPIsTab({ project }) {
                 </svg>
               </div>
               <div className="kpis-metric-content">
-                <div className="kpis-metric-label">Total Acomptes</div>
+                <div className="kpis-metric-label">Encaissé en cours</div>
                 <div className="kpis-metric-value">{formatMoney(kpis?.total_deposits)}</div>
               </div>
             </div>
