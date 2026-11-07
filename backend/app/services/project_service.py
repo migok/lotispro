@@ -15,6 +15,8 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger
 from app.domain.lot_workflow import (
+    DELIVERED_STATUS,
+    IN_PROGRESS_STATUSES,
     OPTIONAL_KEY_LABELS,
     OPTIONAL_KEY_STATUSES,
     assert_transition_allowed,
@@ -48,9 +50,14 @@ from app.infrastructure.database.repositories import (
     SaleRepository,
     UserRepository,
 )
+from app.infrastructure.database.repositories.reservation_payment_repository import (
+    amount_received_expr,
+)
 from app.services.payment_progress import payment_progress
 
 logger = get_logger(__name__)
+
+_EMPTY_BUCKETS = {"available_lots": 0, "reserved_lots": 0, "sold_lots": 0}
 
 
 class ProjectService:
@@ -97,20 +104,9 @@ class ProjectService:
             )
             ca_objectifs = {row[0]: float(row[1]) for row in result.all()}
 
-            # Get reserved lots count grouped by project
-            reserved_result = await self.session.execute(
-                select(
-                    LotModel.project_id, func.count(LotModel.id).label("reserved_count")
-                )
-                .where(
-                    LotModel.project_id.in_(project_ids),
-                    LotModel.status == "reserved",
-                )
-                .group_by(LotModel.project_id)
-            )
-            reserved_lots_map = {row[0]: row[1] for row in reserved_result.all()}
+            buckets = await self._lot_buckets(project_ids)
         else:
-            reserved_lots_map = {}
+            buckets = {}
 
         return [
             ProjectResponse(
@@ -119,8 +115,7 @@ class ProjectService:
                 description=p.description,
                 visibility=p.visibility,
                 total_lots=p.total_lots,
-                sold_lots=p.sold_lots,
-                reserved_lots=reserved_lots_map.get(p.id, 0),
+                **buckets.get(p.id, _EMPTY_BUCKETS),
                 ca_objectif=ca_objectifs.get(p.id, 0.0),
                 geojson_file_url=p.geojson_file_url,
                 image_url=p.image_url,
@@ -198,14 +193,9 @@ class ProjectService:
         )
         ca_objectif = float(ca_objectif_result.scalar() or 0)
 
-        # Count reserved lots
-        reserved_result = await self.session.execute(
-            select(func.count(LotModel.id)).where(
-                LotModel.project_id == project_id,
-                LotModel.status == "reserved",
-            )
+        buckets = (await self._lot_buckets([project_id])).get(
+            project_id, _EMPTY_BUCKETS
         )
-        reserved_lots = reserved_result.scalar() or 0
 
         return ProjectResponse(
             id=project.id,
@@ -213,8 +203,7 @@ class ProjectService:
             description=project.description,
             visibility=project.visibility,
             total_lots=project.total_lots,
-            sold_lots=project.sold_lots,
-            reserved_lots=reserved_lots,
+            **buckets,
             ca_objectif=ca_objectif,
             geojson_file_url=project.geojson_file_url,
             image_url=project.image_url,
@@ -699,10 +688,16 @@ class ProjectService:
                     func.sum(LotModel.surface).filter(LotModel.status == "available"), 0
                 ).label("available"),
                 func.coalesce(
-                    func.sum(LotModel.surface).filter(LotModel.status == "reserved"), 0
+                    func.sum(LotModel.surface).filter(
+                        LotModel.status.in_(IN_PROGRESS_STATUSES)
+                    ),
+                    0,
                 ).label("reserved"),
                 func.coalesce(
-                    func.sum(LotModel.surface).filter(LotModel.status == "sold"), 0
+                    func.sum(LotModel.surface).filter(
+                        LotModel.status == DELIVERED_STATUS
+                    ),
+                    0,
                 ).label("sold"),
             ).where(LotModel.project_id == project_id)
         )
@@ -739,8 +734,8 @@ class ProjectService:
 
         # Calculate rates
         total = sum(status_counts.values()) or 1
-        sold_lots = status_counts.get("sold", 0)
-        reserved_lots = status_counts.get("reserved", 0)
+        sold_lots = status_counts.get(DELIVERED_STATUS, 0)
+        reserved_lots = sum(status_counts.get(s, 0) for s in IN_PROGRESS_STATUSES)
         taux_vente = round((sold_lots / total) * 100, 2)
         taux_reservation = round((reserved_lots / total) * 100, 2)
 
@@ -771,22 +766,8 @@ class ProjectService:
         if ca_objectif > 0:
             progression_ca = round((ca_realise / ca_objectif) * 100, 2)
 
-        prix_moyen_lot = 0.0
-        if sold_lots > 0:
-            prix_moyen_lot = round(ca_realise / sold_lots, 2)
-
-        prix_moyen_m2 = 0.0
-        if surface_vendue > 0:
-            prix_moyen_m2 = round(ca_realise / surface_vendue, 2)
-
-        # Total deposits from validated reservations only (confirmed by commercial)
-        deposits_result = await self.session.execute(
-            select(func.coalesce(func.sum(ReservationModel.deposit), 0)).where(
-                ReservationModel.project_id == project_id,
-                ReservationModel.status == "validated",
-            )
-        )
-        total_deposits = float(deposits_result.scalar() or 0)
+        prix_moyen_lot, prix_moyen_m2 = await self._delivered_average_prices(project_id)
+        total_deposits = await self._received_in_progress(project_id)
 
         # Monthly stats - current month
         from datetime import date
@@ -892,24 +873,36 @@ class ProjectService:
 
         project_id = project.id
 
-        # Count user's reservations (active)
-        reserved_count_result = await self.session.execute(
-            select(func.count()).where(
-                ReservationModel.project_id == project_id,
+        # The user's lots: those whose current reservation is theirs
+        user_lots = await self.session.execute(
+            select(
+                func.count().filter(LotModel.status.in_(IN_PROGRESS_STATUSES)),
+                func.count().filter(LotModel.status == DELIVERED_STATUS),
+                func.coalesce(
+                    func.sum(LotModel.surface).filter(
+                        LotModel.status.in_(IN_PROGRESS_STATUSES)
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(LotModel.surface).filter(
+                        LotModel.status == DELIVERED_STATUS
+                    ),
+                    0,
+                ),
+            )
+            .join(
+                ReservationModel,
+                ReservationModel.id == LotModel.current_reservation_id,
+            )
+            .where(
+                LotModel.project_id == project_id,
                 ReservationModel.reserved_by_user_id == filter_user_id,
-                ReservationModel.status == "active",
             )
         )
-        reserved_lots = reserved_count_result.scalar() or 0
-
-        # Count user's sales
-        sold_count_result = await self.session.execute(
-            select(func.count()).where(
-                SaleModel.project_id == project_id,
-                SaleModel.sold_by_user_id == filter_user_id,
-            )
-        )
-        sold_lots = sold_count_result.scalar() or 0
+        reserved_lots, sold_lots, surface_reservee, surface_vendue = user_lots.one()
+        surface_reservee = float(surface_reservee or 0)
+        surface_vendue = float(surface_vendue or 0)
 
         # CA realized (user's sales + deposits from their validated reservations)
         ca_result = await self.session.execute(
@@ -970,32 +963,6 @@ class ProjectService:
         total_res = conv_row.total or 1
         taux_transformation = round((conv_row.converted / total_res) * 100, 2)
 
-        # Surfaces for user's lots
-        surface_reserved_result = await self.session.execute(
-            select(func.coalesce(func.sum(LotModel.surface), 0)).where(
-                LotModel.id.in_(
-                    select(ReservationModel.lot_id).where(
-                        ReservationModel.project_id == project_id,
-                        ReservationModel.reserved_by_user_id == filter_user_id,
-                        ReservationModel.status == "active",
-                    )
-                ),
-            )
-        )
-        surface_reservee = float(surface_reserved_result.scalar() or 0)
-
-        surface_sold_result = await self.session.execute(
-            select(func.coalesce(func.sum(LotModel.surface), 0)).where(
-                LotModel.id.in_(
-                    select(SaleModel.lot_id).where(
-                        SaleModel.project_id == project_id,
-                        SaleModel.sold_by_user_id == filter_user_id,
-                    )
-                ),
-            )
-        )
-        surface_vendue = float(surface_sold_result.scalar() or 0)
-
         # Calculate ca_objectif as total price of all lots
         ca_objectif_result = await self.session.execute(
             select(func.coalesce(func.sum(LotModel.price), 0)).where(
@@ -1009,23 +976,12 @@ class ProjectService:
         if ca_objectif > 0:
             progression_ca = round((ca_realise / ca_objectif) * 100, 2)
 
-        prix_moyen_lot = 0.0
-        if sold_lots > 0:
-            prix_moyen_lot = round(ca_realise / sold_lots, 2)
-
-        prix_moyen_m2 = 0.0
-        if surface_vendue > 0:
-            prix_moyen_m2 = round(ca_realise / surface_vendue, 2)
-
-        # Total deposits from user's validated reservations only (confirmed by commercial)
-        deposits_result = await self.session.execute(
-            select(func.coalesce(func.sum(ReservationModel.deposit), 0)).where(
-                ReservationModel.project_id == project_id,
-                ReservationModel.reserved_by_user_id == filter_user_id,
-                ReservationModel.status == "validated",
-            )
+        prix_moyen_lot, prix_moyen_m2 = await self._delivered_average_prices(
+            project_id, sold_by_user_id=filter_user_id
         )
-        total_deposits = float(deposits_result.scalar() or 0)
+        total_deposits = await self._received_in_progress(
+            project_id, reserved_by_user_id=filter_user_id
+        )
 
         # Monthly stats for this user
         today = date.today()
@@ -1119,6 +1075,60 @@ class ProjectService:
             tendance_ventes=tendance_ventes,
             tendance_ca=tendance_ca,
         )
+
+    async def _lot_buckets(self, project_ids: list[int]) -> dict[int, dict[str, int]]:
+        """Available / in-progress / handed-over lot counts per project."""
+        result = await self.session.execute(
+            select(
+                LotModel.project_id,
+                func.count().filter(LotModel.status == "available"),
+                func.count().filter(LotModel.status.in_(IN_PROGRESS_STATUSES)),
+                func.count().filter(LotModel.status == DELIVERED_STATUS),
+            )
+            .where(LotModel.project_id.in_(project_ids))
+            .group_by(LotModel.project_id)
+        )
+        return {
+            pid: {"available_lots": a, "reserved_lots": r, "sold_lots": s}
+            for pid, a, r, s in result.all()
+        }
+
+    async def _delivered_average_prices(
+        self, project_id: int, *, sold_by_user_id: int | None = None
+    ) -> tuple[float, float]:
+        """Average price per lot and per m² of the sales of lots handed over."""
+        query = (
+            select(
+                func.coalesce(func.sum(SaleModel.price), 0),
+                func.count(SaleModel.id),
+                func.coalesce(func.sum(LotModel.surface), 0),
+            )
+            .join(LotModel, LotModel.id == SaleModel.lot_id)
+            .where(
+                SaleModel.project_id == project_id,
+                LotModel.status == DELIVERED_STATUS,
+            )
+        )
+        if sold_by_user_id is not None:
+            query = query.where(SaleModel.sold_by_user_id == sold_by_user_id)
+        total, count, surface = (await self.session.execute(query)).one()
+        per_lot = round(float(total) / count, 2) if count else 0.0
+        per_m2 = round(float(total) / float(surface), 2) if surface else 0.0
+        return per_lot, per_m2
+
+    async def _received_in_progress(
+        self, project_id: int, *, reserved_by_user_id: int | None = None
+    ) -> float:
+        """Amount received on the project's in-progress (not sold) reservations."""
+        query = select(func.coalesce(func.sum(amount_received_expr()), 0)).where(
+            ReservationModel.project_id == project_id,
+            ReservationModel.status.in_(("active", "validated")),
+        )
+        if reserved_by_user_id is not None:
+            query = query.where(
+                ReservationModel.reserved_by_user_id == reserved_by_user_id
+            )
+        return float((await self.session.execute(query)).scalar() or 0)
 
     async def get_project_performance(
         self,

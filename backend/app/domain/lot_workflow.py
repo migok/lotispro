@@ -51,6 +51,17 @@ SOLD_STATUSES: tuple[str, ...] = (
     "chez_notaire",
     "chez_proprietaire",
 )
+# KPI buckets (user decision 2026-11-07): a lot counts as sold once handed
+# over to its owner; every status from the option to the notary is in progress.
+DELIVERED_STATUS = "chez_proprietaire"
+IN_PROGRESS_STATUSES: tuple[str, ...] = (
+    "option",
+    "reservation_a_finaliser",
+    "reservation_engagee",
+    "reservation_soldee",
+    *EDL_STATUSES,
+    "chez_notaire",
+)
 # Statuses where the lot's état des lieux is shown (a lot sent back to
 # ``available`` keeps its current reservation, hence its old EDL).
 EDL_VISIBLE_STATUSES: tuple[str, ...] = (

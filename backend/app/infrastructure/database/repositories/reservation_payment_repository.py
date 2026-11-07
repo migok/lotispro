@@ -1,11 +1,12 @@
 """Reservation payments repository (encaissements, never updated nor deleted)."""
 
-from sqlalchemy import Select, or_, select
+from sqlalchemy import ColumnElement, Select, case, func, or_, select
 
 from app.domain.reservation_amounts import to_cents
 from app.infrastructure.database.models import (
     PaymentInstallmentModel,
     PaymentScheduleModel,
+    ReservationModel,
     ReservationPaymentModel,
     UserModel,
 )
@@ -15,6 +16,27 @@ from app.infrastructure.database.repositories.base import BaseRepository
 def _sum(amounts: list[float]) -> float:
     """Exact sum to the cent (R5)."""
     return sum(to_cents(a) for a in amounts) / 100
+
+
+def amount_received_expr() -> ColumnElement[float]:
+    """Amount received on a reservation, per ``ReservationModel`` row.
+
+    Once engaged (agreed total price set, or payments recorded) it is the sum
+    of its payments; before that, the option deposit plus the guarantee.
+    Single source of the « Encaissé » amounts (fiche client, pipeline,
+    commerciaux, KPIs projet).
+    """
+    paid = (
+        select(func.coalesce(func.sum(ReservationPaymentModel.amount), 0.0))
+        .where(ReservationPaymentModel.reservation_id == ReservationModel.id)
+        .correlate(ReservationModel)
+        .scalar_subquery()
+    )
+    return case(
+        (or_(ReservationModel.agreed_total_price.is_not(None), paid > 0), paid),
+        else_=func.coalesce(ReservationModel.deposit, 0.0)
+        + func.coalesce(ReservationModel.guarantee_amount, 0.0),
+    )
 
 
 def installment_for_update(installment_id: int) -> Select:

@@ -565,7 +565,7 @@ class TestReadAndCounts:
 
         assert response.status_code == 404
 
-    async def test_dashboard_counts_edl_lot_as_sold(
+    async def test_dashboard_counts_edl_lot_as_in_progress(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -590,7 +590,9 @@ class TestReadAndCounts:
         assert counts["edl_programme"] == 0
         assert counts["edl_finalise"] == 0
         assert counts["en_cours"] == 1
-        assert project_body.json()["sold_lots"] == 1
+        # Sold = handed over to the owner (decision of 2026-11-07)
+        assert project_body.json()["sold_lots"] == 0
+        assert project_body.json()["reserved_lots"] == 1
 
     async def test_lot_list_filters_on_edl_status(
         self,

@@ -985,7 +985,6 @@ class TestFinalReviewFixes:
         )
         project = await db_session.get(ProjectModel, lot.project_id)
         assert project is not None
-        sold_before = project.sold_lots
 
         first = ReservationService(db_session)
         await first.engagee_to_soldee(
@@ -1010,5 +1009,6 @@ class TestFinalReviewFixes:
         await db_session.rollback()
         sales = (await db_session.execute(select(SaleModel))).scalars().all()
         assert len(sales) == 1
+        # A soldée lot is not handed over yet: the project's sold count is unchanged
         await db_session.refresh(project)
-        assert project.sold_lots == sold_before + 1
+        assert project.sold_lots == 0
