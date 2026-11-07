@@ -323,7 +323,7 @@ Light (`data-theme="light"`): `#f4f5f0` warm stone + `#b87728` deep brass
 |--------|----------------------|------------|-------------|
 | creation | `#64748b` | `#94a3b8` | `#475569` |
 | available | `#15803d` | `#4ade80` | `#15803d` |
-| option | `#d97706` | `#fbbf24` | `#a16207` |
+| option | `#a21caf` | `#d946ef` | `#a21caf` |
 | reservation_a_finaliser | `#9333ea` | `#c084fc` | `#9333ea` |
 | reservation_engagee | `#2563eb` | `#60a5fa` | `#2563eb` |
 | reservation_soldee | `#0891b2` | `#22d3ee` | `#0e7490` |
@@ -337,11 +337,16 @@ Light (`data-theme="light"`): `#f4f5f0` warm stone + `#b87728` deep brass
 `STATUS_LABELS`, `STATUS_COLORS` and `STATUS_HEX_COLORS` in `utils/constants.js`
 are authoritative. The CSS references resolve through `styles/tokens.css`; keep the
 12 status colours perceptually separated in each theme, including within a phase.
-Available stock is green, options amber, reservations to finalise violet, engaged
+Available stock is green, options fuchsia, reservations to finalise violet, engaged
 blue, settled cyan; EDL uses rust, teal and indigo; notary pink, delivered lime,
 blocked red and creation slate. Map outlines use saturated variants on the pale
 basemap, shared by legend dots. Regression checks require a CIELAB distance of at
 least 20 between every pair and map colour contrast of at least 3:1 against white.
+No status may read as the brand gold: the option colour stays at least 40 CIELAB units
+from `--color-primary` (map, dark and light).
+Client pipeline stages use their own aliases in `tokens.css` (`--pipeline-buyer`,
+`--pipeline-active`, `--pipeline-prospect`, `--pipeline-past`), shared by the client
+portfolio bar and the dashboard `.pipeline-badge`; never the brand gold or an alert colour.
 These numerical checks complement visual QA; labels remain necessary for identification.
 
 **Typography:** Cormorant Garamond (display) + DM Sans (body) + DM Mono (mono)  

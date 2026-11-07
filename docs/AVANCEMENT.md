@@ -8,7 +8,7 @@
 
 **Légende :** ⬜ À faire · 🟦 En cours · 🟨 En revue · ✅ Terminé · ⛔ Bloqué
 
-_Dernière mise à jour : 2026-11-02 (E5 et E6 terminés ; refonte UI : lots 1 à 3 en revue, recette visuelle à réaliser)_
+_Dernière mise à jour : 2026-11-07 (refonte UI : lots 1 à 3 fusionnés, recette visuelle à réaliser ; lot 4 en revue)_
 
 ## Vue d'ensemble
 
@@ -29,10 +29,10 @@ Ajustement E2 « téléphone international » (2026-10-26, livré par [#53](http
 
 | Lot | Statut | Portée | Validation |
 |---|---|---|---|
-| 1 — Fondations | 🟨 [En revue (#58)](https://github.com/migok/lotispro/pull/58) | Tokens, contraste, typographie, formateurs, Tailwind v4 et configuration shadcn | 589 tests verts (correction 58.1) ; lint et build OK ; recette visuelle bloquée par le contrôle Chrome |
-| 2 — Primitives | 🟨 [En revue (#59)](https://github.com/migok/lotispro/pull/59) | Composants accessibles, confirmations, skeletons, navigation clavier | 617 tests verts (corrections 59.1–59.2) ; lint et build OK ; recette visuelle non validée |
-| 3 — Shell et dashboard global | 🟨 En revue | Autorisé le 2026-11-02 ; navigation, KPI actuels, stock filtrable, À traiter, évolution E6, erreurs par source | 678 tests verts (corrections 60.1–60.6) ; lint et build OK ; recette visuelle non validée |
-| 4 — Clients | ⬜ À faire | Hors périmètre de cette session | — |
+| 1 — Fondations | 🟨 [Fusionné (#58)](https://github.com/migok/lotispro/pull/58), recette à faire | Tokens, contraste, typographie, formateurs, Tailwind v4 et configuration shadcn | 589 tests verts (correction 58.1) ; lint et build OK ; recette visuelle bloquée par le contrôle Chrome |
+| 2 — Primitives | 🟨 [Fusionné (#59)](https://github.com/migok/lotispro/pull/59), recette à faire | Composants accessibles, confirmations, skeletons, navigation clavier | 617 tests verts (corrections 59.1–59.2) ; lint et build OK ; recette visuelle non validée |
+| 3 — Shell et dashboard global | 🟨 [Fusionné (#60)](https://github.com/migok/lotispro/pull/60), recette à faire | Autorisé le 2026-11-02 ; navigation, KPI actuels, stock filtrable, À traiter, évolution E6, erreurs par source | 678 tests verts (corrections 60.1–60.6) ; lint et build OK ; recette visuelle non validée |
+| 4 — Clients | 🟨 [En revue (#61)](https://github.com/migok/lotispro/pull/61) | Portefeuille en tableau (filtres dans l'URL, pipeline cliquable, aperçu latéral, erreurs explicites) ; fiche client (identité d'abord, retour avec filtres, édition depuis chaque onglet, historique complet) | 710 tests verts ; lint et build OK ; recette visuelle à faire ; couleurs du pipeline et de « Option » corrigées (6fb5fa3) |
 | 5 — Projet et lots | ⬜ À faire | Hors périmètre de cette session ; E6 déjà fusionné (#57) | — |
 
 ## Détail des tâches

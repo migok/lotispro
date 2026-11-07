@@ -1,11 +1,14 @@
 import { LoadingSkeleton } from './ui/skeleton';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useLocation } from 'react-router-dom';
 import { useToast } from '../contexts/toastHooks';
 import { apiGet, apiPost, apiPut, apiFetch, buildApiError } from '../utils/api';
 import { useAuth } from '../contexts/authHooks';
 import { formatPrice, formatDate, formatSurface } from '../utils/formatters';
 import ClientForm from './clients/ClientForm';
+import { Amount } from './ui/amount';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
+import '../styles/clients.css';
 import NotificationHistory from './notifications/NotificationHistory';
 import PaymentsPanel from './lots/PaymentsPanel';
 import { acteThresholdMessage, getFinancialSummary } from '../services/reservationFinanceService';
@@ -143,6 +146,22 @@ function timelineType(ev) {
 /* ── Payment overview card ──────────────────────────────────── */
 // Reservations on which a payment can still be recorded (engaged, not yet sold)
 const OPEN_RESERVATION_STATUSES = ['active', 'validated'];
+
+function TimelineItem({ ev }) {
+  return (
+    <li className={`cd-timeline-item cd-tl-${timelineType(ev)}`}>
+      <div className="cd-tl-dot" />
+      <div className="cd-tl-content">
+        <div className="cd-tl-top">
+          <span className="cd-tl-day">{formatDate(ev.date)}</span>
+          {ev.sub && <span className="badge badge-gray">{ev.sub}</span>}
+        </div>
+        <div className="cd-tl-label">{ev.label}</div>
+        {ev.amount > 0 && <div className="cd-tl-amount">{formatPrice(ev.amount)}</div>}
+      </div>
+    </li>
+  );
+}
 
 /**
  * Échéancier et encaissements d'une réservation du client (spec E4-T5) : mêmes
@@ -314,7 +333,8 @@ function ReservationDeedActions({ reservationId, lotNumero, clientEmail, onDownl
 /* ════════════════════════════════════════════════════════════ */
 export default function ClientDetailPage() {
   const { clientId } = useParams();
-  const navigate = useNavigate();
+  const location = useLocation();
+  const backTo = `/app/clients${typeof location.state?.portfolioSearch === 'string' ? location.state.portfolioSearch : ''}`;
   const toast = useToast();
   const { user, isManager } = useAuth();
 
@@ -323,6 +343,14 @@ export default function ClientDetailPage() {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('info');
   const [isEditing, setIsEditing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const editButton = useRef(null);
+  const wasEditing = useRef(false);
+  // Radix restores focus on a timer; return it to « Modifier » as soon as the dialog has closed
+  useEffect(() => {
+    if (!isEditing && wasEditing.current) editButton.current?.focus();
+    wasEditing.current = isEditing;
+  }, [isEditing]);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
 
   // Payment data
@@ -460,9 +488,9 @@ export default function ClientDetailPage() {
     <div className="page-container">
       <div className="empty-state">
         <p style={{ color: 'var(--color-danger)', marginBottom: 'var(--spacing-md)' }}>{error}</p>
-        <button className="btn btn-primary" onClick={() => navigate('/app/clients')}>
+        <Link className="btn btn-primary" to={backTo}>
           Retour aux clients
-        </button>
+        </Link>
       </div>
     </div>
   );
@@ -512,8 +540,8 @@ export default function ClientDetailPage() {
       sub: r.project_name, amount: r.amount_received,
     })),
   ]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 5);
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const summaryEvents = timelineEvents.slice(0, 5);
 
   const hasMultipleProjects = projects.length > 1;
 
@@ -530,16 +558,14 @@ export default function ClientDetailPage() {
 
       {/* ── Header ──────────────────────────────────────── */}
       <div className="cd-header">
-        <button className="cd-back-btn" onClick={() => navigate('/app/clients')}>
+        <Link className="cd-back-btn" to={backTo}>
           <IconChevronLeft />
-          Retour
-        </button>
+          Retour aux clients
+        </Link>
         <div className="cd-title-block">
           <h1 className="cd-name">{client.name}</h1>
           <p className="cd-meta">
             {CLIENT_TYPE_LABELS[client.client_type] || 'Client'}
-            {' · '}
-            <span className="badge badge-green">Client actif</span>
             {' · Créé le '}
             {formatDate(client.created_at)}
           </p>
@@ -558,7 +584,7 @@ export default function ClientDetailPage() {
             <IconMail />Envoyer email
           </a>
         )}
-        <button className="cd-action-btn" onClick={() => setIsEditing(true)}>
+        <button ref={editButton} className="cd-action-btn" onClick={() => setIsEditing(true)}>
           <IconEdit />Modifier
         </button>
       </div>
@@ -566,8 +592,9 @@ export default function ClientDetailPage() {
       {/* ── Project filter ──────────────────────────────── */}
       {hasMultipleProjects && (
         <div className="cd-project-filter">
-          <span className="cd-project-filter-icon"><IconBuilding /></span>
+          <label htmlFor="cd-project-select" className="cd-project-filter-icon"><IconBuilding /><span className="cd-project-label">Projet</span></label>
           <select
+            id="cd-project-select"
             className="cd-project-select"
             value={selectedProjectId ?? ''}
             onChange={e => setSelectedProjectId(e.target.value ? Number(e.target.value) : null)}
@@ -593,9 +620,9 @@ export default function ClientDetailPage() {
       <div className="stat-strip">
         <div className="stat-tile cd-stat-grow">
           <div className="stat-tile-value" style={{ color: 'var(--color-success)' }}>
-            {formatPrice(stats.total_purchases || 0)}
+            <Amount label="Total des achats" value={stats.total_purchases || 0} compact={false} />
           </div>
-          <div className="stat-tile-label">CA Total</div>
+          <div className="stat-tile-label">Total des achats</div>
         </div>
         <div className="stat-tile">
           <div className="stat-tile-value num">{stats.total_lots || 0}</div>
@@ -627,67 +654,6 @@ export default function ClientDetailPage() {
         )}
       </div>
 
-      {/* ── Body grid: résumé + timeline ────────────────── */}
-      <div className="cd-body-grid">
-
-        {/* Résumé commercial */}
-        <div className="card cd-summary">
-          <h3 className="cd-section-title">Résumé commercial</h3>
-
-          <ul className="cd-summary-list">
-            {stats.total_lots > 0 && (
-              <li>{stats.total_lots} lot{stats.total_lots > 1 ? 's' : ''} acheté{stats.total_lots > 1 ? 's' : ''}</li>
-            )}
-            {stats.active_reservations > 0 && (
-              <li>{stats.active_reservations} réservation{stats.active_reservations > 1 ? 's' : ''} en cours</li>
-            )}
-            {lastSale && (
-              <li>Dernier achat le {formatDate(lastSale.sale_date)}</li>
-            )}
-            {!stats.total_lots && !stats.active_reservations && (
-              <li style={{ color: 'var(--text-muted)' }}>Aucune activité enregistrée</li>
-            )}
-          </ul>
-        </div>
-
-        {/* Historique client */}
-        <div className="card cd-timeline-card">
-          <h3 className="cd-section-title">Historique client</h3>
-          {timelineEvents.length === 0 ? (
-            <div className="empty-state" style={{ padding: 'var(--spacing-lg) 0' }}>
-              Aucune activité
-            </div>
-          ) : (
-            <ol className="cd-timeline-list">
-              {timelineEvents.map((ev, i) => {
-                const type = timelineType(ev);
-                return (
-                  <li key={i} className={`cd-timeline-item cd-tl-${type}`}>
-                    <div className="cd-tl-dot" />
-                    <div className="cd-tl-content">
-                      <div className="cd-tl-top">
-                        <span className="cd-tl-day">{formatDate(ev.date)}</span>
-                        {ev.sub && <span className="badge badge-gray">{ev.sub}</span>}
-                      </div>
-                      <div className="cd-tl-label">{ev.label}</div>
-                      {ev.amount > 0 && (
-                        <div className="cd-tl-amount">{formatPrice(ev.amount)}</div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-          {timelineEvents.length > 0 && (
-            <button className="cd-tl-more">
-              Voir toute l'activité
-              <IconArrowRight />
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* ── Tab nav ─────────────────────────────────────── */}
       <div className="cd-tabs">
         {TABS.map(tab => (
@@ -706,16 +672,7 @@ export default function ClientDetailPage() {
 
         {/* ── Informations ── */}
         {activeTab === 'info' && (
-          isEditing ? (
-            <div className="card">
-              <ClientForm
-                initialValues={client}
-                excludeId={client.id}
-                onSubmit={handleSave}
-                onCancel={() => setIsEditing(false)}
-              />
-            </div>
-          ) : (
+          <>
             <div className="cd-info-grid">
               {/* Identité */}
               <div className="card">
@@ -841,7 +798,50 @@ export default function ClientDetailPage() {
                 </div>
               </div>
             </div>
-          )
+      {/* ── Body grid: résumé + timeline ────────────────── */}
+      <div className="cd-body-grid">
+
+        {/* Résumé commercial */}
+        <div className="card cd-summary">
+          <h3 className="cd-section-title">Résumé commercial</h3>
+
+          <ul className="cd-summary-list">
+            {stats.total_lots > 0 && (
+              <li>{stats.total_lots} lot{stats.total_lots > 1 ? 's' : ''} acheté{stats.total_lots > 1 ? 's' : ''}</li>
+            )}
+            {stats.active_reservations > 0 && (
+              <li>{stats.active_reservations} réservation{stats.active_reservations > 1 ? 's' : ''} en cours</li>
+            )}
+            {lastSale && (
+              <li>Dernier achat le {formatDate(lastSale.sale_date)}</li>
+            )}
+            {!stats.total_lots && !stats.active_reservations && (
+              <li style={{ color: 'var(--text-muted)' }}>Aucune activité enregistrée</li>
+            )}
+          </ul>
+        </div>
+
+        {/* Historique commercial */}
+        <div className="card cd-timeline-card">
+          <h3 className="cd-section-title">Historique commercial</h3>
+          {summaryEvents.length === 0 ? (
+            <div className="empty-state" style={{ padding: 'var(--spacing-lg) 0' }}>
+              Aucune activité
+            </div>
+          ) : (
+            <ol className="cd-timeline-list">
+              {summaryEvents.map((ev, i) => <TimelineItem key={i} ev={ev} />)}
+            </ol>
+          )}
+          {timelineEvents.length > 0 && (
+            <button type="button" className="cd-tl-more" onClick={() => setShowHistory(true)}>
+              Voir tout l’historique
+              <IconArrowRight />
+            </button>
+          )}
+        </div>
+      </div>
+          </>
         )}
 
         {/* ── Achats ── */}
@@ -1007,6 +1007,29 @@ export default function ClientDetailPage() {
           </button>
         )}
       </div>
+
+      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+        <DialogContent className="cd-dialog">
+          <DialogTitle>Modifier le client</DialogTitle>
+          <DialogDescription>Mettez à jour les informations de {client.name}.</DialogDescription>
+          <ClientForm
+            initialValues={client}
+            excludeId={client.id}
+            onSubmit={handleSave}
+            onCancel={() => setIsEditing(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showHistory} onOpenChange={setShowHistory}>
+        <DialogContent className="cd-dialog">
+          <DialogTitle>Historique commercial de {client.name}</DialogTitle>
+          <DialogDescription>{timelineEvents.length} événement{timelineEvents.length > 1 ? 's' : ''}, du plus récent au plus ancien.</DialogDescription>
+          <ol className="cd-timeline-list">
+            {timelineEvents.map((ev, i) => <TimelineItem key={i} ev={ev} />)}
+          </ol>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

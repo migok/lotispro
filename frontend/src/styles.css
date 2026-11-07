@@ -2033,27 +2033,27 @@ body {
 }
 
 .pipeline-badge.buyer {
-  background: rgba(16, 185, 129, 0.12);
-  color: var(--color-available);
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: color-mix(in srgb, var(--pipeline-buyer) 12%, transparent);
+  color: var(--pipeline-buyer);
+  border: 1px solid color-mix(in srgb, var(--pipeline-buyer) 25%, transparent);
 }
 
 .pipeline-badge.active_reservation {
-  background: rgba(212, 151, 58, 0.12);
-  color: var(--color-primary);
-  border: 1px solid rgba(212, 151, 58, 0.25);
+  background: color-mix(in srgb, var(--pipeline-active) 12%, transparent);
+  color: var(--pipeline-active);
+  border: 1px solid color-mix(in srgb, var(--pipeline-active) 25%, transparent);
 }
 
 .pipeline-badge.past_reservation {
-  background: rgba(167, 139, 250, 0.12);
-  color: #a78bfa;
-  border: 1px solid rgba(167, 139, 250, 0.25);
+  background: color-mix(in srgb, var(--pipeline-past) 12%, transparent);
+  color: var(--pipeline-past);
+  border: 1px solid color-mix(in srgb, var(--pipeline-past) 25%, transparent);
 }
 
 .pipeline-badge.prospect {
-  background: rgba(110, 126, 158, 0.1);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--pipeline-prospect) 12%, transparent);
+  color: var(--pipeline-prospect);
+  border: 1px solid color-mix(in srgb, var(--pipeline-prospect) 25%, transparent);
 }
 
 /* ── Dashboard Clients Widget (dc-*) ─────────────────────── */
