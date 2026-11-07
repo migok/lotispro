@@ -37,6 +37,7 @@ from app.infrastructure.database.repositories import (
     SaleRepository,
 )
 from app.infrastructure.database.repositories.reservation_payment_repository import (
+    amount_net_expr,
     amount_received_expr,
 )
 from app.services.dashboard_period_service import DashboardPeriodService
@@ -999,8 +1000,9 @@ class DashboardService:
             total_sales = sales_row[0] or 0
             total_purchases = float(sales_row[1] or 0)
 
-            # Amount received on all their reservations (same as the fiche client)
-            deposit_query = select(func.sum(amount_received_expr())).where(
+            # Amount received on all their reservations, refunds deducted
+            # (same as the fiche client)
+            deposit_query = select(func.sum(amount_net_expr())).where(
                 ReservationModel.client_id == client.id,
             )
             if project_id:

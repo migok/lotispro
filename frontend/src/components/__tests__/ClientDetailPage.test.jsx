@@ -54,18 +54,19 @@ describe('ClientDetailPage - fiche client', () => {
     vi.unstubAllGlobals()
   })
 
-  it('totals the amount received, not the option deposit', async () => {
+  it('totals the amount received net of refunds, not the option deposit', async () => {
     mockFetch({
       ...CLIENT,
       reservations_history: [
-        { id: 5, status: 'active', lot_numero: 'A1', project_id: 1, project_name: 'Projet', deposit: 10000, amount_received: 100000, reservation_date: '2026-10-05T10:00:00' },
-        { id: 6, status: 'active', lot_numero: 'A2', project_id: 1, project_name: 'Projet', deposit: 5000, amount_received: 25000, reservation_date: '2026-10-06T10:00:00' },
+        { id: 5, status: 'active', lot_numero: 'A1', project_id: 1, project_name: 'Projet', deposit: 10000, amount_received: 100000, amount_net: 100000, reservation_date: '2026-10-05T10:00:00' },
+        { id: 6, status: 'active', lot_numero: 'A2', project_id: 1, project_name: 'Projet', deposit: 5000, amount_received: 25000, amount_net: 25000, reservation_date: '2026-10-06T10:00:00' },
+        { id: 7, status: 'released', lot_numero: 'A3', project_id: 1, project_name: 'Projet', deposit: 10000, amount_received: 10000, amount_net: 2000, deposit_refund_amount: 8000, reservation_date: '2026-10-07T10:00:00' },
       ],
     })
     renderPage()
 
     const tile = (await screen.findByText('Encaissé', { selector: '.stat-tile-label' })).closest('.stat-tile')
-    expect(tile).toHaveTextContent(/125\s?000/)
+    expect(tile).toHaveTextContent(/127\s?000/)
   })
 
   it('shows the acquisition channel with referrer and DD/MM/YYYY date', async () => {

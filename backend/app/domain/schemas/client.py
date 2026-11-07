@@ -171,6 +171,10 @@ class ReservationHistory(BaseSchema):
         default=0,
         description="Encaissé: payments once engaged, else option deposit + guarantee",
     )
+    amount_net: float = Field(
+        default=0,
+        description="Encaissé minus the refund of a cancelled / expired reservation",
+    )
     deposit_date: date | None = None
     deposit_refund_amount: float | None = None
     deposit_refund_date: date | None = None

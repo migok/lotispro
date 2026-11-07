@@ -39,6 +39,23 @@ def amount_received_expr() -> ColumnElement[float]:
     )
 
 
+def amount_net_expr() -> ColumnElement[float]:
+    """:func:`amount_received_expr` minus what was handed back on cancellation.
+
+    Only a cancelled / expired reservation deducts its refund: a deposit
+    refunded at engagement never became a payment, so it is already out of
+    the received amount. Client totals (fiche client, pipeline) use it.
+    """
+    refund = case(
+        (
+            ReservationModel.status.in_(("released", "expired")),
+            func.coalesce(ReservationModel.deposit_refund_amount, 0.0),
+        ),
+        else_=0.0,
+    )
+    return amount_received_expr() - refund
+
+
 def installment_for_update(installment_id: int) -> Select:
     """The installment and its reservation id, row locked (``FOR UPDATE``).
 

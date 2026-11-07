@@ -490,7 +490,8 @@ export default function ClientDetailPage() {
   const stats = {
     total_purchases: sales.reduce((sum, s) => sum + (s.price || 0), 0),
     total_lots: sales.length,
-    total_deposit: reservations.reduce((sum, r) => sum + (r.amount_received || 0), 0),
+    // Net of the refunds of cancelled reservations (shown apart below)
+    total_deposit: reservations.reduce((sum, r) => sum + (r.amount_net || 0), 0),
     total_refund: reservations.filter(r => r.status === 'released').reduce((sum, r) => sum + (r.deposit_refund_amount || 0), 0),
     active_reservations: reservations.filter(r => r.status === 'active' || r.status === 'validated').length,
     lots_liberes: reservations.filter(r => r.status === 'released' || r.status === 'expired').length,

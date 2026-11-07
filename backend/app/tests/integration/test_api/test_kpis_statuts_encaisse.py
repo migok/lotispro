@@ -426,3 +426,66 @@ class TestClientDetail:
 
         history = resp.json()["reservations_history"]
         assert sorted(r["amount_received"] for r in history) == [0, 30_000]
+
+    async def test_client_total_deducts_refunds_of_cancelled_reservations(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        manager: UserModel,
+        commercial: UserModel,
+        auth_headers: Callable[[UserModel], dict[str, str]],
+    ) -> None:
+        project = await make_project(db_session, manager)
+        buyer = await make_client(db_session, commercial)
+        engaged = await make_reservation(
+            db_session,
+            await make_lot(db_session, project, status="reservation_engagee"),
+            buyer,
+            agreed_total_price=500_000,
+        )
+        await make_reservation_payment(db_session, engaged, 50_000, PAID_ON)
+        # Cancelled, 8 000 of the 10 000 handed back
+        await make_reservation(
+            db_session,
+            await make_lot(db_session, project),
+            buyer,
+            status="released",
+            deposit=10_000,
+            deposit_refund_amount=8_000,
+        )
+        # Expired, deposit kept
+        await make_reservation(
+            db_session,
+            await make_lot(db_session, project),
+            buyer,
+            status="expired",
+            deposit=5_000,
+        )
+        # Option deposit refunded at engagement: already out of the payments
+        refunded_at_engagement = await make_reservation(
+            db_session,
+            await make_lot(db_session, project, status="reservation_engagee"),
+            buyer,
+            deposit=7_000,
+            deposit_refund_amount=7_000,
+            agreed_total_price=400_000,
+        )
+        await make_reservation_payment(
+            db_session, refunded_at_engagement, 40_000, PAID_ON
+        )
+        await db_session.commit()
+        headers = auth_headers(manager)
+
+        details = await client.get(f"/api/clients/{buyer.id}/details", headers=headers)
+        pipeline = await client.get("/api/dashboard/clients-pipeline", headers=headers)
+
+        body = details.json()
+        assert sorted(r["amount_net"] for r in body["reservations_history"]) == [
+            2_000,
+            5_000,
+            40_000,
+            50_000,
+        ]
+        assert body["stats"]["total_deposit"] == 97_000
+        row = next(r for r in pipeline.json() if r["id"] == buyer.id)
+        assert row["total_deposit"] == 97_000
