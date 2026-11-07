@@ -1,0 +1,23 @@
+.clients-page { display: grid; gap: var(--spacing-lg); min-width: 0; padding-bottom: var(--spacing-xl); }
+.clients-page > * { min-width: 0; }
+.clients-header { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-md); flex-wrap: wrap; }
+.clients-header h1 { margin: 0; font-family: var(--font-display); font-size: var(--type-display); font-weight: 600; line-height: 1.15; }
+.clients-eyebrow { color: var(--text-muted); font-size: var(--type-body); margin: 0 0 var(--spacing-xs); }
+.clients-kpis { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--spacing-md); }
+.clients-kpis .ui-stat-value { font-size: var(--type-value); }
+.clients-toolbar { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); align-items: end; }
+.clients-field { display: grid; gap: var(--spacing-xs); font-size: var(--type-label); color: var(--text-secondary); }
+.clients-field input, .clients-field select { min-height: 40px; min-width: 14rem; padding: 0 var(--spacing-sm); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text-primary); font: inherit; font-size: var(--type-body); }
+.clients-pipeline { display: flex; flex-wrap: wrap; gap: var(--spacing-xs); }
+.clients-pipeline [aria-pressed='true'] { border-color: var(--color-primary); background: var(--color-primary-subtle); }
+.clients-count { color: var(--text-secondary); font-size: var(--type-label); }
+.clients-name { display: grid; gap: 2px; }
+.clients-name a { color: var(--text-primary); font-weight: 600; text-underline-offset: 4px; }
+.clients-meta { color: var(--text-muted); font-size: var(--type-label); }
+.clients-page td a[href^='tel:'], .clients-preview a { color: var(--text-primary); text-underline-offset: 4px; }
+.clients-error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--color-danger); border-radius: var(--radius-md); font-size: var(--type-body); }
+.clients-preview { display: grid; gap: var(--spacing-sm); margin: var(--spacing-md) 0; }
+.clients-preview dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--spacing-xs) var(--spacing-md); margin: 0; font-size: var(--type-body); }
+.clients-preview dt { color: var(--text-secondary); }
+.clients-preview dd { margin: 0; overflow-wrap: anywhere; }
+@media (min-width: 640px) { .clients-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
