@@ -5,10 +5,12 @@ import { LoadingSkeleton } from './skeleton';
 
 const collator = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
 
-/** Display-only sorting and pagination; source rows are never mutated. */
-export function DataTable({ columns, data = [], caption, pageSize = 10, loading = false, error, onRetry, getRowKey = (row) => row.id }) {
+/** Display-only sorting and pagination; source rows are never mutated. A changed `resetKey` returns to page 1. */
+export function DataTable({ columns, data = [], caption, pageSize = 10, loading = false, error, onRetry, getRowKey = (row) => row.id, resetKey }) {
   const [sort, setSort] = useState(null);
   const [page, setPage] = useState(0);
+  const [seenKey, setSeenKey] = useState(resetKey);
+  if (seenKey !== resetKey) { setSeenKey(resetKey); setPage(0); }
   const ordered = useMemo(() => {
     if (!sort) return data;
     return [...data].sort((a, b) => {

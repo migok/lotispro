@@ -29,7 +29,7 @@
   /* Separate categorical hues, including within each workflow phase. */
   --color-creation: #94a3b8;
   --color-available: #4ade80;
-  --color-option: #fbbf24;
+  --color-option: #d946ef;
   --color-raf: #c084fc;
   --color-engaged: #60a5fa;
   --color-soldee: #22d3ee;
@@ -41,6 +41,11 @@
   --color-blocked: #f87171;
   --color-reserved: var(--color-option);
   --color-sold: var(--color-proprietaire);
+  /* Client pipeline stages: own aliases, never the brand gold or an alert colour. */
+  --pipeline-buyer: var(--color-proprietaire);
+  --pipeline-active: var(--color-engaged);
+  --pipeline-prospect: var(--color-raf);
+  --pipeline-past: var(--color-creation);
   --border-gold: rgb(212 151 58 / 0.28);
   --border-subtle: rgb(194 204 223 / 0.14);
   --border-control: #7686a2;
@@ -134,7 +139,7 @@
   --color-info: #254f99;
   --color-creation: #475569;
   --color-available: #15803d;
-  --color-option: #a16207;
+  --color-option: #a21caf;
   --color-raf: #9333ea;
   --color-engaged: #2563eb;
   --color-soldee: #0e7490;

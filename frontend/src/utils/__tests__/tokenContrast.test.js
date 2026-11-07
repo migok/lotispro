@@ -39,6 +39,24 @@ it.each([['map', STATUS_HEX_COLORS], ['dark', statusPalette(dark)], ['light', st
     }));
   },
 );
+const labDistance = (hex, otherHex) => {
+  const a = lab(hex);
+  const b = lab(otherHex);
+  return Math.hypot(...a.map((v, axis) => v - b[axis]));
+};
+// The brand gold marks primary actions and key figures; no status may read as it (audit problem 3).
+it.each([['map', STATUS_HEX_COLORS.option, resolve(dark, '--color-primary')], ['dark', resolve(dark, '--color-option'), resolve(dark, '--color-primary')], ['light', resolve(light, '--color-option'), resolve(light, '--color-primary')]])(
+  'keeps the option status at least 40 CIELAB units away from the brand gold in %s', (_theme, option, gold) => {
+    expect(labDistance(option, gold)).toBeGreaterThanOrEqual(40);
+  },
+);
+const PIPELINE_TOKENS = ['--pipeline-buyer', '--pipeline-active', '--pipeline-prospect', '--pipeline-past'];
+it.each([['dark', dark], ['light', light]])('gives each client pipeline stage its own colour, away from the brand gold, in %s', (_theme, tokens) => {
+  const values = PIPELINE_TOKENS.map((token) => resolve(tokens, token));
+  values.forEach((value, i) => expect(value, PIPELINE_TOKENS[i]).toMatch(/^#[0-9a-f]{6}$/i));
+  expect(new Set(values).size).toBe(4);
+  for (const value of values) expect(labDistance(value, resolve(tokens, '--color-primary'))).toBeGreaterThanOrEqual(40);
+});
 it('keeps map outlines and legend dots visible on the pale basemap', () => {
   for (const [status, hex] of Object.entries(STATUS_HEX_COLORS)) {
     expect(1.05 / (luminance(hex) + 0.05), status).toBeGreaterThanOrEqual(3);

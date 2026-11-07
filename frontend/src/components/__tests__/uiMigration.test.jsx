@@ -17,7 +17,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-it('provides a client profile link without clickable generic cards', async () => {
+it('provides a client profile link without clickable generic rows', async () => {
   apiGet.mockResolvedValue([CLIENT]);
   const { container } = renderWithProviders(<ClientsPage />, { user: { id: 1, role: 'manager' } });
   const links = await screen.findAllByRole('link', { name: CLIENT.name });
@@ -25,23 +25,19 @@ it('provides a client profile link without clickable generic cards', async () =>
   links[0].focus();
   expect(links[0]).toHaveFocus();
   expect(container.querySelector('a button, a a')).toBeNull();
-  expect(links[0].closest('.cp-card')).not.toHaveAttribute('onclick');
+  expect(links[0].closest('tr')).not.toHaveAttribute('onclick');
 });
 
-it('covers each client card and ranking row with its native profile link', async () => {
+it('exposes one native profile link per client row', async () => {
   apiGet.mockResolvedValue([CLIENT]);
   function Location() { return <output aria-label="URL">{useLocation().pathname}</output>; }
   renderWithProviders(<><ClientsPage /><Location /></>, { user: { id: 1, role: 'manager' }, route: '/app/clients' });
   const links = await screen.findAllByRole('link', { name: CLIENT.name });
-  for (const link of links) {
-    expect(link.parentElement).toBe(link.closest('.cp-card, .cp-lb-row'));
-    expect(link).toHaveAttribute('href', '/app/clients/12');
-  }
+  expect(links).toHaveLength(1);
+  expect(links[0]).toHaveAttribute('href', '/app/clients/12');
   links[0].focus();
   expect(links[0]).toHaveFocus();
   await userEvent.keyboard('{Enter}');
-  expect(screen.getByLabelText('URL')).toHaveTextContent('/app/clients/12');
-  await userEvent.click(links[1]);
   expect(screen.getByLabelText('URL')).toHaveTextContent('/app/clients/12');
 });
 
