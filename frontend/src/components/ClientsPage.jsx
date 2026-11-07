@@ -130,7 +130,7 @@ export default function ClientsPage() {
       <div className="clients-pipeline">
         {PIPELINE_FILTERS.map(({ key, label }) => <Button key={key} variant="outline" size="sm" aria-pressed={pipeline === key}
           aria-label={`${label} : ${plural(counts[key])}`} onClick={() => setFilter('pipeline', pipeline === key ? '' : key)}>
-          {label} <span className="clients-count">{counts[key]}</span>
+          <span className={`clients-pipeline-swatch is-${key}`} aria-hidden="true" />{label} <span className="clients-count">{counts[key]}</span>
         </Button>)}
       </div>
       {rows.length === 0

@@ -37,7 +37,7 @@ export const STATUS_COLORS = {
 export const STATUS_HEX_COLORS = {
   creation:               '#64748b',
   available:              '#15803d',
-  option:                 '#d97706',
+  option:                 '#a21caf',
   reservation_a_finaliser:'#9333ea',
   reservation_engagee:    '#2563eb',
   reservation_soldee:     '#0891b2',

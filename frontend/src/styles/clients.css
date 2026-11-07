@@ -10,10 +10,12 @@
 .clients-field input, .clients-field select { min-height: 40px; min-width: 14rem; padding: 0 var(--spacing-sm); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text-primary); font: inherit; font-size: var(--type-body); }
 .clients-pipeline-bar { display: flex; height: 0.5rem; margin-bottom: var(--spacing-xs); border-radius: var(--radius-full); overflow: hidden; background: var(--border-subtle); }
 .clients-pipeline-segment { height: 100%; cursor: pointer; transition: opacity 0.15s; }
-.clients-pipeline-segment.is-buyer { background: var(--color-success); }
-.clients-pipeline-segment.is-active_reservation { background: var(--color-primary); }
-.clients-pipeline-segment.is-prospect { background: var(--color-info); }
-.clients-pipeline-segment.is-past_reservation { background: var(--color-warning); }
+.is-buyer { --pipeline-color: var(--pipeline-buyer); }
+.is-active_reservation { --pipeline-color: var(--pipeline-active); }
+.is-prospect { --pipeline-color: var(--pipeline-prospect); }
+.is-past_reservation { --pipeline-color: var(--pipeline-past); }
+.clients-pipeline-segment { background: var(--pipeline-color); }
+.clients-pipeline-swatch { display: inline-block; width: 0.625rem; height: 0.625rem; margin-right: var(--spacing-xs); border-radius: var(--radius-full); background: var(--pipeline-color); }
 .clients-pipeline-segment.is-dimmed { opacity: 0.35; }
 .clients-pipeline-segment.is-selected { box-shadow: inset 0 0 0 2px var(--text-primary); }
 .clients-pipeline { display: flex; flex-wrap: wrap; gap: var(--spacing-xs); }
